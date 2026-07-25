@@ -188,6 +188,7 @@ def _score_valuation(profile: KnowledgeProfile) -> SectionScore:
         val.ev_ebitda is not None,
         val.pb_ratio is not None,
         val.fcf_yield is not None,
+        val.price_target is not None and val.price_target.upside_pct is not None,
     ])
 
 

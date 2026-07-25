@@ -136,7 +136,8 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
     # 3a. Struktur Kompetitif
     competitive_structure = CompetitiveStructure(
         business_model=None,  # TODO: infer dari industry
-        total_revenue_ttm=evidence.fundamental.revenue
+        total_revenue_ttm=evidence.fundamental.revenue,
+        employees_count=evidence.company_profile.employees if evidence.company_profile else None
     )
 
     # 3b. Momentum — spec 03_KNOWLEDGE.md §3b.
@@ -161,7 +162,10 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         return_3y=returns.get('return_3y'),
         return_5y=returns.get('return_5y'),
         volatility_daily=volatility,
-        beta=evidence.price_market.beta
+        beta=evidence.price_market.beta,
+        earnings_beat_miss_streak=_compute_earnings_beat_streak(
+            evidence.analyst_estimates.eps_surprise_history if evidence.analyst_estimates else []
+        )
     )
 
     # 5. Kepemilikan
@@ -217,7 +221,8 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
 
     # Count completed fields untuk Confidence downstream
     completed_fields, expected_fields, missing_fields = _count_completed_fields(
-        returns, volatility, financial_health, ownership, valuation
+        returns, volatility, financial_health, ownership, valuation,
+        competitive_structure, historical_trend
     )
 
     # Metadata
@@ -255,7 +260,10 @@ def _fcf_margin_pct(fcf: float | None, revenue: float | None) -> float | None:
     return (fcf / revenue) * 100
 
 
-def _count_completed_fields(returns: dict, volatility: float | None, financial_health, ownership, valuation) -> tuple[int, int, list[str]]:
+def _count_completed_fields(
+    returns: dict, volatility: float | None, financial_health, ownership, valuation,
+    competitive_structure, historical_trend
+) -> tuple[int, int, list[str]]:
     """#5: Count non-null fields untuk data quality tracking.
 
     Returns (fields_completed, fields_expected, missing_fields) — semuanya
@@ -284,6 +292,9 @@ def _count_completed_fields(returns: dict, volatility: float | None, financial_h
         ("valuation.ps_ratio", valuation.ps_ratio),
         ("valuation.pb_ratio", valuation.pb_ratio),
         ("valuation.fcf_yield", valuation.fcf_yield),
+        ("valuation.price_target.upside_pct", valuation.price_target.upside_pct if valuation.price_target else None),
+        ("competitive_structure.employees_count", competitive_structure.employees_count),
+        ("historical_trend.earnings_beat_miss_streak", historical_trend.earnings_beat_miss_streak),
     ]
     # "is not None", BUKAN truthy check -- return_1y=0.0 (flat), debt_to_equity=0.0
     # (bebas utang), roe/roa=0.0 (breakeven) semuanya nilai VALID, bukan data
@@ -342,6 +353,22 @@ def _generate_quality_notes(evidence: EvidencePackage, returns: dict, volatility
         notes.append("No news data")
 
     return " | ".join(notes) if notes else None
+
+
+def _compute_earnings_beat_streak(eps_surprise_history: list) -> str | None:
+    """#4 Tren Historis: hitung berapa dari kuartal EPS terakhir yang "beat"
+    estimate analis (surprise_pct > 0) -- format "N/M beat" sesuai contoh di
+    HistoricalTrend.earnings_beat_miss_streak (knowledge_contracts.py).
+    eps_surprise_history dari Evidence hanya 4 kuartal terakhir (yfinance
+    earnings_history), bukan 8 -- lihat AnalystEstimatesBlock di frontend.
+    Kuartal tanpa surprise_pct (None) tidak dihitung sebagai penyebut.
+    """
+    valid = [e for e in eps_surprise_history if e.surprise_pct is not None]
+    if not valid:
+        return None
+
+    beats = sum(1 for e in valid if e.surprise_pct > 0)
+    return f"{beats}/{len(valid)} beat"
 
 
 def _compute_acceleration_signal(trends: dict) -> str | None:

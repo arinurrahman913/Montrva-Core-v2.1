@@ -39,15 +39,17 @@ METHOD_VERSION = "2.0"
 MODULE_KNOWLEDGE_GAP_FIELDS = {
     "multibagger": {
         "historical_trend.return_1y", "historical_trend.return_3y", "historical_trend.return_5y",
-        "historical_trend.volatility_daily",
+        "historical_trend.volatility_daily", "historical_trend.earnings_beat_miss_streak",
         "valuation.pe_ratio_trailing", "valuation.ps_ratio", "valuation.pb_ratio", "valuation.fcf_yield",
+        "valuation.price_target.upside_pct",
     },
     "quality_compound": {
         "financial_health.balance_sheet.debt_to_equity", "financial_health.balance_sheet.current_ratio",
         "financial_health.balance_sheet.quick_ratio", "financial_health.cash_flow_trend.fcf_q4",
         "historical_trend.return_1y", "historical_trend.return_3y", "historical_trend.return_5y",
-        "historical_trend.volatility_daily",
+        "historical_trend.volatility_daily", "historical_trend.earnings_beat_miss_streak",
         "valuation.pe_ratio_trailing", "valuation.ps_ratio", "valuation.pb_ratio", "valuation.fcf_yield",
+        "valuation.price_target.upside_pct",
     },
     "speculative": {
         "historical_trend.volatility_daily",  # D-12: Speculative cuma dapat volatilitas dari bagian 4
@@ -198,6 +200,41 @@ def run_quality_lens(
             score -= 6
             negative.append(f"P/E more expensive than {pct:.0f}% of peers")
             metrics["pe_peer_percentile"] = pct
+
+    # Analyst consensus price target (bagian 6, upgrade 2026-07-25) — sinyal
+    # eksternal (banyak analis) di luar valuasi absolut/peer di atas. Bobot
+    # sedang (+/-8), sejajar peer percentile: pelengkap, bukan pengganti.
+    pt = val.price_target
+    if pt and pt.upside_pct is not None:
+        if pt.upside_pct > 15:
+            score += 8
+            positive.append(f"Analyst consensus implies {pt.upside_pct:.0f}% upside")
+            metrics["analyst_upside_pct"] = pt.upside_pct
+        elif pt.upside_pct < -10:
+            score -= 8
+            negative.append(f"Analyst consensus implies {abs(pt.upside_pct):.0f}% downside")
+            metrics["analyst_upside_pct"] = pt.upside_pct
+
+    # EPS beat/miss streak (bagian 4) — "N/M beat" string diparse defensif
+    # (try/except) karena formatnya dihasilkan Knowledge (_compute_earnings_
+    # beat_streak), bukan data eksternal mentah, tapi tetap tidak boleh
+    # crash pipeline kalau formatnya berubah di masa depan.
+    if ht.earnings_beat_miss_streak:
+        try:
+            beats_str, total_str = ht.earnings_beat_miss_streak.split("/")
+            beats, total = int(beats_str), int(total_str.split()[0])
+            if total > 0:
+                beat_rate = beats / total
+                if beat_rate >= 0.75:
+                    score += 6
+                    positive.append(f"Strong EPS beat record ({ht.earnings_beat_miss_streak})")
+                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+                elif beat_rate <= 0.25:
+                    score -= 6
+                    negative.append(f"Weak EPS beat record ({ht.earnings_beat_miss_streak})")
+                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+        except (ValueError, IndexError):
+            pass
 
     gov = profile.governance
     if len(gov.restatements or []) > 0:
@@ -442,6 +479,38 @@ def run_multibagger_lens(
             score += 6
             positive.append(f"Revenue growth faster than {pct:.0f}% of peers")
             metrics["revenue_growth_peer_percentile"] = pct
+
+    # Analyst consensus price target (bagian 6, upgrade 2026-07-25) — dibaca
+    # sebagai indikator "masih ada ruang naik" versi eksternal, sejalan
+    # thesis modul ini. Bobot & threshold sama dengan Quality lens supaya
+    # sinyal yang sama tidak diberi bobot berbeda-beda antar modul tanpa alasan.
+    pt = val.price_target
+    if pt and pt.upside_pct is not None:
+        if pt.upside_pct > 15:
+            score += 8
+            positive.append(f"Analyst consensus sees {pt.upside_pct:.0f}% more room to run")
+            metrics["analyst_upside_pct"] = pt.upside_pct
+        elif pt.upside_pct < -10:
+            score -= 8
+            negative.append(f"Analyst consensus sees limited room ({pt.upside_pct:.0f}%)")
+            metrics["analyst_upside_pct"] = pt.upside_pct
+
+    if ht.earnings_beat_miss_streak:
+        try:
+            beats_str, total_str = ht.earnings_beat_miss_streak.split("/")
+            beats, total = int(beats_str), int(total_str.split()[0])
+            if total > 0:
+                beat_rate = beats / total
+                if beat_rate >= 0.75:
+                    score += 6
+                    positive.append(f"Consistent execution vs. estimates ({ht.earnings_beat_miss_streak})")
+                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+                elif beat_rate <= 0.25:
+                    score -= 6
+                    negative.append(f"Inconsistent execution vs. estimates ({ht.earnings_beat_miss_streak})")
+                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+        except (ValueError, IndexError):
+            pass
 
     if confidence and confidence.overall.score < 40:
         score -= 12
