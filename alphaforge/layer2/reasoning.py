@@ -215,6 +215,35 @@ def run_quality_lens(
             negative.append(f"Analyst consensus implies {abs(pt.upside_pct):.0f}% downside")
             metrics["analyst_upside_pct"] = pt.upside_pct
 
+    # recommendation_key & price_target_trend_3m (bagian 6) — dua sinyal
+    # analyst-consensus TAMBAHAN di luar upside_pct di atas: recommendation_key
+    # itu rating kategorikal langsung dari analis (bisa beda arah dari
+    # upside_pct kalau target harganya basi/belum di-update), trend_3m itu
+    # ARAH perubahan konsensus 3 bulan terakhir (momentum sentimen, bukan
+    # level absolut). Bobot lebih kecil (+/-5) dari upside_pct karena
+    # ketiganya sama-sama berasal dari analyst_estimates -- supaya satu
+    # sumber data eksternal tidak mendominasi skor lensa cuma karena
+    # direpresentasikan di 3 field berbeda.
+    if pt and pt.recommendation_key:
+        if pt.recommendation_key in ("strong_buy", "buy"):
+            score += 5
+            positive.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
+            metrics["analyst_recommendation"] = pt.recommendation_key
+        elif pt.recommendation_key in ("sell", "strong_sell"):
+            score -= 5
+            negative.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
+            metrics["analyst_recommendation"] = pt.recommendation_key
+
+    if pt and pt.price_target_trend_3m is not None:
+        if pt.price_target_trend_3m > 10:
+            score += 5
+            positive.append(f"Analyst targets rising ({pt.price_target_trend_3m:.0f}% over 3M)")
+            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
+        elif pt.price_target_trend_3m < -10:
+            score -= 5
+            negative.append(f"Analyst targets falling ({pt.price_target_trend_3m:.0f}% over 3M)")
+            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
+
     # EPS beat/miss streak (bagian 4) — "N/M beat" string diparse defensif
     # (try/except) karena formatnya dihasilkan Knowledge (_compute_earnings_
     # beat_streak), bukan data eksternal mentah, tapi tetap tidak boleh
@@ -494,6 +523,29 @@ def run_multibagger_lens(
             score -= 8
             negative.append(f"Analyst consensus sees limited room ({pt.upside_pct:.0f}%)")
             metrics["analyst_upside_pct"] = pt.upside_pct
+
+    # recommendation_key & price_target_trend_3m -- sama seperti Quality lens
+    # di atas, bobot lebih kecil (+/-5) karena satu sumber data (analyst_
+    # estimates) dengan upside_pct.
+    if pt and pt.recommendation_key:
+        if pt.recommendation_key in ("strong_buy", "buy"):
+            score += 5
+            positive.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
+            metrics["analyst_recommendation"] = pt.recommendation_key
+        elif pt.recommendation_key in ("sell", "strong_sell"):
+            score -= 5
+            negative.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
+            metrics["analyst_recommendation"] = pt.recommendation_key
+
+    if pt and pt.price_target_trend_3m is not None:
+        if pt.price_target_trend_3m > 10:
+            score += 5
+            positive.append(f"Analyst targets rising ({pt.price_target_trend_3m:.0f}% over 3M)")
+            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
+        elif pt.price_target_trend_3m < -10:
+            score -= 5
+            negative.append(f"Analyst targets falling ({pt.price_target_trend_3m:.0f}% over 3M)")
+            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
 
     if ht.earnings_beat_miss_streak:
         try:
