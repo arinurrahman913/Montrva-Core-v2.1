@@ -132,7 +132,8 @@ def calculate_financial_metrics(
     market_cap: float | None,
     shares_outstanding: int | None,
     last_price: float | None,
-    eps: float | None
+    eps: float | None,
+    book_value_per_share: float | None = None
 ) -> dict[str, float | None]:
     """Calculate derived financial metrics dari fundamental data."""
     metrics = {
@@ -140,7 +141,8 @@ def calculate_financial_metrics(
         'fcf_yield_pct': None,
         'price_to_fcf': None,
         'net_margin_pct': None,
-        'fcf_to_net_income_pct': None
+        'fcf_to_net_income_pct': None,
+        'pb_ratio': None
     }
 
     # P/S ratio
@@ -164,6 +166,10 @@ def calculate_financial_metrics(
     # FCF to Net Income
     if free_cash_flow is not None and net_income and net_income > 0:
         metrics['fcf_to_net_income_pct'] = (free_cash_flow / net_income) * 100
+
+    # P/B ratio
+    if last_price and last_price > 0 and book_value_per_share and book_value_per_share > 0:
+        metrics['pb_ratio'] = last_price / book_value_per_share
 
     return metrics
 
@@ -264,3 +270,58 @@ def infer_size_category(market_cap: float | None, soft_flags: list[str]) -> str 
         return "mid"
     else:
         return "large"
+
+
+def calculate_price_target_metrics(
+    current_price: float | None,
+    analyst_estimates: dict | None,
+    price_target_history: list | None = None
+) -> dict[str, float | None | str]:
+    """Calculate analyst consensus price target metrics.
+
+    Args:
+        current_price: Current stock price
+        analyst_estimates: Dict dengan target_mean, target_median, target_low, target_high,
+                          num_analyst_opinions, recommendation_mean, recommendation_key
+        price_target_history: List of PriceTargetSnapshot untuk calculate trend
+
+    Returns:
+        Dict dengan upside_pct, recommendation breakdown, trend_3m, dll
+    """
+    metrics = {
+        'current_price': current_price,
+        'target_mean': None,
+        'target_median': None,
+        'target_low': None,
+        'target_high': None,
+        'num_analysts': None,
+        'upside_pct': None,
+        'recommendation_key': None,
+        'recommendation_pct_buy': None,
+        'recommendation_pct_hold': None,
+        'recommendation_pct_sell': None,
+        'price_target_trend_3m': None
+    }
+
+    if not analyst_estimates or not current_price or current_price <= 0:
+        return metrics
+
+    metrics['target_mean'] = analyst_estimates.get('target_mean')
+    metrics['target_median'] = analyst_estimates.get('target_median')
+    metrics['target_low'] = analyst_estimates.get('target_low')
+    metrics['target_high'] = analyst_estimates.get('target_high')
+    metrics['num_analysts'] = analyst_estimates.get('num_analyst_opinions')
+    metrics['recommendation_key'] = analyst_estimates.get('recommendation_key')
+
+    if metrics['target_mean'] and metrics['target_mean'] > 0:
+        metrics['upside_pct'] = ((metrics['target_mean'] - current_price) / current_price) * 100
+
+    if price_target_history and len(price_target_history) >= 2:
+        oldest = price_target_history[0]
+        latest = price_target_history[-1]
+        if oldest.target_mean and latest.target_mean and oldest.target_mean > 0:
+            metrics['price_target_trend_3m'] = (
+                (latest.target_mean - oldest.target_mean) / oldest.target_mean
+            ) * 100
+
+    return metrics

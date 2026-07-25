@@ -76,6 +76,27 @@ def _index_by_ticker(items: list[dict]) -> dict[str, dict]:
     return {item["ticker"]: item for item in items if "ticker" in item}
 
 
+def _get_price_target_store() -> dict[str, list[dict]]:
+    """Small ticker->[snapshot] file, appended to daily by
+    price_target.sync_price_target_history() during a pipeline run — kept
+    separate from evidence.json (mtime-cached the same way) so the dashboard
+    can show accumulated history without waiting for the next full refresh
+    to fold it back into the (much larger) evidence.json stage file."""
+    path = DATA_DIR / "price_target_history.json"
+    if not path.exists():
+        return {}
+
+    mtime = path.stat().st_mtime
+    cached = _stage_cache.get("_price_target_store")
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    _stage_cache["_price_target_store"] = (mtime, data)
+    return data
+
+
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
 
 
@@ -98,9 +119,20 @@ def get_ticker_detail(ticker: str):
     aggregator = _index_by_ticker(_get_stage("aggregator").get("recommendations", []))
     historical = _get_stage("historical")
 
+    evidence_entry = evidence.get(ticker)
+    pt_history = _get_price_target_store().get(ticker)
+    if evidence_entry and pt_history and evidence_entry.get("analyst_estimates"):
+        # Shallow-copy so we never mutate the shared, mtime-cached evidence
+        # dict — this merge is per-request display enrichment only.
+        evidence_entry = dict(evidence_entry)
+        evidence_entry["analyst_estimates"] = {
+            **evidence_entry["analyst_estimates"],
+            "price_target_history": pt_history,
+        }
+
     return jsonify({
         "ticker": ticker,
-        "evidence": evidence.get(ticker),
+        "evidence": evidence_entry,
         "knowledge": knowledge.get(ticker),
         "catalyst": catalyst.get(ticker),
         "confidence": confidence.get(ticker),

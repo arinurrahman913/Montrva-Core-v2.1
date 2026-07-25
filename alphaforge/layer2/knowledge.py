@@ -17,11 +17,12 @@ from .knowledge_contracts import (
     KnowledgeProfile, KnowledgeMetadata, FinancialHealth, Ownership,
     RevenueTrend, MarginTrend, BalanceSheet, CashFlowTrend, CapExInfo,
     CompetitiveStructure, CompetitiveMomentum, HistoricalTrend, Valuation, Governance,
-    GovernanceEvent
+    GovernanceEvent, PriceTargetMetrics
 )
 from .knowledge_helpers import (
     calculate_returns, calculate_volatility,
-    calculate_financial_metrics, infer_size_category, compute_financial_trends
+    calculate_financial_metrics, infer_size_category, compute_financial_trends,
+    calculate_price_target_metrics
 )
 
 
@@ -66,7 +67,8 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         market_cap=evidence.price_market.market_cap,
         shares_outstanding=evidence.price_market.shares_outstanding,
         last_price=evidence.price_market.last_price,
-        eps=evidence.fundamental.eps
+        eps=evidence.fundamental.eps,
+        book_value_per_share=evidence.fundamental.book_value_per_share
     )
 
     # Nominal CapEx per kuartal dari quarterly_data — quarterly_data[0] =
@@ -172,12 +174,42 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
     # 6. Valuasi
     # #3: FIELD EXTRACTION — metrics sudah dihitung di atas (dipakai juga
     # untuk fallback net_margin_q4)
+    # Price Target Metrics dari analyst estimates
+    price_target_metrics = None
+    if evidence.analyst_estimates:
+        from dataclasses import asdict
+        analyst_data = {
+            'target_mean': evidence.analyst_estimates.target_mean,
+            'target_median': evidence.analyst_estimates.target_median,
+            'target_low': evidence.analyst_estimates.target_low,
+            'target_high': evidence.analyst_estimates.target_high,
+            'num_analyst_opinions': evidence.analyst_estimates.num_analyst_opinions,
+            'recommendation_key': evidence.analyst_estimates.recommendation_key
+        }
+        pt_metrics = calculate_price_target_metrics(
+            current_price=evidence.price_market.last_price,
+            analyst_estimates=analyst_data,
+            price_target_history=evidence.analyst_estimates.price_target_history
+        )
+        price_target_metrics = PriceTargetMetrics(
+            current_price=pt_metrics.get('current_price'),
+            target_mean=pt_metrics.get('target_mean'),
+            target_median=pt_metrics.get('target_median'),
+            target_low=pt_metrics.get('target_low'),
+            target_high=pt_metrics.get('target_high'),
+            num_analysts=pt_metrics.get('num_analysts'),
+            upside_pct=pt_metrics.get('upside_pct'),
+            recommendation_key=pt_metrics.get('recommendation_key'),
+            price_target_trend_3m=pt_metrics.get('price_target_trend_3m')
+        )
+
     valuation = Valuation(
         pe_ratio_trailing=evidence.fundamental.pe_ratio,
         ps_ratio=metrics['ps_ratio'],
         ev_ebitda=None,  # TODO: compute jika EBITDA ada
-        pb_ratio=evidence.fundamental.book_value_per_share,
-        fcf_yield=metrics['fcf_yield_pct']
+        pb_ratio=metrics['pb_ratio'],
+        fcf_yield=metrics['fcf_yield_pct'],
+        price_target=price_target_metrics
     )
 
     # 7. Governance — spec 03_KNOWLEDGE.md §7.

@@ -125,6 +125,23 @@ class Ownership:
 
 
 @dataclass
+class PriceTargetMetrics:
+    """Analyst price target consensus & metrics."""
+    current_price: float | None = None
+    target_mean: float | None = None
+    target_median: float | None = None
+    target_low: float | None = None
+    target_high: float | None = None
+    num_analysts: int | None = None
+    upside_pct: float | None = None  # Mean target upside dari current price (%)
+    recommendation_key: str | None = None  # "strong_buy", "buy", "hold", "sell", "strong_sell"
+    recommendation_pct_buy: float | None = None  # % buy ratings (0-100)
+    recommendation_pct_hold: float | None = None  # % hold ratings
+    recommendation_pct_sell: float | None = None  # % sell ratings
+    price_target_trend_3m: float | None = None  # Change dalam mean target 3 bulan terakhir (%)
+
+
+@dataclass
 class Valuation:
     """Bagian 6: Valuasi — rasio absolut per ticker saja, bukan vs peer."""
     pe_ratio_trailing: float | None = None
@@ -133,6 +150,7 @@ class Valuation:
     ev_ebitda: float | None = None  # Enterprise Value / EBITDA
     pb_ratio: float | None = None  # Price to Book
     fcf_yield: float | None = None  # FCF / Market Cap (%)
+    price_target: PriceTargetMetrics | None = None  # Analyst consensus price target
 
 
 @dataclass

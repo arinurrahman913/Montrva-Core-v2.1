@@ -33,6 +33,7 @@ from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
 from alphaforge.layer2.screening import run_screening  # noqa: E402
 from alphaforge.layer2.evidence import run_evidence  # noqa: E402
+from alphaforge.layer2.price_target import sync_price_target_history  # noqa: E402
 from alphaforge.layer2.knowledge import run_knowledge  # noqa: E402
 from alphaforge.layer2.catalyst import run_catalyst  # noqa: E402
 from alphaforge.layer2.peer import run_peer_comparison  # noqa: E402
@@ -103,6 +104,14 @@ def main() -> int:
 
         evidence_packages = run_evidence(screening_result)
         log.info(f"Evidence: {len(evidence_packages)} packages")
+
+        # Yahoo has no free historical price-target time series — this
+        # appends today's snapshot/ticker to an on-disk store and attaches
+        # the accumulated series back onto each package, so Knowledge (next)
+        # sees the up-to-date history for its 3-month trend calc.
+        pt_store = sync_price_target_history(evidence_packages, DATA_DIR / "price_target_history.json")
+        n_pt = sum(1 for p in evidence_packages if p.analyst_estimates and p.analyst_estimates.target_mean is not None)
+        log.info(f"Price target: {n_pt} tickers snapshotted ({len(pt_store)} tracked total)")
 
         profiles = run_knowledge(evidence_packages, screening_result.passed)
         log.info(f"Knowledge: {len(profiles)} profiles")

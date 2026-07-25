@@ -57,6 +57,12 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
     # (cache 24h) sudah ter-cache, bukan network call kedua.
     fundamental.shares_outstanding_change_12m = fetch_shares_outstanding_change_12m(ticker)
 
+    # analyst_estimates.price_target_history is populated later, in bulk,
+    # by price_target.sync_price_target_history() after run_evidence()
+    # returns — that's where the on-disk historical store lives (see that
+    # module's docstring for why: Yahoo has no free historical time series
+    # for this, so it has to be accumulated across daily pipeline runs).
+
     package = EvidencePackage(
         ticker=ticker,
         exchange=exchange,

@@ -488,6 +488,7 @@ function AnalystEstimatesBlock({ estimates, currentPrice }) {
   const hasTargets = estimates.target_low != null && estimates.target_high != null
   const hasEps = (estimates.eps_surprise_history || []).length > 0
   const hasRevEst = (estimates.revenue_estimates || []).length > 0
+  const priceHistory = estimates.price_target_history || []
 
   if (!hasTargets && !hasEps && !hasRevEst) {
     return (
@@ -530,6 +531,33 @@ function AnalystEstimatesBlock({ estimates, currentPrice }) {
             <span>mean ${fmtNum(estimates.target_mean, 2)}{upsidePct != null ? ` (${fmtPct(upsidePct, 1)})` : ''}</span>
             <span>high ${fmtNum(estimates.target_high, 2)}</span>
           </div>
+
+          {priceHistory.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+              <div className="mcell-label" style={{ marginBottom: 8, fontSize: 11 }}>Historical Targets</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80 }}>
+                {priceHistory.slice(-6).map((snap, i) => {
+                  const maxVal = Math.max(...priceHistory.map(s => s.target_mean || 0))
+                  const height = maxVal > 0 ? (snap.target_mean / maxVal) * 100 : 0
+                  return (
+                    <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9 }}>
+                      <div
+                        style={{
+                          height: `${height}%`,
+                          background: 'linear-gradient(to top, var(--accent), rgba(100,150,200,0.3))',
+                          borderRadius: '2px 2px 0 0',
+                          minHeight: '2px',
+                          marginBottom: 2,
+                        }}
+                        title={`$${fmtNum(snap.target_mean, 2)}`}
+                      />
+                      <div style={{ color: 'var(--faint)', fontSize: 8 }}>${fmtNum(snap.target_mean, 0)}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -949,3 +977,4 @@ function InsiderActivitySection({ activity }) {
     </div>
   )
 }
+

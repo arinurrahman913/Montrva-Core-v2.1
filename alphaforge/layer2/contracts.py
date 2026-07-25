@@ -173,6 +173,17 @@ class RevenueEstimatePeriod:
 
 
 @dataclass
+class PriceTargetSnapshot:
+    """Historical snapshot dari analyst price target consensus pada satu titik waktu."""
+    date: str  # ISO date (YYYY-MM-DD)
+    target_mean: float | None = None
+    target_median: float | None = None
+    target_low: float | None = None
+    target_high: float | None = None
+    num_analysts: int | None = None
+
+
+@dataclass
 class AnalystEstimates:
     """Konsensus analis — price target (dari `.info`, gratis) + EPS surprise
     history & revenue estimate forward (dari yfinance earnings_history /
@@ -187,6 +198,7 @@ class AnalystEstimates:
     num_analyst_opinions: int | None = None
     eps_surprise_history: list[EpsSurprise] = field(default_factory=list)
     revenue_estimates: list[RevenueEstimatePeriod] = field(default_factory=list)
+    price_target_history: list[PriceTargetSnapshot] = field(default_factory=list)
 
 
 @dataclass
