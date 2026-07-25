@@ -32,6 +32,7 @@ from alphaforge.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
 from alphaforge.layer2.sources.sector_map import (  # noqa: E402
     KNOWN_SECTORS, load_sector_map_meta as sector_map_meta
 )
+from alphaforge.layer2.ai_narrative import get_or_generate_narrative  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
 FRONTEND_DIST = ROOT / "frontend" / "dist"
@@ -152,6 +153,31 @@ def get_ticker_live_quote(ticker: str):
     return jsonify(fetch_live_quote(ticker))
 
 
+@app.get("/api/ticker/<ticker>/ai-narrative")
+def get_ticker_ai_narrative(ticker: str):
+    """On-demand AI narrative (Gemini) for one ticker — reads the FULL
+    Evidence package (all 8 sections) plus a few already-computed Knowledge
+    metrics (trends/streak/price-target upside), deliberately NOT part of
+    the full pipeline refresh (see ai_narrative.py docstring: cost/latency
+    at ~5000-ticker scale for data nobody may ever view). Cached to
+    dashboard/data/ai_narrative_cache.json, keyed by ticker +
+    KnowledgeMetadata.evidence_date, so repeat views of the same ticker on
+    the same data don't re-call the API."""
+    ticker = ticker.upper()
+    knowledge = _index_by_ticker(_get_stage("knowledge").get("profiles", []))
+    profile = knowledge.get(ticker)
+    if not profile:
+        return jsonify({"narrative": None, "available": False, "error": "no knowledge profile"}), 404
+
+    evidence = _index_by_ticker(_get_stage("evidence").get("packages", []))
+    evidence_entry = evidence.get(ticker)
+    if not evidence_entry:
+        return jsonify({"narrative": None, "available": False, "error": "no evidence package"}), 404
+
+    result = get_or_generate_narrative(evidence_entry, profile, DATA_DIR / "ai_narrative_cache.json")
+    return jsonify(result)
+
+
 # --- Refresh pipeline dari dashboard (tombol Generate) -----------------------
 # Menjalankan script refresh yang sudah ada sebagai subprocess di thread
 # background, supaya request HTTP tidak nge-block. Status di-poll oleh frontend.
@@ -182,7 +208,11 @@ def _run_refresh(mode: str, sector: str | None = None) -> None:
         # makan waktu berjam-jam, jauh di atas 30 menit lama yang cukup untuk
         # sample 60-ticker. Kalau `sector` diisi, scope-nya jauh lebih kecil
         # (satu sektor GICS) jadi tetap cepat walau mode="full".
-        timeout = 4 * 3600 if mode == "full" and not sector else 1800
+        # 6 jam (bukan 4) -- run 2026-07-24 selesai di ~3.3 jam, tapi run
+        # 2026-07-25 kena banyak error/rate-limit Yahoo ekstra dan baru
+        # dibunuh di batas 4 jam lama tanpa sempat selesai (all-or-nothing
+        # writes berarti itu total kerja 4 jam hilang, gak ada yang tersimpan).
+        timeout = 6 * 3600 if mode == "full" and not sector else 1800
         env = dict(os.environ)
         if sector:
             env["SCREENING_SECTOR"] = sector
@@ -203,7 +233,10 @@ def _run_refresh(mode: str, sector: str | None = None) -> None:
             tail = err.splitlines()[-1] if err else f"exit code {proc.returncode}"
             msg = f"Gagal: {tail}"
     except subprocess.TimeoutExpired:
-        msg = "Timeout (>30 menit)."
+        # Pesan sebelumnya hardcode ">30 menit" walau timeout sesungguhnya
+        # yang dipakai bisa 4/6 jam (mode="full") -- salah info soal berapa
+        # lama proses itu benar-benar jalan sebelum dibunuh.
+        msg = f"Timeout (>{timeout // 3600} jam)."
     except Exception as exc:  # noqa: BLE001
         msg = f"Error: {exc}"
     finally:

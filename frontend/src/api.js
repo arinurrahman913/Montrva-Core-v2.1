@@ -28,6 +28,7 @@ export const api = {
   sourceHealth: () => getJSON('/api/source_health'),
   ticker: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}`),
   liveQuote: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/live`),
+  aiNarrative: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/ai-narrative`),
   sectors: () => getJSON('/api/sectors'),
   // Trigger refresh pipeline dari dashboard. Tidak throw pada 409 (sudah jalan).
   // `sector` opsional — filter Screening ke satu sektor GICS (butuh sector_map,

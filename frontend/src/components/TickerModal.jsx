@@ -18,6 +18,7 @@ export default function TickerModal({ ticker, context, onClose }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [live, setLive] = useState(null) // null = loading, {stale:true} = failed, else fresh quote
+  const [aiNarrative, setAiNarrative] = useState(null) // null = loading/n.a., else {narrative, cached, available}
 
   useEffect(() => {
     let cancelled = false
@@ -55,6 +56,28 @@ export default function TickerModal({ ticker, context, onClose }) {
   }, [ticker])
 
   useEffect(() => {
+    // Cuma relevan buat modal Knowledge — jangan buang panggilan API (walau
+    // ada cache) buat context lain yang gak pernah nampilin ini.
+    if (context !== 'knowledge') {
+      setAiNarrative(null)
+      return
+    }
+    let cancelled = false
+    setAiNarrative(null)
+    api
+      .aiNarrative(ticker)
+      .then((d) => {
+        if (!cancelled) setAiNarrative(d)
+      })
+      .catch((e) => {
+        if (!cancelled) setAiNarrative({ narrative: null, available: false, error: String(e) })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [ticker, context])
+
+  useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose()
     }
@@ -77,7 +100,7 @@ export default function TickerModal({ ticker, context, onClose }) {
         <div className="modal-body">
           {error && <div className="empty">Gagal memuat detail: {error}</div>}
           {!error && !data && <div className="loading">Memuat detail…</div>}
-          {data && <ModalBody data={data} context={context} />}
+          {data && <ModalBody data={data} context={context} aiNarrative={aiNarrative} />}
         </div>
       </div>
     </div>
@@ -99,7 +122,162 @@ function LiveQuoteBadge({ live }) {
   )
 }
 
-function ModalBody({ data, context }) {
+function AiNarrativeBlock({ aiNarrative }) {
+  if (!aiNarrative) {
+    return (
+      <div className="msection" style={{ marginBottom: 12 }}>
+        <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Ringkasan AI</span>
+          <span className="pill neutral">memuat…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!aiNarrative.available) {
+    return (
+      <div className="msection" style={{ marginBottom: 12 }}>
+        <div className="msection-title">Ringkasan AI</div>
+        <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>
+          Belum dikonfigurasi — isi <code>GEMINI_API_KEY</code> di <code>.env</code> untuk mengaktifkan ringkasan naratif otomatis.
+        </p>
+      </div>
+    )
+  }
+
+  if (!aiNarrative.qualitative) {
+    return (
+      <div className="msection" style={{ marginBottom: 12 }}>
+        <div className="msection-title">Ringkasan AI</div>
+        <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>
+          Gagal membuat ringkasan untuk ticker ini. Coba lagi nanti.
+        </p>
+      </div>
+    )
+  }
+
+  const highlights = aiNarrative.quantitative_highlights || []
+
+  return (
+    <div className="msection" style={{ marginBottom: 12 }}>
+      <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>Ringkasan AI</span>
+        {aiNarrative.cached && <span className="pill neutral" title="Dari cache, data belum berubah sejak terakhir dibuat">cache</span>}
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--faint)', marginBottom: 6, letterSpacing: 0.3 }}>
+        KUALITATIF
+      </div>
+      <p className="narrative" style={{ marginBottom: highlights.length ? 14 : 0 }}>{aiNarrative.qualitative}</p>
+
+      {highlights.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--faint)', marginBottom: 8, letterSpacing: 0.3 }}>
+            SOROTAN KUANTITATIF <span style={{ fontWeight: 400 }}>— dipilih AI</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+            {highlights.map((h, i) => (
+              <div key={i} style={{ background: 'var(--panel)', borderRadius: 6, padding: '8px 10px' }}>
+                <div style={{ fontSize: 10, color: 'var(--faint)' }}>{h.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 500 }}>{h.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailCard({ title, children }) {
+  return (
+    <div style={{ background: 'var(--panel2)', borderRadius: 10, padding: '12px 14px', border: '0.5px solid var(--rule)' }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5 }}>{children}</div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value, valueColor }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+      <span style={{ color: 'var(--dim)' }}>{label}</span>
+      <span style={{ fontWeight: 600, color: valueColor, textAlign: 'right' }}>{value}</span>
+    </div>
+  )
+}
+
+function KnowledgeDetailCards({ knowledge, evidence }) {
+  const fh = knowledge.financial_health || {}
+  const rt = fh.revenue_trend || {}
+  const bs = fh.balance_sheet || {}
+  const ht = knowledge.historical_trend || {}
+  const own = knowledge.ownership || {}
+  const val = knowledge.valuation || {}
+  const pt = val.price_target || {}
+  const gov = knowledge.governance || {}
+
+  const fundamental = evidence?.fundamental || {}
+  const io = evidence?.institutional_ownership || {}
+  const topHolder = (io.top_holders || [])[0]
+  const ia = evidence?.institutional_activity || {}
+  const news = (evidence?.news?.news || []).slice(0, 3)
+  const filings = (evidence?.sec_filings?.filings || []).slice(0, 3)
+  const revEst = (evidence?.analyst_estimates?.revenue_estimates || []).find((r) => r.period === '+1q')
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+      <DetailCard title="Pertumbuhan & Margin">
+        <DetailRow label="Revenue YoY (kini)" value={fmtPct(rt.yoy_q4)} />
+        <DetailRow label="Net margin (kini)" value={fmtPct(fh.net_margin_trend?.q4)} />
+        <DetailRow label="Revenue (kini)" value={fmtMoney(fundamental.revenue)} />
+      </DetailCard>
+
+      <DetailCard title="Performa & Risiko">
+        <DetailRow label="Return 1Y" value={fmtPct(ht.return_1y)} valueColor={ht.return_1y >= 0 ? 'var(--good)' : 'var(--bad)'} />
+        <DetailRow label="Volatilitas harian" value={fmtPct(ht.volatility_daily)} />
+        <DetailRow label="D/E · Current ratio" value={`${fmtNum(bs.debt_to_equity)} · ${fmtNum(bs.current_ratio)}`} />
+      </DetailCard>
+
+      <DetailCard title="Valuasi & Analis">
+        <DetailRow label="P/E · P/S · P/B" value={`${fmtNum(val.pe_ratio_trailing)}x · ${fmtNum(val.ps_ratio)}x · ${fmtNum(val.pb_ratio)}x`} />
+        <DetailRow
+          label={`Target (${pt.num_analysts ?? '—'} analis)`}
+          value={pt.target_mean ? `${fmtMoney(pt.target_mean)} (${fmtPct(pt.upside_pct)})` : '—'}
+          valueColor="var(--accent)"
+        />
+        {revEst && <DetailRow label="Revenue est. Q depan" value={fmtPct(revEst.growth)} />}
+      </DetailCard>
+
+      <DetailCard title="Kepemilikan">
+        <DetailRow label="Institutional own." value={fmtPct(own.institutional_pct != null ? own.institutional_pct * 100 : null)} />
+        {topHolder && <DetailRow label="Top holder" value={`${topHolder.holder} ${fmtPct(topHolder.pct_held)}`} />}
+        <DetailRow label="Form 4 filing (30d)" value={fmtCompact(ia.buy_count_30d ?? 0)} />
+      </DetailCard>
+
+      <DetailCard title="Governance">
+        <DetailRow label="Saham beredar (12bln)" value={fmtPct(gov.shares_outstanding_change_12m)} />
+        <DetailRow label="Auditor · Restatement" value={`${(gov.auditor_changes || []).length} · ${(gov.restatements || []).length}`} />
+      </DetailCard>
+
+      <DetailCard title="Berita & Filing Terbaru">
+        {news.length === 0 && filings.length === 0 && <span style={{ color: 'var(--faint)' }}>Tidak ada data terbaru.</span>}
+        {news.map((n, i) => (
+          <div key={`n${i}`} style={{ fontSize: 11.5 }}>
+            {n.headline} <span style={{ color: 'var(--faint)' }}>· {n.published_at?.slice(0, 10)}</span>
+          </div>
+        ))}
+        {filings.map((f, i) => (
+          <div key={`f${i}`} style={{ fontSize: 11.5 }}>
+            {f.form_type} filed <span style={{ color: 'var(--faint)' }}>· {f.filing_date}</span>
+          </div>
+        ))}
+      </DetailCard>
+    </div>
+  )
+}
+
+function ModalBody({ data, context, aiNarrative }) {
   const { aggregator, reasoning, risk, confidence, catalyst, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
 
@@ -296,15 +474,11 @@ function ModalBody({ data, context }) {
 
       {showKnowledge && knowledge && (
         <div className="msection" id="sec-knowledge">
-          <div className="msection-title">Knowledge — Revenue Trend (YoY)</div>
-          <div className="mrow">
-            {['yoy_q1', 'yoy_q2', 'yoy_q3', 'yoy_q4'].map((k, i) => (
-              <div className="mcell" key={k}>
-                <div className="mcell-label">{i === 3 ? 'Q terkini' : `Q-${3 - i}`}</div>
-                <div className="mcell-val">{fmtPct(knowledge.financial_health?.revenue_trend?.[k])}</div>
-              </div>
-            ))}
+          <AiNarrativeBlock aiNarrative={aiNarrative} />
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dim)', letterSpacing: '.04em', textTransform: 'uppercase', margin: '18px 0 10px' }}>
+            Data Pendukung Lengkap
           </div>
+          <KnowledgeDetailCards knowledge={knowledge} evidence={evidence} />
         </div>
       )}
 
