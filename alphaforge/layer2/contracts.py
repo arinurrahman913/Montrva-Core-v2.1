@@ -139,6 +139,57 @@ class FundamentalData:
 
 
 @dataclass
+class CompanyProfile:
+    """Identitas & deskripsi perusahaan — dari field `.info` Yahoo Finance
+    yang sudah ke-cache (yahoo_info) tapi sebelumnya dibuang tanpa diekstrak.
+    Tidak ada network call baru."""
+    metadata: SourceMetadata
+    long_name: str | None = None
+    business_summary: str | None = None
+    website: str | None = None
+    employees: int | None = None
+    city: str | None = None
+    country: str | None = None
+
+
+@dataclass
+class EpsSurprise:
+    """Satu kuartal histori EPS actual vs estimate analis (yfinance earnings_history)."""
+    quarter: str  # ISO date, akhir kuartal fiskal
+    eps_actual: float | None = None
+    eps_estimate: float | None = None
+    surprise_pct: float | None = None
+
+
+@dataclass
+class RevenueEstimatePeriod:
+    """Satu horizon konsensus revenue analis (kuartal ini/depan, tahun ini/depan)."""
+    period: str  # "0q", "+1q", "0y", "+1y"
+    avg: float | None = None
+    low: float | None = None
+    high: float | None = None
+    growth: float | None = None
+    num_analysts: int | None = None
+
+
+@dataclass
+class AnalystEstimates:
+    """Konsensus analis — price target (dari `.info`, gratis) + EPS surprise
+    history & revenue estimate forward (dari yfinance earnings_history /
+    revenue_estimate, network call baru per ticker)."""
+    metadata: SourceMetadata
+    target_low: float | None = None
+    target_high: float | None = None
+    target_mean: float | None = None
+    target_median: float | None = None
+    recommendation_mean: float | None = None
+    recommendation_key: str | None = None
+    num_analyst_opinions: int | None = None
+    eps_surprise_history: list[EpsSurprise] = field(default_factory=list)
+    revenue_estimates: list[RevenueEstimatePeriod] = field(default_factory=list)
+
+
+@dataclass
 class InstitutionalHolder:
     """Satu institusi pemegang saham — dari Yahoo Finance `institutional_holders`
     (agregasi Yahoo atas SEC 13F, bukan parsing 13F manual)."""
@@ -245,6 +296,8 @@ class EvidencePackage:
     news: NewsCollection
     sec_filings: SecFilings
     generated_at: str
+    company_profile: CompanyProfile | None = None
+    analyst_estimates: AnalystEstimates | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -252,6 +305,8 @@ class EvidencePackage:
             "exchange": self.exchange,
             "price_market": asdict(self.price_market),
             "fundamental": asdict(self.fundamental),
+            "company_profile": asdict(self.company_profile) if self.company_profile else None,
+            "analyst_estimates": asdict(self.analyst_estimates) if self.analyst_estimates else None,
             "institutional_ownership": asdict(self.institutional_ownership),
             "institutional_activity": {
                 "buy_count_30d": self.institutional_activity.buy_count_30d,

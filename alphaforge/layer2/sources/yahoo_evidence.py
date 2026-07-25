@@ -20,7 +20,7 @@ import yfinance as yf
 from ...cache import get as cache_get, set as cache_set
 from ..contracts import (
     SourceMetadata, PriceMarketData, PriceBar, FundamentalData, InstitutionalOwnership,
-    InstitutionalHolder
+    InstitutionalHolder, CompanyProfile, AnalystEstimates, EpsSurprise, RevenueEstimatePeriod
 )
 from ._retry import retry
 
@@ -54,6 +54,9 @@ YAHOO_INFO_CACHE_TTL = 24 * 3600  # 24 jam — sama dengan 2 di atas, sengaja di
 
 YF_EVIDENCE_RETRIES = 2
 YF_EVIDENCE_RETRY_BACKOFF_SECONDS = 3.0
+
+COMPANY_PROFILE_CACHE_TTL = 24 * 3600  # 24 jam
+ANALYST_ESTIMATES_CACHE_TTL = 24 * 3600  # 24 jam
 
 YF_EVIDENCE_BATCH_SIZE = int(os.environ.get("YF_EVIDENCE_BATCH_SIZE", "20"))
 YF_EVIDENCE_BATCH_DELAY_SECONDS = float(os.environ.get("YF_EVIDENCE_BATCH_DELAY_SECONDS", "2.0"))
@@ -405,3 +408,194 @@ def fetch_institutional_ownership(ticker: str) -> InstitutionalOwnership:
             status="missing"
         )
         return InstitutionalOwnership(metadata=metadata)
+
+
+def fetch_company_profile(ticker: str) -> CompanyProfile:
+    """Identitas & deskripsi perusahaan — dari field `.info` yang sudah
+    ke-cache lewat `_fetch_yahoo_info` (dipakai bareng fundamental/ownership),
+    field-field ini sebelumnya dibuang tanpa diekstrak. TIDAK ADA network
+    call baru."""
+    cached = cache_get("company_profile", ticker, COMPANY_PROFILE_CACHE_TTL)
+    if cached is not None:
+        meta = cached.get("_metadata", {})
+        return CompanyProfile(
+            metadata=SourceMetadata(**meta) if meta else SourceMetadata(
+                source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="ok"
+            ),
+            long_name=cached.get("long_name"),
+            business_summary=cached.get("business_summary"),
+            website=cached.get("website"),
+            employees=cached.get("employees"),
+            city=cached.get("city"),
+            country=cached.get("country"),
+        )
+
+    try:
+        info = _fetch_yahoo_info(ticker)
+        long_name = info.get("longName") or info.get("shortName")
+        employees = info.get("fullTimeEmployees")
+
+        metadata = SourceMetadata(
+            source="yahoo_finance",
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+            status="ok" if long_name else "missing"
+        )
+
+        data = CompanyProfile(
+            metadata=metadata,
+            long_name=long_name,
+            business_summary=info.get("longBusinessSummary"),
+            website=info.get("website"),
+            employees=int(employees) if isinstance(employees, (int, float)) else None,
+            city=info.get("city"),
+            country=info.get("country"),
+        )
+
+        cache_set("company_profile", ticker, {
+            "long_name": data.long_name,
+            "business_summary": data.business_summary,
+            "website": data.website,
+            "employees": data.employees,
+            "city": data.city,
+            "country": data.country,
+            "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status},
+        })
+
+        return data
+    except Exception as e:
+        print(f"[yahoo_company_profile:{ticker}] gagal (post-processing/final): {e}", file=sys.stderr)
+        return CompanyProfile(metadata=SourceMetadata(
+            source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="missing"
+        ))
+
+
+def _fetch_earnings_history(ticker: str) -> list[dict]:
+    """EPS actual vs estimate analis, 4 kuartal terakhir dilaporkan
+    (`Ticker.earnings_history`) — endpoint terpisah dari `.info`, network
+    call baru per ticker. surprise_pct dikonversi ke skala percentage-point
+    (12.4 = 12.4%), konsisten dengan konvensi net_margin_q4/return_1y di
+    fundamental data — bukan skala fraksi seperti institutional percentage."""
+    def _do_fetch():
+        df = yf.Ticker(ticker).earnings_history
+        if df is None or df.empty:
+            return []
+        out = []
+        for idx, row in df.iterrows():
+            surprise = _safe_float(row.get("surprisePercent"))
+            out.append({
+                "quarter": idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
+                "eps_actual": _safe_float(row.get("epsActual")),
+                "eps_estimate": _safe_float(row.get("epsEstimate")),
+                "surprise_pct": surprise * 100 if surprise is not None else None,
+            })
+        return out
+
+    return retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
+                 backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
+                 label=f"yahoo_earnings_history:{ticker}")
+
+
+def _fetch_revenue_estimate(ticker: str) -> list[dict]:
+    """Konsensus revenue analis forward — kuartal ini/depan, tahun ini/depan
+    (`Ticker.revenue_estimate`) — network call baru per ticker. Cuma
+    forward-looking, TIDAK ada histori revenue-estimate-vs-actual bertahun-
+    tahun via yfinance gratis (beda dari earnings_history yang historis)."""
+    def _do_fetch():
+        df = yf.Ticker(ticker).revenue_estimate
+        if df is None or df.empty:
+            return []
+        out = []
+        for idx, row in df.iterrows():
+            growth = _safe_float(row.get("growth"))
+            num_analysts = row.get("numberOfAnalysts")
+            out.append({
+                "period": str(idx),
+                "avg": _safe_float(row.get("avg")),
+                "low": _safe_float(row.get("low")),
+                "high": _safe_float(row.get("high")),
+                "growth": growth * 100 if growth is not None else None,
+                "num_analysts": int(num_analysts) if isinstance(num_analysts, (int, float)) and num_analysts == num_analysts else None,
+            })
+        return out
+
+    return retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
+                 backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
+                 label=f"yahoo_revenue_estimate:{ticker}")
+
+
+def fetch_analyst_estimates(ticker: str) -> AnalystEstimates:
+    """Konsensus analis: price target & rating dari `.info` (gratis, sudah
+    ke-cache) + EPS surprise history & revenue estimate forward (network
+    call baru per ticker, lihat _fetch_earnings_history/_fetch_revenue_estimate)."""
+    cached = cache_get("analyst_estimates", ticker, ANALYST_ESTIMATES_CACHE_TTL)
+    if cached is not None:
+        meta = cached.get("_metadata", {})
+        return AnalystEstimates(
+            metadata=SourceMetadata(**meta) if meta else SourceMetadata(
+                source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="ok"
+            ),
+            target_low=cached.get("target_low"),
+            target_high=cached.get("target_high"),
+            target_mean=cached.get("target_mean"),
+            target_median=cached.get("target_median"),
+            recommendation_mean=cached.get("recommendation_mean"),
+            recommendation_key=cached.get("recommendation_key"),
+            num_analyst_opinions=cached.get("num_analyst_opinions"),
+            eps_surprise_history=[EpsSurprise(**e) for e in cached.get("eps_surprise_history", [])],
+            revenue_estimates=[RevenueEstimatePeriod(**r) for r in cached.get("revenue_estimates", [])],
+        )
+
+    try:
+        info = _fetch_yahoo_info(ticker)
+        target_mean = _safe_float(info.get("targetMeanPrice"))
+
+        try:
+            eps_history_raw = _fetch_earnings_history(ticker)
+        except Exception as exc:
+            print(f"[yahoo_analyst_estimates:{ticker}] gagal earnings_history, lanjut tanpa: {exc}", file=sys.stderr)
+            eps_history_raw = []
+        try:
+            revenue_est_raw = _fetch_revenue_estimate(ticker)
+        except Exception as exc:
+            print(f"[yahoo_analyst_estimates:{ticker}] gagal revenue_estimate, lanjut tanpa: {exc}", file=sys.stderr)
+            revenue_est_raw = []
+
+        num_opinions = info.get("numberOfAnalystOpinions")
+        metadata = SourceMetadata(
+            source="yahoo_finance",
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+            status="ok" if (target_mean is not None or eps_history_raw or revenue_est_raw) else "missing"
+        )
+
+        data = AnalystEstimates(
+            metadata=metadata,
+            target_low=_safe_float(info.get("targetLowPrice")),
+            target_high=_safe_float(info.get("targetHighPrice")),
+            target_mean=target_mean,
+            target_median=_safe_float(info.get("targetMedianPrice")),
+            recommendation_mean=_safe_float(info.get("recommendationMean")),
+            recommendation_key=info.get("recommendationKey"),
+            num_analyst_opinions=int(num_opinions) if isinstance(num_opinions, (int, float)) else None,
+            eps_surprise_history=[EpsSurprise(**e) for e in eps_history_raw],
+            revenue_estimates=[RevenueEstimatePeriod(**r) for r in revenue_est_raw],
+        )
+
+        cache_set("analyst_estimates", ticker, {
+            "target_low": data.target_low,
+            "target_high": data.target_high,
+            "target_mean": data.target_mean,
+            "target_median": data.target_median,
+            "recommendation_mean": data.recommendation_mean,
+            "recommendation_key": data.recommendation_key,
+            "num_analyst_opinions": data.num_analyst_opinions,
+            "eps_surprise_history": eps_history_raw,
+            "revenue_estimates": revenue_est_raw,
+            "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status},
+        })
+
+        return data
+    except Exception as e:
+        print(f"[yahoo_analyst_estimates:{ticker}] gagal (post-processing/final): {e}", file=sys.stderr)
+        return AnalystEstimates(metadata=SourceMetadata(
+            source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="missing"
+        ))

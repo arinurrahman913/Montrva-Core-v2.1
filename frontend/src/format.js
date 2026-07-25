@@ -127,6 +127,65 @@ const LABEL_MAP = {
   universe_size: 'Universe Size',
   median_5y: 'Median (5Y)',
   score_0_100: 'Score (0–100)',
+  // key_metrics reasoning modules
+  net_margin_q4: 'Net Margin',
+  current_ratio: 'Current Ratio',
+  debt_to_equity: 'Debt/Equity',
+  return_1y: 'Return 1Y',
+  pe_ratio: 'P/E',
+  pb_ratio: 'P/B',
+  pe_peer_percentile: 'P/E Peer Percentile',
+  volatility_daily: 'Volatility (Daily)',
+  institutional_pct: 'Institutional %',
+  insider_transactions: 'Insider Transactions',
+  next_catalyst: 'Next Catalyst',
+  insider_filing_activity_30d: 'Insider Filing Activity (30D)',
+  tam_estimate: 'TAM Estimate',
+  segment_growth: 'Segment Growth',
+  acceleration_signal: 'Acceleration Signal',
+  revenue_growth_peer_percentile: 'Revenue Growth Peer Percentile',
+}
+
+// key_metrics values are a mix of number/string — format numbers compactly,
+// leave strings (e.g. next_catalyst: "earnings@2026-08-05") as-is.
+export function fmtMetricValue(v) {
+  if (v === null || v === undefined) return '—'
+  if (typeof v !== 'number') return String(v)
+  return Number.isInteger(v) ? String(v) : v.toFixed(2)
+}
+
+// Kalimat pertama dari longBusinessSummary (data asli Yahoo, bukan
+// parafrase) — dipakai sebagai teaser di header, full text tetap ada di
+// balik "baca selengkapnya".
+export function firstSentence(text) {
+  if (!text) return null
+  const match = text.match(/^.*?[.!?](?=\s|$)/)
+  return match ? match[0] : text
+}
+
+export function fmtCompact(v) {
+  return v === null || v === undefined ? '—' : v.toLocaleString()
+}
+
+// Polyline SVG points buat sparkline dari price_history (array {close}) —
+// sample turun ke ~N titik biar path-nya nggak terlalu padat, normalized ke
+// viewBox width x height.
+export function sparklinePoints(bars, width = 300, height = 56, maxPoints = 30) {
+  if (!bars || bars.length < 2) return ''
+  const step = Math.max(1, Math.floor(bars.length / maxPoints))
+  const sample = []
+  for (let i = 0; i < bars.length; i += step) sample.push(bars[i].close)
+  if (sample[sample.length - 1] !== bars[bars.length - 1].close) sample.push(bars[bars.length - 1].close)
+  const lo = Math.min(...sample)
+  const hi = Math.max(...sample)
+  const range = hi - lo || 1
+  return sample
+    .map((c, i) => {
+      const x = (i / (sample.length - 1)) * width
+      const y = height - ((c - lo) / range) * height
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
 }
 
 const ACRONYMS = { pct: '%', ma: 'MA', vix: 'VIX', dxy: 'DXY', wti: 'WTI', oas: 'OAS', gdp: 'GDP', m2: 'M2', spx: 'SPX', bps: 'bps', yoy: 'YoY', qoq: 'QoQ' }

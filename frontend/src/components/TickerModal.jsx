@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { fmtPct, fmtMoney, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel, MODULE_LABELS } from '../format'
+import {
+  fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
+  fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
+} from '../format'
+
+const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
-export default function TickerModal({ ticker, onClose }) {
+// Kontext dari halaman asal klik menentukan section mana yang ditampilkan
+// (D-04 "jangan campur" — user eksplisit minta modal fokus per stage,
+// bukan dump semua sekaligus). Nama-nama di sini = key activeView di App.jsx.
+const STAGE_CONTEXTS = new Set(['reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical'])
+
+export default function TickerModal({ ticker, context, onClose }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [live, setLive] = useState(null) // null = loading, {stale:true} = failed, else fresh quote
@@ -67,7 +77,7 @@ export default function TickerModal({ ticker, onClose }) {
         <div className="modal-body">
           {error && <div className="empty">Gagal memuat detail: {error}</div>}
           {!error && !data && <div className="loading">Memuat detail…</div>}
-          {data && <ModalBody data={data} />}
+          {data && <ModalBody data={data} context={context} />}
         </div>
       </div>
     </div>
@@ -89,7 +99,7 @@ function LiveQuoteBadge({ live }) {
   )
 }
 
-function ModalBody({ data }) {
+function ModalBody({ data, context }) {
   const { aggregator, reasoning, risk, confidence, catalyst, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
 
@@ -97,9 +107,25 @@ function ModalBody({ data }) {
 
   const synthesis = aggregator?.synthesis
 
+  // Modal fokus per stage sesuai halaman asal klik — bukan dump semua
+  // sekaligus (lihat catatan di STAGE_CONTEXTS). Konteks yang nggak
+  // punya section khusus (screening/peer/dst) fallback ke grup Evidence,
+  // karena itu paling relevan sebagai "profil dasar" ticker.
+  const showReasoning = context === 'reasoning' || context === 'aggregator'
+  const showRisk = context === 'risk'
+  const showConfidence = context === 'confidence'
+  const showCatalyst = context === 'catalyst'
+  const showKnowledge = context === 'knowledge'
+  const showHistorical = context === 'historical'
+  const showEvidence = !STAGE_CONTEXTS.has(context)
+
   return (
     <>
-      {aggregator?.halted && (
+      {showEvidence && (
+        <CompanyHeaderSection profile={evidence?.company_profile} fundamental={evidence?.fundamental} />
+      )}
+
+      {showReasoning && aggregator?.halted && (
         <div className="msection">
           <div className="flag">
             <strong>HALTED</strong> — {aggregator.halt_reason || 'red flag severity ekstrem terpicu'}.
@@ -108,35 +134,92 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {synthesis && (
-        <div className="msection">
-          <div className="msection-title">
-            Sintesis — {synthesis.full_convergence ? '3 lensa konvergen' : 'ada perbedaan pandangan'}
+      {showReasoning && (synthesis || (reasoning && !aggregator?.halted)) && (
+        <div className="msection" id="sec-reasoning">
+          <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Reasoning — 3 Lensa</span>
+            {synthesis && (
+              <span className={`pill ${synthesis.full_convergence ? 'ok' : 'neutral'}`}>
+                {synthesis.full_convergence ? 'konvergen' : 'divergen'}
+              </span>
+            )}
+            {synthesis?.confidence && (
+              <span className={`pill ${bandClass(synthesis.confidence.band)}`}>
+                confidence {synthesis.confidence.score.toFixed(0)} · {synthesis.confidence.band}
+              </span>
+            )}
+            {synthesis?.surprise != null && (
+              <span className="pill neutral">surprise {synthesis.surprise.toFixed(2)}</span>
+            )}
           </div>
-          <div className="mrow">
-            <div className="mcell">
-              <div className="mcell-label">Confidence (terendah)</div>
-              <div className="mcell-val">
-                <span className={`pill ${bandClass(synthesis.confidence?.band)}`}>
-                  {synthesis.confidence ? `${synthesis.confidence.score.toFixed(0)} · ${synthesis.confidence.band}` : '—'}
-                </span>
-              </div>
+
+          {synthesis?.narrative && <p className="narrative" style={{ marginBottom: 12 }}>{synthesis.narrative}</p>}
+
+          {reasoning && !aggregator?.halted && (
+            <div className="lens-grid">
+              {MODULES.map((key) => {
+                const o = reasoning[key]
+                if (!o) return null
+                const metricEntries = Object.entries(o.key_metrics || {})
+                const hasDetail =
+                  (o.positive_factors || []).length > 0 ||
+                  (o.negative_factors || []).length > 0 ||
+                  (o.knowledge_gaps || []).length > 0 ||
+                  (o.flag_responses || []).length > 0
+                return (
+                  <div className="lens-card" key={key}>
+                    <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
+                    <span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span>
+                    {o.stance_rationale && <p className="lens-card-rationale">{o.stance_rationale}</p>}
+                    {metricEntries.length > 0 && (
+                      <div className="lens-card-metrics">
+                        {metricEntries.slice(0, 3).map(([k, v]) => (
+                          <div className="lens-card-metric" key={k}>
+                            <span>{prettyLabel(k)}</span>
+                            <b>{fmtMetricValue(v)}</b>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--faint)' }}>
+                      conf {o.confidence?.score?.toFixed(0) ?? '—'}/{o.confidence?.band ?? '—'}
+                    </div>
+                    {hasDetail && (
+                      <details className="lens-details">
+                        <summary>Detail lainnya</summary>
+                        {(o.positive_factors || []).map((f, i) => (
+                          <div className="factor pos" key={`p${i}`}>+ {f}</div>
+                        ))}
+                        {(o.negative_factors || []).map((f, i) => (
+                          <div className="factor neg" key={`n${i}`}>− {f}</div>
+                        ))}
+                        {(o.knowledge_gaps || []).length > 0 && (
+                          <div className="factor" style={{ color: 'var(--faint)' }}>
+                            Data kurang: {o.knowledge_gaps.join(', ')}
+                          </div>
+                        )}
+                        {(o.flag_responses || []).map((fr, i) => (
+                          <div className="factor" key={`fr${i}`} style={{ color: 'var(--warn)' }}>
+                            ⚑ {fr.flag_id} ({fr.impact}): {fr.rationale}
+                          </div>
+                        ))}
+                      </details>
+                    )}
+                  </div>
+                )
+              })}
             </div>
-            <div className="mcell">
-              <div className="mcell-label">Surprise</div>
-              <div className="mcell-val">{synthesis.surprise != null ? synthesis.surprise.toFixed(2) : '—'}</div>
+          )}
+
+          {(synthesis?.agreements || []).length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              {synthesis.agreements.map((a, i) => (
+                <div className="agreement-item" key={`agr${i}`}>→ {a.claim}</div>
+              ))}
             </div>
-            <div className="mcell">
-              <div className="mcell-label">Kesepakatan</div>
-              <div className="mcell-val">{synthesis.agreements?.length ?? 0}</div>
-            </div>
-            <div className="mcell">
-              <div className="mcell-label">Perbedaan</div>
-              <div className="mcell-val">{synthesis.divergences?.length ?? 0}</div>
-            </div>
-          </div>
-          {synthesis.narrative && <p className="narrative" style={{ marginTop: 8 }}>{synthesis.narrative}</p>}
-          {(synthesis.divergences || []).map((d, i) => (
+          )}
+
+          {(synthesis?.divergences || []).map((d, i) => (
             <div className="lens-box" key={`div${i}`}>
               <div className="lens-head">
                 <span>{d.claim}</span>
@@ -152,51 +235,8 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {reasoning && !aggregator?.halted && (
-        <div className="msection">
-          <div className="msection-title">Reasoning — 3 Lensa Independen</div>
-          {MODULES.map((key) => {
-            const o = reasoning[key]
-            if (!o) return null
-            return (
-              <div className="lens-box" key={key}>
-                <div className="lens-head">
-                  <span>{MODULE_LABELS[key]}</span>
-                  <span>
-                    <span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span>
-                    {' '}
-                    <span style={{ color: 'var(--faint)', fontSize: 11 }}>
-                      conf {o.confidence?.score?.toFixed(0) ?? '—'}/{o.confidence?.band ?? '—'}
-                    </span>
-                  </span>
-                </div>
-                {o.stance_rationale && (
-                  <div className="factor" style={{ color: 'var(--dim)' }}>{o.stance_rationale}</div>
-                )}
-                {(o.positive_factors || []).map((f, i) => (
-                  <div className="factor pos" key={`p${i}`}>+ {f}</div>
-                ))}
-                {(o.negative_factors || []).map((f, i) => (
-                  <div className="factor neg" key={`n${i}`}>− {f}</div>
-                ))}
-                {(o.knowledge_gaps || []).length > 0 && (
-                  <div className="factor" style={{ color: 'var(--faint)', fontSize: 11 }}>
-                    Data kurang: {o.knowledge_gaps.join(', ')}
-                  </div>
-                )}
-                {(o.flag_responses || []).map((fr, i) => (
-                  <div className="factor" key={`fr${i}`} style={{ color: 'var(--warn)', fontSize: 11 }}>
-                    ⚑ {fr.flag_id} ({fr.impact}): {fr.rationale}
-                  </div>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {(risk?.flags?.length > 0 || risk?.red_flags?.length > 0) && (
-        <div className="msection">
+      {showRisk && (risk?.flags?.length > 0 || risk?.red_flags?.length > 0) && (
+        <div className="msection" id="sec-risk">
           <div className="msection-title">
             Risk / Red Flags{risk.risk_score != null ? ` (score ${risk.risk_score.toFixed(0)})` : ''}
           </div>
@@ -213,8 +253,8 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {confidence && (
-        <div className="msection">
+      {showConfidence && confidence && (
+        <div className="msection" id="sec-confidence">
           <div className="msection-title">
             Confidence Report — overall {confidence.overall?.score?.toFixed(0) ?? '—'}%{' '}
             <span className={`pill ${bandClass(confidence.overall?.band)}`}>{confidence.overall?.band || '—'}</span>
@@ -235,8 +275,8 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {catalyst && (catalyst.catalysts || []).length > 0 && (
-        <div className="msection">
+      {showCatalyst && catalyst && (catalyst.catalysts || []).length > 0 && (
+        <div className="msection" id="sec-catalyst">
           <div className="msection-title">Katalis Mendatang</div>
           {catalyst.catalysts.map((c, i) => (
             <div className="lens-box" key={i}>
@@ -254,8 +294,8 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {knowledge && (
-        <div className="msection">
+      {showKnowledge && knowledge && (
+        <div className="msection" id="sec-knowledge">
           <div className="msection-title">Knowledge — Revenue Trend (YoY)</div>
           <div className="mrow">
             {['yoy_q1', 'yoy_q2', 'yoy_q3', 'yoy_q4'].map((k, i) => (
@@ -268,48 +308,44 @@ function ModalBody({ data }) {
         </div>
       )}
 
-      {evidence && (
-        <div className="msection">
+      {showEvidence && evidence && (
+        <div className="msection" id="sec-evidence">
           <div className="msection-title">Evidence — Sumber Data</div>
-          <div className="mrow">
-            <div className="mcell">
-              <div className="mcell-label">Price Source</div>
-              <div className="mcell-val" style={{ fontSize: 12 }}>
-                {evidence.price_market?.metadata?.source || '—'}
-              </div>
-            </div>
-            <div className="mcell">
-              <div className="mcell-label">SEC Filings</div>
-              <div className="mcell-val" style={{ fontSize: 12 }}>
-                {evidence.sec_filings?.items?.length || 0} filing(s)
-              </div>
-            </div>
-            <div className="mcell">
-              <div className="mcell-label">SEC Quarterly</div>
-              <div className="mcell-val" style={{ fontSize: 12 }}>
-                {evidence.fundamental?.quarterly_data?.length || 0} kuartal
-              </div>
-            </div>
-            <div className="mcell">
-              <div className="mcell-label">News</div>
-              <div className="mcell-val" style={{ fontSize: 12 }}>
-                {evidence.news?.news?.length || 0} artikel
-              </div>
-            </div>
+
+          <PriceSnapshotBlock priceMarket={evidence.price_market} />
+
+          {evidence.analyst_estimates && (
+            <AnalystEstimatesBlock
+              estimates={evidence.analyst_estimates}
+              currentPrice={evidence.price_market?.last_price ?? evidence.price_market?.close}
+            />
+          )}
+
+          <DilutionCallout changePct={evidence.fundamental?.shares_outstanding_change_12m} />
+
+          <FundamentalRatiosGrid fundamental={evidence.fundamental} />
+
+          {(evidence.fundamental?.quarterly_data || []).length > 0 && (
+            <QuarterlyFinancialsTable quarters={evidence.fundamental.quarterly_data} />
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 4 }}>
+            <SecFilingsBlock filings={evidence.sec_filings} />
+            <NewsBlock news={evidence.news} />
           </div>
         </div>
       )}
 
-      {evidence?.institutional_activity && (
+      {showEvidence && evidence?.institutional_activity && (
         <InsiderActivitySection activity={evidence.institutional_activity} />
       )}
 
-      {evidence?.institutional_ownership && (
+      {showEvidence && evidence?.institutional_ownership && (
         <InstitutionalHoldersSection ownership={evidence.institutional_ownership} />
       )}
 
-      {historical && (historical.entries || []).length > 0 && (
-        <div className="msection">
+      {showHistorical && historical && (historical.entries || []).length > 0 && (
+        <div className="msection" id="sec-historical">
           <div className="msection-title">
             Historical Tracking ({historical.total_entries || historical.entries.length} snapshot)
           </div>
@@ -342,6 +378,328 @@ function ModalBody({ data }) {
         </div>
       )}
     </>
+  )
+}
+
+function CompanyHeaderSection({ profile, fundamental }) {
+  if (!profile?.long_name && !fundamental?.sector) return null
+  const teaser = firstSentence(profile?.business_summary)
+  const hasMoreText = profile?.business_summary && teaser && profile.business_summary.length > teaser.length
+
+  return (
+    <div className="company-header">
+      {profile?.long_name && <div className="company-name">{profile.long_name}</div>}
+      {(fundamental?.sector || fundamental?.industry) && (
+        <div className="company-badges">
+          {fundamental.sector && <span className="pill neutral">{fundamental.sector}</span>}
+          {fundamental.industry && <span className="pill neutral">{fundamental.industry}</span>}
+        </div>
+      )}
+      {teaser && <p className="company-desc">{teaser}</p>}
+      {hasMoreText && (
+        <details className="company-desc-toggle">
+          <summary>Baca deskripsi lengkap dari Yahoo Finance</summary>
+          <p className="company-desc-full">{profile.business_summary}</p>
+        </details>
+      )}
+      {(profile?.employees != null || profile?.city || profile?.website) && (
+        <div className="company-meta">
+          {profile.employees != null && <span>{fmtCompact(profile.employees)} karyawan</span>}
+          {(profile.city || profile.country) && <span>{[profile.city, profile.country].filter(Boolean).join(', ')}</span>}
+          {profile.website && (
+            <a href={profile.website} target="_blank" rel="noreferrer">
+              {profile.website.replace(/^https?:\/\//, '')}
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PriceSnapshotBlock({ priceMarket }) {
+  if (!priceMarket) return null
+  const close = priceMarket.last_price ?? priceMarket.close
+  const lo52 = priceMarket.low_52w
+  const hi52 = priceMarket.high_52w
+  const pos52 = lo52 != null && hi52 != null && hi52 > lo52 && close != null
+    ? Math.max(0, Math.min(100, ((close - lo52) / (hi52 - lo52)) * 100))
+    : null
+  const points = sparklinePoints(priceMarket.price_history)
+
+  return (
+    <div className="mrow" style={{ marginBottom: 4 }}>
+      <div className="mcell">
+        <div className="mcell-label">Close</div>
+        <div className="mcell-val">${fmtNum(close, 2)}</div>
+      </div>
+      <div className="mcell">
+        <div className="mcell-label">Open / High / Low</div>
+        <div className="mcell-val" style={{ fontSize: 13 }}>
+          ${fmtNum(priceMarket.open, 2)} / ${fmtNum(priceMarket.high, 2)} / ${fmtNum(priceMarket.low, 2)}
+        </div>
+      </div>
+      <div className="mcell">
+        <div className="mcell-label">Market Cap</div>
+        <div className="mcell-val">{fmtMoney(priceMarket.market_cap)}</div>
+      </div>
+      <div className="mcell">
+        <div className="mcell-label">Volume</div>
+        <div className="mcell-val" style={{ fontSize: 15 }}>{fmtCompact(priceMarket.volume)}</div>
+      </div>
+      <div className="mcell">
+        <div className="mcell-label">Shares Outstanding</div>
+        <div className="mcell-val" style={{ fontSize: 15 }}>{fmtCompact(priceMarket.shares_outstanding)}</div>
+      </div>
+      <div className="mcell">
+        <div className="mcell-label">Beta</div>
+        <div className="mcell-val">{priceMarket.beta != null ? fmtNum(priceMarket.beta, 2) : '—'}</div>
+      </div>
+
+      {pos52 != null && (
+        <div className="mcell" style={{ gridColumn: '1 / -1' }}>
+          <div className="mcell-label">52 Minggu</div>
+          <div className="range-bar">
+            <div className="range-bar-fill" style={{ width: `${pos52}%` }} />
+            <div className="range-bar-mark" style={{ left: `${pos52}%`, background: 'var(--text)' }} />
+          </div>
+          <div className="range-bar-labels">
+            <span>low ${fmtNum(lo52, 2)}</span>
+            <span>high ${fmtNum(hi52, 2)}</span>
+          </div>
+        </div>
+      )}
+
+      {points && (
+        <div className="mcell" style={{ gridColumn: '1 / -1' }}>
+          <div className="mcell-label">Tren 1 Tahun</div>
+          <svg viewBox="0 0 300 56" width="100%" height="40" preserveAspectRatio="none">
+            <polyline points={points} fill="none" stroke="var(--good)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const REV_ESTIMATE_LABELS = { '0q': 'Kuartal Ini', '+1q': 'Kuartal Depan', '0y': 'Tahun Ini', '+1y': 'Tahun Depan' }
+
+function AnalystEstimatesBlock({ estimates, currentPrice }) {
+  const hasTargets = estimates.target_low != null && estimates.target_high != null
+  const hasEps = (estimates.eps_surprise_history || []).length > 0
+  const hasRevEst = (estimates.revenue_estimates || []).length > 0
+
+  if (!hasTargets && !hasEps && !hasRevEst) {
+    return (
+      <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 12 }}>
+        Belum ada cakupan analis untuk ticker ini.
+      </p>
+    )
+  }
+
+  const range = hasTargets ? estimates.target_high - estimates.target_low : 0
+  const targetPos = hasTargets && range > 0 && currentPrice != null
+    ? Math.max(0, Math.min(100, ((currentPrice - estimates.target_low) / range) * 100))
+    : null
+  const meanPos = hasTargets && range > 0 && estimates.target_mean != null
+    ? Math.max(0, Math.min(100, ((estimates.target_mean - estimates.target_low) / range) * 100))
+    : null
+  const upsidePct = currentPrice && estimates.target_mean != null
+    ? ((estimates.target_mean - currentPrice) / currentPrice) * 100
+    : null
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {hasTargets && (
+        <div className="mcell" style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div className="mcell-label" style={{ marginBottom: 0 }}>
+              Price Target Konsensus{estimates.num_analyst_opinions ? ` · ${estimates.num_analyst_opinions} analis` : ''}
+            </div>
+            {estimates.recommendation_key && (
+              <span className={`pill ${ratingClass(estimates.recommendation_key)}`}>{prettyStance(estimates.recommendation_key)}</span>
+            )}
+          </div>
+          <div className="range-bar">
+            {targetPos != null && <div className="range-bar-mark" style={{ left: `${targetPos}%`, background: 'var(--text)' }} />}
+            {meanPos != null && <div className="range-bar-mark" style={{ left: `${meanPos}%`, background: 'var(--accent)' }} />}
+          </div>
+          <div className="range-bar-labels">
+            <span>low ${fmtNum(estimates.target_low, 2)}</span>
+            {currentPrice != null && <span>sekarang ${fmtNum(currentPrice, 2)}</span>}
+            <span>mean ${fmtNum(estimates.target_mean, 2)}{upsidePct != null ? ` (${fmtPct(upsidePct, 1)})` : ''}</span>
+            <span>high ${fmtNum(estimates.target_high, 2)}</span>
+          </div>
+        </div>
+      )}
+
+      {hasEps && (
+        <div style={{ marginBottom: 10 }}>
+          <div className="mcell-label" style={{ marginBottom: 6 }}>EPS Surprise — 4 Kuartal Terakhir</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--sans)', fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--rule)', color: 'var(--faint)', textAlign: 'right' }}>
+                <th style={{ padding: '4px 8px 8px 0', fontWeight: 600, textAlign: 'left' }}>Kuartal</th>
+                <th style={{ padding: '4px 8px 8px', fontWeight: 600 }}>Actual</th>
+                <th style={{ padding: '4px 8px 8px', fontWeight: 600 }}>Estimate</th>
+                <th style={{ padding: '4px 0 8px 8px', fontWeight: 600 }}>Surprise</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimates.eps_surprise_history.map((e, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--rule)' }}>
+                  <td style={{ padding: '6px 8px 6px 0' }}>{e.quarter}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>${fmtNum(e.eps_actual, 2)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--faint)' }}>${fmtNum(e.eps_estimate, 2)}</td>
+                  <td
+                    style={{
+                      padding: '6px 0 6px 8px', textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 600,
+                      color: e.surprise_pct >= 0 ? 'var(--good)' : 'var(--bad)',
+                    }}
+                  >
+                    {fmtPct(e.surprise_pct, 1)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasRevEst && (
+        <div>
+          <div className="mcell-label" style={{ marginBottom: 6 }}>Estimasi Revenue Ke Depan</div>
+          <div className="mrow">
+            {estimates.revenue_estimates.map((r) => (
+              <div className="mcell" key={r.period}>
+                <div className="mcell-label">{REV_ESTIMATE_LABELS[r.period] || r.period}</div>
+                <div className="mcell-val" style={{ fontSize: 15 }}>
+                  {fmtMoney(r.avg)}{' '}
+                  {r.growth != null && <span style={{ fontSize: 11, color: 'var(--good)', fontWeight: 400 }}>{fmtPct(r.growth, 1)}</span>}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>
+                  range {fmtMoney(r.low)}–{fmtMoney(r.high)}{r.num_analysts ? ` · ${r.num_analysts} analis` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="narrative" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 8 }}>
+        Histori "revenue actual vs estimate" bertahun-tahun tidak tersedia gratis dari Yahoo — cuma EPS 4 kuartal terakhir + estimasi forward yang ada.
+      </p>
+    </div>
+  )
+}
+
+function DilutionCallout({ changePct }) {
+  if (changePct == null || changePct <= DILUTION_WARN_THRESHOLD_PCT) return null
+  return (
+    <div className="flag medium" style={{ marginBottom: 14 }}>
+      <strong>Shares outstanding naik {fmtNum(changePct, 1)}% dalam 12 bulan</strong> — field yang dipakai risk flag{' '}
+      <code style={{ fontFamily: 'var(--mono)' }}>dilution_12m</code> (threshold {fmtNum(DILUTION_WARN_THRESHOLD_PCT, 0)}%).
+    </div>
+  )
+}
+
+const RATIO_FIELDS = [
+  ['pe_ratio', 'P/E', (v) => `${fmtNum(v, 2)}x`],
+  ['eps', 'EPS', (v) => `$${fmtNum(v, 2)}`],
+  ['book_value_per_share', 'Book Value/Share', (v) => `$${fmtNum(v, 2)}`],
+  ['gross_margin', 'Gross Margin', (v) => fmtPct(v * 100, 1)],
+  ['operating_margin', 'Operating Margin', (v) => fmtPct(v * 100, 1)],
+  ['roe', 'ROE', (v) => fmtPct(v * 100, 1)],
+  ['roa', 'ROA', (v) => fmtPct(v * 100, 1)],
+  ['current_ratio', 'Current Ratio', (v) => fmtNum(v, 2)],
+  ['quick_ratio', 'Quick Ratio', (v) => fmtNum(v, 2)],
+  ['free_cash_flow', 'Free Cash Flow', (v) => fmtMoney(v)],
+  ['payout_ratio', 'Payout Ratio', (v) => fmtPct(v * 100, 1)],
+  ['dividend_yield', 'Dividend Yield', (v) => fmtPct(v * 100, 1)],
+  ['debt_to_equity', 'Debt/Equity', (v) => fmtNum(v, 2)],
+  ['shares_outstanding_change_12m', 'Shares Out. Δ12m', (v) => fmtPct(v, 1)],
+]
+
+function FundamentalRatiosGrid({ fundamental }) {
+  if (!fundamental) return null
+  return (
+    <div className="mrow" style={{ marginTop: 4, marginBottom: 4 }}>
+      {RATIO_FIELDS.map(([key, label, fmt]) => {
+        const v = fundamental[key]
+        return (
+          <div className="mcell" key={key} style={v == null ? { opacity: 0.5 } : undefined}>
+            <div className="mcell-label">{label}</div>
+            <div className="mcell-val" style={{ fontSize: 15 }}>{v != null ? fmt(v) : 'tidak tersedia'}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function QuarterlyFinancialsTable({ quarters }) {
+  const sorted = [...quarters].sort((a, b) => (b.fiscal_date || b.period || '').localeCompare(a.fiscal_date || a.period || ''))
+  return (
+    <div style={{ marginTop: 4, marginBottom: 4 }}>
+      <div className="mcell-label" style={{ marginBottom: 6 }}>Kuartal Terakhir ({sorted.length} kuartal SEC)</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--sans)', fontSize: 12.5 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--rule)', color: 'var(--faint)', textAlign: 'right' }}>
+            <th style={{ padding: '4px 8px 8px 0', fontWeight: 600, textAlign: 'left' }}>Kuartal</th>
+            <th style={{ padding: '4px 8px 8px', fontWeight: 600 }}>Revenue</th>
+            <th style={{ padding: '4px 8px 8px', fontWeight: 600 }}>Gross Profit</th>
+            <th style={{ padding: '4px 8px 8px', fontWeight: 600 }}>Net Income</th>
+            <th style={{ padding: '4px 0 8px 8px', fontWeight: 600 }}>Cash From Ops</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((q, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid var(--rule)' }}>
+              <td style={{ padding: '6px 8px 6px 0' }}>{q.fiscal_date || q.period}</td>
+              <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(q.revenue)}</td>
+              <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(q.gross_profit)}</td>
+              <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(q.net_income)}</td>
+              <td style={{ padding: '6px 0 6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtMoney(q.cash_from_operations)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SecFilingsBlock({ filings }) {
+  const items = filings?.items || []
+  if (items.length === 0) return null
+  const sorted = [...items].sort((a, b) => (b.filing_date || '').localeCompare(a.filing_date || ''))
+  return (
+    <div>
+      <div className="mcell-label" style={{ marginBottom: 8 }}>SEC Filings ({items.length} total)</div>
+      {sorted.slice(0, 5).map((f, i) => (
+        <a key={i} href={f.url} target="_blank" rel="noreferrer" className="filing-row">
+          <span>{f.filing_date ? fmtIdDate(new Date(f.filing_date + 'T00:00:00Z')) : '—'}</span>
+          <span className="pill neutral">{f.form_type}</span>
+        </a>
+      ))}
+      {items.length > 5 && <div style={{ fontSize: 11, color: 'var(--faint)' }}>+ {items.length - 5} filing lainnya</div>}
+    </div>
+  )
+}
+
+function NewsBlock({ news }) {
+  const items = news?.items || []
+  if (items.length === 0) return null
+  const sorted = [...items].sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''))
+  return (
+    <div>
+      <div className="mcell-label" style={{ marginBottom: 8 }}>Berita Terbaru ({items.length})</div>
+      {sorted.slice(0, 5).map((n, i) => (
+        <a key={i} href={n.url} target="_blank" rel="noreferrer" className="news-row">
+          <div>{n.headline}</div>
+          <div className="news-row-meta">{n.source}{n.published_at ? ` · ${fmtIdDate(new Date(n.published_at))}` : ''}</div>
+        </a>
+      ))}
+    </div>
   )
 }
 
@@ -398,7 +756,7 @@ function InstitutionalHoldersSection({ ownership }) {
   const deadline = latestReportDate ? nextFilingDeadline(latestReportDate) : null
 
   return (
-    <div className="msection">
+    <div className="msection" id="sec-holders">
       <div className="msection-title">
         Institutional Holders
         {pct !== null && pct !== undefined && ` — ${(pct * 100).toFixed(1)}% dari total saham dipegang institusi`}
@@ -407,6 +765,27 @@ function InstitutionalHoldersSection({ ownership }) {
         <p className="narrative">Detail per-institusi tidak tersedia (data mentah dari Yahoo Finance).</p>
       ) : (
         <>
+          <div className="mrow" style={{ marginBottom: 10 }}>
+            <div className="mcell">
+              <div className="mcell-label">🆕 Baru Masuk</div>
+              <div className="mcell-val" style={{ color: 'var(--good)' }}>{newCount}</div>
+            </div>
+            <div className="mcell">
+              <div className="mcell-label">▲ Nambah Posisi</div>
+              <div className="mcell-val" style={{ color: 'var(--good)' }}>{addedCount}</div>
+            </div>
+            <div className="mcell">
+              <div className="mcell-label">▼ Kurangi Posisi</div>
+              <div className="mcell-val" style={{ color: 'var(--bad)' }}>{reducedCount}</div>
+            </div>
+            <div className="mcell" style={{ opacity: 0.6 }}>
+              <div className="mcell-label">⋯ Keluar Total dari Top 10</div>
+              <div className="mcell-val" style={{ fontSize: 13 }}>tidak diketahui</div>
+            </div>
+          </div>
+          <p className="narrative" style={{ fontSize: 10.5, color: 'var(--faint)', marginBottom: 10 }}>
+            "Keluar total" belum bisa dideteksi — cache institutional_ownership cuma nyimpen snapshot kuartal terakhir, belum ada history buat dibandingkan.
+          </p>
           {deadline && (
             <p className="narrative" style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 8 }}>
               Data 13F per {fmtIdDate(new Date(latestReportDate + 'T00:00:00Z'))} — ini yang terbaru tersedia di manapun (SEC, Yahoo, dll).
@@ -478,7 +857,7 @@ function InsiderActivitySection({ activity }) {
   const convictionTone = count30d >= 3 ? 'good' : count30d === 2 ? 'neutral' : 'faint'
 
   return (
-    <div className="msection">
+    <div className="msection" id="sec-insider">
       <div className="msection-title">
         Insider Activity (Form 4 Filings)
       </div>
@@ -500,6 +879,29 @@ function InsiderActivitySection({ activity }) {
               ✓ Insider aktif
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="mrow" style={{ marginBottom: 4 }}>
+        <div className="mcell">
+          <div className="mcell-label">Beli (30d)</div>
+          <div className="mcell-val" style={{ color: 'var(--good)' }}>{activity.buy_count_30d ?? 0}</div>
+        </div>
+        <div className="mcell">
+          <div className="mcell-label">Jual (30d)</div>
+          <div className="mcell-val" style={{ color: (activity.sell_count_30d || 0) > 0 ? 'var(--bad)' : 'var(--dim)' }}>
+            {activity.sell_count_30d ?? 0}
+          </div>
+        </div>
+        <div className="mcell">
+          <div className="mcell-label">Net Shares (30d)</div>
+          <div className="mcell-val" style={{ fontSize: 15 }}>{fmtCompact(activity.net_shares_30d)}</div>
+        </div>
+        <div className="mcell">
+          <div className="mcell-label">Top Buyer / Seller</div>
+          <div className="mcell-val" style={{ fontSize: 12 }}>
+            {activity.top_buyer || '—'} / {activity.top_seller || '—'}
+          </div>
         </div>
       </div>
 

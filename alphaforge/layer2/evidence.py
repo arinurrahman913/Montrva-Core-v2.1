@@ -18,6 +18,7 @@ from .contracts import (
 )
 from .sources.yahoo_evidence import (
     fetch_price_market_data, fetch_fundamental_data, fetch_institutional_ownership,
+    fetch_company_profile, fetch_analyst_estimates,
     reset_batch_tracking as reset_yahoo_batch_tracking
 )
 from .sources.finnhub import fetch_company_news, reset_batch_tracking as reset_finnhub_batch_tracking
@@ -40,6 +41,8 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
     institutional_activity = fetch_institutional_activity(ticker)
     news = fetch_company_news(ticker)
     sec_filings = fetch_sec_filings(ticker)
+    company_profile = fetch_company_profile(ticker)
+    analyst_estimates = fetch_analyst_estimates(ticker)
 
     # #2 Financial Trends: Fetch quarterly data dari SEC EDGAR
     quarterly_data = fetch_quarterly_financials(ticker)
@@ -63,7 +66,9 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
         institutional_activity=institutional_activity,
         news=news,
         sec_filings=sec_filings,
-        generated_at=datetime.now(timezone.utc).isoformat()
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        company_profile=company_profile,
+        analyst_estimates=analyst_estimates,
     )
 
     return package

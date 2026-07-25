@@ -470,5 +470,42 @@ tbody tr:last-child td{border-bottom:none}
 .lens-head{display:flex;justify-content:space-between;font-family:var(--sans);font-weight:600;font-size:13px;margin-bottom:9px}
 .narrative{font-size:13.5px;line-height:1.65;color:var(--text)}
 
+.lens-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px}
+.lens-card{background:var(--panel2);border-radius:10px;padding:12px 13px}
+.lens-card-mod{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px}
+.lens-card-rationale{font-size:12.5px;line-height:1.5;color:var(--dim);margin:8px 0 10px}
+.lens-card-metrics{border-top:1px solid var(--rule);padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.lens-card-metric{display:flex;justify-content:space-between;font-family:var(--sans);font-size:11.5px;color:var(--dim)}
+.lens-card-metric b{color:var(--text);font-weight:600}
+.lens-details{margin-top:9px;font-size:11.5px}
+.lens-details summary{cursor:pointer;color:var(--faint);font-family:var(--sans);font-size:11px;letter-spacing:.02em}
+.lens-details summary:hover{color:var(--dim)}
+.lens-details .factor{padding:3px 0;font-size:12px}
+.agreement-item{padding:4px 0;font-size:12.5px;color:var(--dim)}
+.agreement-item b{color:var(--text);font-weight:600}
+
+.company-header{margin-bottom:18px}
+.company-name{font-family:var(--sans);font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
+.company-badges{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.company-desc{font-size:12.5px;line-height:1.6;color:var(--dim);max-width:640px;margin:0 0 6px}
+.company-desc-toggle{margin-bottom:8px}
+.company-desc-toggle summary{cursor:pointer;color:var(--faint);font-size:11px;font-family:var(--sans)}
+.company-desc-toggle summary:hover{color:var(--dim)}
+.company-desc-full{font-size:12px;line-height:1.6;color:var(--faint);max-width:640px;margin:8px 0 0}
+.company-meta{display:flex;gap:16px;font-size:11.5px;color:var(--faint);flex-wrap:wrap}
+.company-meta a{color:var(--accent);text-decoration:none}
+.company-meta a:hover{text-decoration:underline}
+
+.range-bar{position:relative;height:6px;background:var(--panel3);border-radius:4px;margin:6px 0}
+.range-bar-fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:4px;opacity:.5}
+.range-bar-mark{position:absolute;top:-4px;width:2px;height:14px;border-radius:1px}
+.range-bar-labels{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;font-family:var(--sans);font-size:10.5px;color:var(--faint)}
+
+.filing-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;background:var(--panel2);border-radius:8px;margin-bottom:6px;font-family:var(--sans);font-size:12.5px;color:var(--text);text-decoration:none;transition:background .15s var(--ease)}
+.filing-row:hover{background:var(--panel3)}
+.news-row{display:block;padding:7px 10px;background:var(--panel2);border-radius:8px;margin-bottom:6px;font-family:var(--sans);font-size:12.5px;color:var(--text);text-decoration:none;transition:background .15s var(--ease)}
+.news-row:hover{background:var(--panel3)}
+.news-row-meta{font-size:10.5px;color:var(--faint);margin-top:2px}
+
 .loading{padding:48px;text-align:center;font-family:var(--sans);color:var(--faint);font-size:13px}
 .empty{padding:22px;font-family:var(--sans);color:var(--faint);font-size:13px}

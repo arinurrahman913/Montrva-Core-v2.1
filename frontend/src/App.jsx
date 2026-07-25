@@ -67,7 +67,9 @@ export default function App() {
         </div>
       </div>
 
-      {modalTicker && <TickerModal ticker={modalTicker} onClose={() => setModalTicker(null)} />}
+      {modalTicker && (
+        <TickerModal ticker={modalTicker} context={activeView} onClose={() => setModalTicker(null)} />
+      )}
     </div>
   )
 }
