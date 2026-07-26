@@ -9,10 +9,15 @@ provenance-nya tetap "Evidence-stage Yahoo fetch" (memenuhi D-11), bukan sumber
 baru.
 
 Keterbatasan yang didokumentasikan jujur (bukan bug):
-- Cuma katalis `earnings` (+ opsional `ex_dividend` sebagai "other") yang
-  derivable. `product`/`regulatory` butuh parsing isi berita/filing yang tidak
-  dilakukan Evidence. `certainty="rumored"` (rumor M&A dll) tidak pernah
-  dihasilkan — butuh analisis konten berita, di luar scope saat ini.
+- Cuma katalis `earnings` dan `dividend` yang derivable dari Yahoo `.info`
+  (field tanggal tersedia langsung, tanpa fetch/parse tambahan). Kategori lain
+  yang diminta spec (M&A, FDA approval, Investor Day, buyback, macro event,
+  regulatory update) butuh parsing ISI SEC filing (mis. item code di 8-K —
+  yang kita simpan sekarang cuma form_type generik, bukan item code) atau isi
+  berita (NLP) — dua-duanya scope jauh lebih besar dari sekadar field baru,
+  didokumentasikan sebagai gap, bukan dipaksa di-derive dari data yang tidak
+  ada. `certainty="rumored"` (rumor M&A dll) tidak pernah dihasilkan untuk
+  alasan yang sama.
 """
 from __future__ import annotations
 
@@ -80,14 +85,14 @@ def build_catalyst_set(
                 source=source,
             ))
 
-    # --- Ex-dividend (opsional, kind="other") ---
+    # --- Ex-dividend ---
     ex_div = _epoch_to_date(info.get("exDividendDate"))
     if ex_div:
         d = datetime.fromisoformat(ex_div).date()
         if today <= d <= horizon_end:
             catalysts.append(Catalyst(
                 catalyst_id=f"ex_dividend_{ex_div}",
-                kind="other",
+                kind="dividend",
                 expected_at=ex_div,
                 certainty="scheduled",
                 expires_at=(d + timedelta(days=1)).isoformat(),

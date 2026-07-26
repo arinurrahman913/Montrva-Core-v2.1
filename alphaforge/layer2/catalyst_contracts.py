@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-CatalystKind = Literal["earnings", "product", "regulatory", "filing", "other"]
+CatalystKind = Literal["earnings", "dividend", "product", "regulatory", "filing", "other"]
 # scheduled = tanggal pasti terkonfirmasi; expected = tanggal estimasi;
 # rumored = belum resmi (mis. rumor akuisisi) — rumored WAJIB menurunkan
 # confidence, bukan menaikkan stance (lihat spec "Kepastian Bertingkat").
