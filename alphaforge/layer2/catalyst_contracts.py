@@ -20,6 +20,14 @@ CatalystKind = Literal["earnings", "dividend", "product", "regulatory", "filing"
 Certainty = Literal["scheduled", "expected", "rumored"]
 CatalystStatus = Literal["ok", "degraded", "missing"]
 
+# Lifecycle di mana posisi catalyst ini SEKARANG, berbeda dari `Certainty`
+# (soal kepastian TANGGAL) dan dari `CatalystStatus` (soal kelengkapan DATA).
+# Dihitung dengan bandingkan snapshot hari ini vs kemarin — lihat
+# catalyst_history.py. "scheduled"/"monitoring" default untuk catalyst yang
+# masih aktif dalam horizon; "delayed"/"completed"/"cancelled" cuma bisa
+# diketahui lintas-run (satu snapshot tidak cukup).
+LifecycleStatus = Literal["scheduled", "monitoring", "delayed", "completed", "cancelled"]
+
 
 @dataclass
 class CatalystSource:
@@ -41,6 +49,20 @@ class Catalyst:
     expires_at: str  # ISO date — kapan katalis berhenti relevan
     source: CatalystSource
     expected_at_end: str | None = None  # ISO date — akhir rentang, None kalau tanggal tunggal
+    lifecycle_status: LifecycleStatus = "scheduled"
+    previous_expected_at: str | None = None  # cuma terisi kalau lifecycle_status == "delayed"
+
+
+@dataclass
+class ResolvedCatalyst:
+    """Satu catalyst yang sudah keluar dari CatalystSet aktif — completed
+    (waktu lewat wajar) atau cancelled (hilang dari sumber sebelum waktunya).
+    Ini histori-nya, disimpan cross-run (lihat catalyst_history.py)."""
+    kind: str
+    expected_at: str
+    lifecycle_status: Literal["completed", "cancelled"]
+    resolved_on: str  # ISO date — kapan status ini terdeteksi
+    outcome_note: str | None = None  # mis. earnings actual vs estimate, best-effort
 
 
 @dataclass
@@ -51,6 +73,7 @@ class CatalystSet:
     horizon_days: int  # jendela ke depan yang dipindai
     catalysts: list[Catalyst] = field(default_factory=list)
     status: CatalystStatus = "ok"
+    resolved_history: list[ResolvedCatalyst] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         from dataclasses import asdict

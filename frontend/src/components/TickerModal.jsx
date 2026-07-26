@@ -341,7 +341,12 @@ function CatalystCountdownCard({ catalyst, aiNarrative }) {
       <div className="mcell" style={{ marginBottom: others.length ? 10 : 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div className="mcell-label" style={{ marginBottom: 0, textTransform: 'capitalize' }}>{nearest.kind}</div>
-          <span className={`pill ${CERTAINTY_TONE[nearest.certainty]}`}>{nearest.certainty}</span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            {nearest.lifecycle_status === 'delayed' && (
+              <span className="pill warn" title={`Sebelumnya diperkirakan ${nearest.previous_expected_at}`}>delayed</span>
+            )}
+            <span className={`pill ${CERTAINTY_TONE[nearest.certainty]}`}>{nearest.certainty}</span>
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
           <span style={{ fontSize: 26, fontWeight: 700, fontFamily: 'var(--mono)' }}>{days}</span>
@@ -370,8 +375,47 @@ function CatalystCountdownCard({ catalyst, aiNarrative }) {
       {others.map((c, i) => (
         <div className="factor" key={i} style={{ color: 'var(--faint)', fontSize: 11.5 }}>
           {c.kind} · {c.expected_at} ({c.certainty})
+          {c.lifecycle_status === 'delayed' && (
+            <span className="pill warn" style={{ marginLeft: 6, fontSize: 9 }} title={`Sebelumnya diperkirakan ${c.previous_expected_at}`}>delayed</span>
+          )}
         </div>
       ))}
+
+      <CatalystHistoryBar history={catalyst.resolved_history} />
+    </div>
+  )
+}
+
+const RESOLVED_TONE = { completed: 'ok', cancelled: 'bad' }
+
+function CatalystHistoryBar({ history }) {
+  const [open, setOpen] = useState(false)
+  if (!history || history.length === 0) return null
+  const sorted = [...history].sort((a, b) => b.resolved_on.localeCompare(a.resolved_on))
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className={`rawdata-bar${open ? ' open' : ''}`} onClick={() => setOpen(!open)}>
+        <span>Histori Catalyst</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="rawdata-meta">{history.length} resolved</span>
+          <span className="rawdata-chev">▾</span>
+        </span>
+      </div>
+      {open && (
+        <div className="rawdata-panel">
+          <div className="rawdata-body">
+            {sorted.map((r, i) => (
+              <div className="rawdata-row" key={i}>
+                <div className="rawdata-field" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ textTransform: 'capitalize' }}>{r.kind} · {r.expected_at}</span>
+                  <span className={`pill ${RESOLVED_TONE[r.lifecycle_status]}`} style={{ fontSize: 9.5 }}>{r.lifecycle_status}</span>
+                </div>
+                {r.outcome_note && <div className="rawdata-val" style={{ marginTop: 3 }}>{r.outcome_note}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

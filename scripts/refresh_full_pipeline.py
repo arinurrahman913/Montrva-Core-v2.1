@@ -36,6 +36,7 @@ from alphaforge.layer2.evidence import run_evidence  # noqa: E402
 from alphaforge.layer2.price_target import sync_price_target_history  # noqa: E402
 from alphaforge.layer2.knowledge import run_knowledge  # noqa: E402
 from alphaforge.layer2.catalyst import run_catalyst  # noqa: E402
+from alphaforge.layer2.catalyst_history import sync_catalyst_history  # noqa: E402
 from alphaforge.layer2.peer import run_peer_comparison  # noqa: E402
 from alphaforge.layer2.confidence import run_confidence  # noqa: E402
 from alphaforge.layer2.risk import run_risk_assessment  # noqa: E402
@@ -117,9 +118,14 @@ def main() -> int:
         log.info(f"Knowledge: {len(profiles)} profiles")
 
         catalysts = run_catalyst([p.ticker for p in profiles])
+        # Satu snapshot tidak cukup buat tahu delayed/completed/cancelled —
+        # bandingkan ke state kemarin (lihat catalyst_history.py docstring).
+        evidence_by_ticker = {p.ticker: p for p in evidence_packages}
+        ch_store = sync_catalyst_history(catalysts, DATA_DIR / "catalyst_history.json", evidence_by_ticker)
+        n_resolved = sum(len(v) for v in ch_store["resolved"].values())
         catalyst_map = {c.ticker: c for c in catalysts}
         n_cat = sum(1 for c in catalysts if c.has_upcoming)
-        log.info(f"Catalyst: {len(catalysts)} sets ({n_cat} with upcoming catalyst)")
+        log.info(f"Catalyst: {len(catalysts)} sets ({n_cat} with upcoming catalyst, {n_resolved} resolved in history)")
 
         comparisons = run_peer_comparison(profiles, screening_result.passed)
         log.info(f"Peer: {len(comparisons)} comparisons")
