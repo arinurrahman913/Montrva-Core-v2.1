@@ -715,6 +715,8 @@ function ModalBody({ data, context, aiNarrative }) {
 
           <FundamentalRatiosGrid fundamental={evidence.fundamental} />
 
+          <CrossReferenceCallout notes={evidence.fundamental?.cross_reference_notes} />
+
           {(evidence.fundamental?.quarterly_data || []).length > 0 && (
             <QuarterlyFinancialsTable quarters={evidence.fundamental.quarterly_data} />
           )}
@@ -1017,6 +1019,18 @@ function DilutionCallout({ changePct }) {
     <div className="flag medium" style={{ marginBottom: 14 }}>
       <strong>Shares outstanding naik {fmtNum(changePct, 1)}% dalam 12 bulan</strong> — field yang dipakai risk flag{' '}
       <code style={{ fontFamily: 'var(--mono)' }}>dilution_12m</code> (threshold {fmtNum(DILUTION_WARN_THRESHOLD_PCT, 0)}%).
+    </div>
+  )
+}
+
+function CrossReferenceCallout({ notes }) {
+  if (!notes || notes.length === 0) return null
+  return (
+    <div className="flag medium" style={{ marginBottom: 14 }}>
+      <strong>Cross-reference antar sumber tidak cocok</strong>
+      {notes.map((n, i) => (
+        <div key={i} style={{ marginTop: i === 0 ? 4 : 2 }}>{n}</div>
+      ))}
     </div>
   )
 }

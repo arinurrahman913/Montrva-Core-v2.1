@@ -146,6 +146,7 @@ class FundamentalData:
     shares_outstanding_change_12m: float | None = None  # % perubahan ~12 bulan (SEC XBRL), baseline dilution
     field_availability: dict[str, DataAvailability] = field(default_factory=dict)
     field_quality: dict[str, DataQuality] = field(default_factory=dict)
+    cross_reference_notes: list[str] = field(default_factory=list)
 
 
 @dataclass

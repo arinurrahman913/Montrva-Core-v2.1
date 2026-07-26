@@ -29,6 +29,47 @@ from .sources.sec_parser import (
 from .sources.sec_form4 import fetch_institutional_activity
 
 
+CROSS_REFERENCE_REVENUE_THRESHOLD_PCT = 15.0
+
+
+def _fmt_money(v: float) -> str:
+    a = abs(v)
+    if a >= 1e9:
+        return f"${v / 1e9:.2f}B"
+    if a >= 1e6:
+        return f"${v / 1e6:.2f}M"
+    return f"${v:.2f}"
+
+
+def _cross_reference_fundamental(fundamental) -> list[str]:
+    """Bandingkan revenue TTM (Yahoo `.info`, top-level `revenue`) vs jumlah
+    4 kuartal terakhir dari SEC EDGAR (`quarterly_data`) — dua sumber
+    independen untuk metrik yang sama, satu-satunya pasangan begitu di
+    Evidence saat ini. Selisih besar = sinyal nyata (unit salah, cache
+    stale, fiscal year misalign), bukan sekadar noise TTM-window."""
+    notes: list[str] = []
+    if fundamental.revenue is None or len(fundamental.quarterly_data) < 4:
+        return notes
+    sorted_quarters = sorted(
+        fundamental.quarterly_data,
+        key=lambda q: q.fiscal_date or q.period,
+        reverse=True,
+    )
+    last_4 = sorted_quarters[:4]
+    if any(q.revenue is None for q in last_4):
+        return notes
+    quarterly_sum = sum(q.revenue for q in last_4)
+    if quarterly_sum == 0:
+        return notes
+    diff_pct = abs(fundamental.revenue - quarterly_sum) / quarterly_sum * 100
+    if diff_pct > CROSS_REFERENCE_REVENUE_THRESHOLD_PCT:
+        notes.append(
+            f"Revenue TTM (Yahoo) {_fmt_money(fundamental.revenue)} vs jumlah 4Q SEC "
+            f"{_fmt_money(quarterly_sum)} — selisih {diff_pct:.1f}%"
+        )
+    return notes
+
+
 def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage | None:
     """Bangun Evidence package untuk satu ticker yang lolos Screening."""
     ticker = candidate.ticker
@@ -51,6 +92,8 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
         fundamental.quarterly_data = [
             QuarterlyFundamental(**q) for q in quarterly_data["periods"]
         ]
+
+    fundamental.cross_reference_notes = _cross_reference_fundamental(fundamental)
 
     # Baseline dilution 12-bulan (lihat sources/sec_parser.py) — dipanggil
     # SETELAH fetch_quarterly_financials di atas supaya company facts XBRL
