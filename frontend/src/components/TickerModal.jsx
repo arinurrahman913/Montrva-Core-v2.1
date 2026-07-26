@@ -326,7 +326,24 @@ function daysAway(dateStr) {
 
 function CatalystCountdownCard({ catalyst, aiNarrative }) {
   const upcoming = (catalyst.catalysts || []).filter((c) => c.certainty !== 'rumored')
-  if (upcoming.length === 0) return null
+  if (upcoming.length === 0) {
+    if (catalyst.status === 'missing') {
+      return (
+        <div className="mcell dim">
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--dim)' }}>
+            <span className="avail-dot unavailable" />Data catalyst tidak tersedia
+          </span>
+        </div>
+      )
+    }
+    return (
+      <div className="mcell dim">
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--dim)' }}>
+          <span className="avail-dot not_applicable" />Tidak ada catalyst terjadwal dalam horizon {catalyst.horizon_days || 90} hari
+        </span>
+      </div>
+    )
+  }
 
   const sorted = [...upcoming].sort((a, b) => a.expected_at.localeCompare(b.expected_at))
   const nearest = sorted[0]
@@ -380,8 +397,6 @@ function CatalystCountdownCard({ catalyst, aiNarrative }) {
           )}
         </div>
       ))}
-
-      <CatalystHistoryBar history={catalyst.resolved_history} />
     </div>
   )
 }
@@ -738,10 +753,11 @@ function ModalBody({ data, context, aiNarrative }) {
         </div>
       )}
 
-      {showCatalyst && catalyst && (catalyst.catalysts || []).length > 0 && (
+      {showCatalyst && catalyst && (
         <div className="msection" id="sec-catalyst">
           <div className="msection-title">Katalis Mendatang</div>
           <CatalystCountdownCard catalyst={catalyst} aiNarrative={aiNarrative} />
+          <CatalystHistoryBar history={catalyst.resolved_history} />
         </div>
       )}
 
