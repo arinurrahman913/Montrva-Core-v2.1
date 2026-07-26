@@ -1,0 +1,3689 @@
+{
+  "knowledge_count": 178,
+  "catalyst_sets_generated": 178,
+  "with_upcoming": 168,
+  "catalyst_sets": [
+    {
+      "ticker": "ACDC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:44.827155+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "ANNA",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "APA",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:44.906203+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "APC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-13",
+          "kind": "earnings",
+          "expected_at": "2026-08-13",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-14",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:44.937457+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BKR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-26",
+          "kind": "earnings",
+          "expected_at": "2026-07-26",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-27",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:44.971139+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BSIN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "missing"
+    },
+    {
+      "ticker": "CHRD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.303566+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CLNE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.318396+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DTI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.334572+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DWSN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "EPSN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-12",
+          "kind": "earnings",
+          "expected_at": "2026-08-12",
+          "certainty": "expected",
+          "expires_at": "2026-08-13",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.353848+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EU",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-17",
+          "kind": "earnings",
+          "expected_at": "2026-08-17",
+          "certainty": "expected",
+          "expires_at": "2026-08-18",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.368112+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EXE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.378953+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FANG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.394470+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GEOS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.408217+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GLND",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "missing"
+    },
+    {
+      "ticker": "GLNG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-13",
+          "kind": "earnings",
+          "expected_at": "2026-08-13",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-14",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.423218+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HMH",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.425910+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HPK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.442946+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "IMPP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "KGEI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "expected",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.468053+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "KLXE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "expected",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.478678+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NCSM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.488575+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NESR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-18",
+          "kind": "earnings",
+          "expected_at": "2026-08-18",
+          "certainty": "expected",
+          "expires_at": "2026-08-19",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.504289+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NEXT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.520939+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NUCL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "missing"
+    },
+    {
+      "ticker": "PAGP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-07",
+          "kind": "earnings",
+          "expected_at": "2026-08-07",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-08",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.535844+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-31",
+          "kind": "other",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.535844+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PNRG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-14",
+          "kind": "earnings",
+          "expected_at": "2026-08-14",
+          "certainty": "expected",
+          "expires_at": "2026-08-15",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.551061+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PROP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-12",
+          "kind": "earnings",
+          "expected_at": "2026-08-12",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-13",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.553691+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PTEN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.556063+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SND",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "expected",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.567590+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-28",
+          "kind": "other",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.567590+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "STAK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "missing"
+    },
+    {
+      "ticker": "TRMD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-26",
+          "kind": "earnings",
+          "expected_at": "2026-08-26",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-27",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.595020+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "UROY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "expected",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.606369+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VNOM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.620381+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WFRD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-20",
+          "kind": "earnings",
+          "expected_at": "2026-10-20",
+          "certainty": "expected",
+          "expires_at": "2026-10-21",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.638155+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-06",
+          "kind": "other",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.638155+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "AESI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.651168+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "AM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.659550+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-29",
+          "kind": "other",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.659550+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "AMPY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "expected",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.675286+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "AR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.677350+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "AROC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.690727+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-04",
+          "kind": "other",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.690727+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BKV",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.706392+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BORR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.718846+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.734815+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BTE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.737006+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BTU",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.754499+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "BWLP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-27",
+          "kind": "earnings",
+          "expected_at": "2026-08-27",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.756523+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CCJ",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-31",
+          "kind": "earnings",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.768646+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CLB",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.785161+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CMBT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-27",
+          "kind": "earnings",
+          "expected_at": "2026-08-27",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.791927+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CNQ",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.801663+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CNR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.817865+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CNX",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.819728+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "COP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.838358+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CRC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.842989+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CRGY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.856582+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CRK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.875536+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CSAN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-14",
+          "kind": "earnings",
+          "expected_at": "2026-08-14",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-15",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.884378+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CVE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.894809+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CVI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.904935+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "CVX",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-31",
+          "kind": "earnings",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.917561+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DEC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.934178+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-28",
+          "kind": "other",
+          "expected_at": "2026-08-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.934178+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DHT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.951308+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DINO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.957246+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.968094+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-03",
+          "kind": "other",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.968094+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DTM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.972307+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "DVN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.983887+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "E",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:45.996119+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.001347+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EFXT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.012753+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EGY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.023380+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "ENB",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-31",
+          "kind": "earnings",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.039245+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EOG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.051562+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EPD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.063194+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-31",
+          "kind": "other",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.063194+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EQNR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "ex_dividend_2026-08-14",
+          "kind": "other",
+          "expected_at": "2026-08-14",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-15",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.069027+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EQT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-20",
+          "kind": "earnings",
+          "expected_at": "2026-10-20",
+          "certainty": "expected",
+          "expires_at": "2026-10-21",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.085428+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-05",
+          "kind": "other",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.085428+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "EROK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-07",
+          "kind": "earnings",
+          "expected_at": "2026-08-07",
+          "certainty": "expected",
+          "expires_at": "2026-08-08",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.096529+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FET",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.112545+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FLNG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-28",
+          "kind": "earnings",
+          "expected_at": "2026-08-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.122729+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FLOC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.134912+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FRO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-31",
+          "kind": "earnings",
+          "expected_at": "2026-08-31",
+          "certainty": "expected",
+          "expires_at": "2026-09-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.151564+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FTI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.160698+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FTK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.174734+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "FTW",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.183844+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-31",
+          "kind": "other",
+          "expected_at": "2026-08-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-09-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.183844+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GFR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "expected",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.193084+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GPOR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.194291+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GPRK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.195444+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "GRNT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.196604+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HAL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-20",
+          "kind": "earnings",
+          "expected_at": "2026-10-20",
+          "certainty": "expected",
+          "expires_at": "2026-10-21",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.201251+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HESM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.202641+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HLX",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "expected",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.203837+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "HP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.205026+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-18",
+          "kind": "other",
+          "expected_at": "2026-08-18",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-19",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.205026+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "INR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.206216+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "INSW",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.207335+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "INVX",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.208531+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "KGS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.209691+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "KMI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "ex_dividend_2026-08-03",
+          "kind": "other",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.210866+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "KNTK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.212025+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "KOS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.213205+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "LB",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.217966+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "LBRT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-14",
+          "kind": "earnings",
+          "expected_at": "2026-10-14",
+          "certainty": "expected",
+          "expires_at": "2026-10-15",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.219200+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-09-04",
+          "kind": "other",
+          "expected_at": "2026-09-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-09-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.219200+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "LEU",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.220354+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "LNG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.221538+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "LPG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-31",
+          "kind": "earnings",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.222732+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-27",
+          "kind": "other",
+          "expected_at": "2026-07-27",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.222732+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "MGY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.223899+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "MPC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.224992+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "MTDR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.226187+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-10",
+          "kind": "other",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.226187+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "MUR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.227382+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NAT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-27",
+          "kind": "earnings",
+          "expected_at": "2026-08-27",
+          "certainty": "expected",
+          "expires_at": "2026-08-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.228544+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NBR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.229638+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.234781+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-27",
+          "kind": "earnings",
+          "expected_at": "2026-07-27",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.236035+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NFG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.237235+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NGS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "expected",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.238411+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NOA",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-12",
+          "kind": "earnings",
+          "expected_at": "2026-08-12",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-13",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.239574+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NOG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.240761+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NOV",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.241941+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NRP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.243080+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NRT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "NVGS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.245368+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "NXE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.246499+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "OII",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-21",
+          "kind": "earnings",
+          "expected_at": "2026-10-21",
+          "certainty": "scheduled",
+          "expires_at": "2026-10-22",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.251551+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "OIS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.252806+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "OKE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.253994+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-03",
+          "kind": "other",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.253994+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "OVV",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "ex_dividend_2026-09-15",
+          "kind": "other",
+          "expected_at": "2026-09-15",
+          "certainty": "scheduled",
+          "expires_at": "2026-09-16",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.255198+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "OXY",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.256317+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PARR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.257510+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PBA",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.258703+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PBF",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.259877+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PBR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.261037+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PBT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-13",
+          "kind": "earnings",
+          "expected_at": "2026-08-13",
+          "certainty": "expected",
+          "expires_at": "2026-08-14",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.262244+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-31",
+          "kind": "other",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.262244+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PDS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.263377+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.268446+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PSX",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.269646+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-18",
+          "kind": "other",
+          "expected_at": "2026-08-18",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-19",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.269646+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "PUMP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.270849+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "RES",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.272008+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "RIG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.273182+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "RNGR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-27",
+          "kind": "earnings",
+          "expected_at": "2026-07-27",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-28",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.274344+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "RRC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "SBR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-07",
+          "kind": "earnings",
+          "expected_at": "2026-08-07",
+          "certainty": "expected",
+          "expires_at": "2026-08-08",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.276677+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.277775+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SDRL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.278880+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SEI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.280059+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SJT",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [],
+      "status": "ok"
+    },
+    {
+      "ticker": "SLB",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-23",
+          "kind": "earnings",
+          "expected_at": "2026-10-23",
+          "certainty": "expected",
+          "expires_at": "2026-10-24",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.288944+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-09-02",
+          "kind": "other",
+          "expected_at": "2026-09-02",
+          "certainty": "scheduled",
+          "expires_at": "2026-09-03",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.288944+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.290158+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SMC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.291354+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SOBO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.292506+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SOC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "expected",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.293633+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "STNG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.294781+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "SU",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.296011+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TALO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.300711+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TBN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-09-24",
+          "kind": "earnings",
+          "expected_at": "2026-09-24",
+          "certainty": "expected",
+          "expires_at": "2026-09-25",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.301908+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TDW",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.303022+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TEN",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-09-10",
+          "kind": "earnings",
+          "expected_at": "2026-09-10",
+          "certainty": "expected",
+          "expires_at": "2026-09-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.304160+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TGS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.305287+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.306435+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TNK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.307532+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TPL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.308672+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TRGP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-06",
+          "kind": "earnings",
+          "expected_at": "2026-08-06",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-07",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.309826+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-31",
+          "kind": "other",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.309826+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TRP",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.311007+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "TTE",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "ex_dividend_2026-09-30",
+          "kind": "other",
+          "expected_at": "2026-09-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-10-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.312952+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VAL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.317721+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VET",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.318948+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VG",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-11",
+          "kind": "earnings",
+          "expected_at": "2026-08-11",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-12",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.320091+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VLO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-30",
+          "kind": "earnings",
+          "expected_at": "2026-07-30",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-31",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.321283+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-07-31",
+          "kind": "other",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.321283+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VTOL",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "expected",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.322456+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "VTS",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.323613+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WBI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-05",
+          "kind": "earnings",
+          "expected_at": "2026-08-05",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-06",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.324685+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WHD",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-29",
+          "kind": "earnings",
+          "expected_at": "2026-07-29",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-30",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.325811+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WHK",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-12",
+          "kind": "earnings",
+          "expected_at": "2026-08-12",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-13",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.326985+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WKC",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-10-22",
+          "kind": "earnings",
+          "expected_at": "2026-10-22",
+          "certainty": "expected",
+          "expires_at": "2026-10-23",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.329809+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WMB",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-03",
+          "kind": "earnings",
+          "expected_at": "2026-08-03",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-04",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.335447+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WTI",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.336789+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "WTTR",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-04",
+          "kind": "earnings",
+          "expected_at": "2026-08-04",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-05",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.337861+00:00"
+          },
+          "expected_at_end": null
+        },
+        {
+          "catalyst_id": "ex_dividend_2026-08-07",
+          "kind": "other",
+          "expected_at": "2026-08-07",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-08",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.337861+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "XOM",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-31",
+          "kind": "earnings",
+          "expected_at": "2026-07-31",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-01",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.338785+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "XPRO",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-07-28",
+          "kind": "earnings",
+          "expected_at": "2026-07-28",
+          "certainty": "scheduled",
+          "expires_at": "2026-07-29",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.339648+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "ticker": "YPF",
+      "method_version": "1.0.0",
+      "horizon_days": 90,
+      "catalysts": [
+        {
+          "catalyst_id": "earnings_2026-08-10",
+          "kind": "earnings",
+          "expected_at": "2026-08-10",
+          "certainty": "scheduled",
+          "expires_at": "2026-08-11",
+          "source": {
+            "provider": "yahoo_finance",
+            "fetched_at": "2026-07-25T23:44:46.340503+00:00"
+          },
+          "expected_at_end": null
+        }
+      ],
+      "status": "ok"
+    }
+  ]
+}

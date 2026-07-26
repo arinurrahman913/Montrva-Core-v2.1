@@ -20,6 +20,7 @@ class PeerMetricComparison:
     peer_group_count: int  # Jumlah peer dalam kalkulasi
     percentile: float | None  # 0-100: posisi ticker di peer group (50=median, >50=better than median)
     status: Literal["ok", "low_sample_size", "missing"]
+    direction: Literal["higher_is_better", "lower_is_better"]  # Metric interpretation: tinggi baik atau rendah baik
 
 
 @dataclass

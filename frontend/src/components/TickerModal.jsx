@@ -450,6 +450,18 @@ function PercentileBar({ label, comp, groupSize }) {
   const tickerVal = has ? (isFraction ? comp.ticker_value * 100 : comp.ticker_value) : null
   const medianVal = has ? (isFraction ? comp.peer_group_median * 100 : comp.peer_group_median) : null
   const suffix = isFraction ? '%' : ''
+
+  // Flip percentile untuk metrik "lower is better" — higher percentile = better
+  // P/E tinggi (mahal) → percentile rendah → di-flip jadi tinggi (signal "baik")
+  const displayPercentile = has && comp.direction === 'lower_is_better'
+    ? 100 - comp.percentile
+    : comp.percentile
+
+  // Tooltip: jelaskan direction logic
+  const directionText = comp?.direction === 'lower_is_better'
+    ? `Rendah adalah lebih baik`
+    : `Tinggi adalah lebih baik`
+
   return (
     <div style={{ opacity: has ? 1 : 0.45 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
@@ -467,17 +479,18 @@ function PercentileBar({ label, comp, groupSize }) {
         {has && (
           <div
             style={{
-              position: 'absolute', left: `${Math.max(0, Math.min(100, comp.percentile))}%`, top: -2,
+              position: 'absolute', left: `${Math.max(0, Math.min(100, displayPercentile))}%`, top: -2,
               width: 9, height: 9, borderRadius: '50%', background: 'var(--accent)',
               transform: 'translateX(-50%)', border: '2px solid var(--panel2)',
             }}
+            title={directionText}
           />
         )}
       </div>
       {has && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>
           <span>{comp.peer_group_count}/{groupSize ?? '—'} peer</span>
-          <span>{ordinal(Math.round(comp.percentile))} percentile</span>
+          <span title={directionText}>{ordinal(Math.round(displayPercentile))} percentile</span>
         </div>
       )}
     </div>

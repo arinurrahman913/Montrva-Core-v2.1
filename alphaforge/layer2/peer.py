@@ -53,6 +53,22 @@ def calculate_percentile(ticker_value: float | None, peer_values: list[float]) -
     return percentile
 
 
+# Metric interpretation: mana yang "tinggi baik" vs "rendah baik"
+METRIC_DIRECTION = {
+    "pe_ratio": "lower_is_better",
+    "ps_ratio": "lower_is_better",
+    "pb_ratio": "lower_is_better",
+    "debt_to_equity": "lower_is_better",
+    "fcf_yield": "higher_is_better",
+    "gross_margin": "higher_is_better",
+    "operating_margin": "higher_is_better",
+    "net_margin": "higher_is_better",
+    "revenue_growth": "higher_is_better",
+    "roe": "higher_is_better",
+    "roa": "higher_is_better",
+}
+
+
 def calculate_metric_comparison(
     metric_name: str,
     ticker_value: float | None,
@@ -92,6 +108,9 @@ def calculate_metric_comparison(
     # Calculate percentile
     percentile = calculate_percentile(ticker_value, peer_values)
 
+    # Get metric direction (default: higher_is_better if unknown)
+    direction = METRIC_DIRECTION.get(metric_name, "higher_is_better")
+
     return PeerMetricComparison(
         metric_name=metric_name,
         ticker_value=ticker_value,
@@ -100,7 +119,8 @@ def calculate_metric_comparison(
         peer_group_max=max_val,
         peer_group_count=group_size,
         percentile=percentile,
-        status=status
+        status=status,
+        direction=direction
     )
 
 
