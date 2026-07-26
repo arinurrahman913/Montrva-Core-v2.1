@@ -15,6 +15,7 @@ half-written file mid-reload.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import subprocess
@@ -99,6 +100,33 @@ def _get_price_target_store() -> dict[str, list[dict]]:
 
 
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+
+# Manual gzip instead of flask-compress -- one dependency avoided for one
+# after_request hook. Full-market runs (4000+ tickers) pushed /api/peer,
+# /api/reasoning etc into the tens-of-MB range (was low hundreds-of-KB at
+# the old ~90-ticker sample scale), so this went from "nice to have" to
+# "page is blank for several seconds while the browser downloads it" --
+# see dashboard perf notes 2026-07-26. Only compress if the client says it
+# can decompress (Accept-Encoding) and the body's big enough that gzip's
+# CPU cost is worth it; skip already-encoded/streamed responses.
+_GZIP_MIN_BYTES = 1024
+
+
+@app.after_request
+def _compress_response(response):
+    accepts_gzip = "gzip" in request.headers.get("Accept-Encoding", "")
+    if (
+        not accepts_gzip
+        or response.direct_passthrough
+        or response.content_encoding
+        or response.content_length is None
+        or response.content_length < _GZIP_MIN_BYTES
+    ):
+        return response
+    response.set_data(gzip.compress(response.get_data(), compresslevel=6))
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Vary"] = "Accept-Encoding"
+    return response
 
 
 @app.get("/api/<stage>")
