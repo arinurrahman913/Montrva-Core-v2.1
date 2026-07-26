@@ -589,6 +589,24 @@ function RiskFlagCard({ flag, assessedAt }) {
   )
 }
 
+function RiskLimitationSummary({ flags }) {
+  const actualCount = flags.filter((f) => f.status === 'triggered').length
+  const limitationCount = flags.filter((f) => f.status === 'undetermined').length
+  if (actualCount === 0 && limitationCount === 0) return null
+
+  return (
+    <div style={{ marginBottom: 14, padding: '8px 10px', background: 'var(--panel3)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11.5, marginBottom: 4 }}>
+        <span style={{ color: 'var(--bad)' }}>⚠ {actualCount} Risiko Aktual</span>
+        <span style={{ color: 'var(--faint)' }}>ⓘ {limitationCount} Keterbatasan Data</span>
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.5 }}>
+        Tidak ada data ≠ tidak ada risiko — bagian "Keterbatasan Data" berarti belum bisa dinilai, bukan berarti aman.
+      </div>
+    </div>
+  )
+}
+
 function RiskFlagsBySeverity({ flags, assessedAt }) {
   const list = flags || []
   if (list.length === 0) return null
@@ -601,7 +619,9 @@ function RiskFlagsBySeverity({ flags, assessedAt }) {
   ].filter(([, items]) => items.length > 0)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: (list.length ? 10 : 0) }}>
+    <div>
+      <RiskLimitationSummary flags={list} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: (list.length ? 10 : 0) }}>
       {groups.map(([severity, items]) => {
         const meta = RISK_SEVERITY_META[severity]
         return (
@@ -617,6 +637,7 @@ function RiskFlagsBySeverity({ flags, assessedAt }) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
