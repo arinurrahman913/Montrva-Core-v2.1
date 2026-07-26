@@ -501,6 +501,42 @@ def serve_frontend(path: str = ""):
     return send_from_directory(FRONTEND_DIST, "index.html")
 
 
+def _warm_cache() -> None:
+    """Pre-load every stage file into _stage_cache BEFORE app.run() starts
+    accepting connections, instead of leaving the cold-load cost
+    (evidence.json alone is 337MB at full-market scale) to whichever
+    request happens to arrive first -- that request was the dashboard's
+    ticker-detail modal hitting a 7s+ "Memuat detail..." stall after every
+    restart (dashboard perf notes 2026-07-26).
+
+    Deliberately SYNCHRONOUS (called before app.run(), not spun off in a
+    background thread) -- a background-thread version was tried first and
+    made things WORSE: CPython's json decoder holds the GIL for the whole
+    parse of a single json.load() call, so a warm-up thread parsing
+    evidence.json would starve the request-handling thread of GIL time for
+    the entire parse. Measured live: a ticker-detail request that used to
+    take ~7s cold took 67.5s instead, blocked behind the background warm-up
+    thread's own evidence.json parse (and the two were redundantly
+    double-parsing the same file, since nothing was serializing access to
+    _stage_cache). Blocking startup on this instead means one predictable
+    ~60-90s delay before the server is reachable at all, in exchange for
+    zero chance of a request racing the warm-up thread for the GIL.
+    Best-effort: one broken/missing stage file logs and moves on rather
+    than taking down the whole warm-up pass."""
+    t0 = time.time()
+    for name in STAGE_FILES:
+        try:
+            _get_stage(name)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warm_cache] gagal load stage '{name}': {exc}", file=sys.stderr)
+    try:
+        _get_price_target_store()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warm_cache] gagal load price_target_store: {exc}", file=sys.stderr)
+    print(f"[warm_cache] selesai dalam {time.time() - t0:.1f}s", file=sys.stderr)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    _warm_cache()
     app.run(host="0.0.0.0", port=port)
