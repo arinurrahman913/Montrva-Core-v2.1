@@ -147,7 +147,7 @@ def main() -> int:
         reasonings = [
             run_reasoning_pipeline(
                 p, confidence_map.get(p.ticker), risk_map.get(p.ticker),
-                peer_map.get(p.ticker), catalyst_map.get(p.ticker),
+                peer_map.get(p.ticker), catalyst_map.get(p.ticker), layer1_pkg,
             )
             for p in profiles
             if not (risk_map.get(p.ticker) and risk_map[p.ticker].halted)

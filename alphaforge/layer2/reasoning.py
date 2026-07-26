@@ -11,11 +11,12 @@ stance, flag_responses, knowledge_gaps), TIDAK mengkalibrasi ulang angkanya.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .reasoning_contracts import (
-    ModuleOutput, ModuleConfidence, FlagResponse, ReasoningBundle,
+    ModuleOutput, ModuleConfidence, FlagResponse, ContextUsage, ReasoningBundle,
     MULTIBAGGER_STANCES, QUALITY_STANCES, SPECULATIVE_STANCES,
     validate_module_output,
 )
@@ -27,8 +28,45 @@ if TYPE_CHECKING:
     from .knowledge_contracts import KnowledgeProfile
     from .peer_contracts import PeerComparisonResult
     from .risk_contracts import RiskAssessment
+    from ..layer1.contracts import MarketContextPackage
 
 METHOD_VERSION = "2.0"
+
+# Komponen Layer 1 yang relevan per lensa — keputusan desain eksplisit
+# (mirip semangat D-12 buat Knowledge), bukan "semua komponen buat semua
+# lensa" supaya context_used tetap fokus & tidak generik. Multibagger fokus
+# growth/ekspansi (sektor+siklus), Quality fokus macro backdrop compounder
+# jangka panjang (kredit+yield), Speculative fokus profil risiko (VIX+regime).
+LAYER1_RELEVANCE: dict[str, list[str]] = {
+    "multibagger": ["sector_rotation", "business_cycle_stage"],
+    "quality_compound": ["credit_spread", "yield_curve"],
+    "speculative": ["volatility_index", "market_regime"],
+}
+
+
+def _build_context_used(layer1: "MarketContextPackage | None", module: str) -> list[ContextUsage]:
+    """Bangun ContextUsage dari komponen Layer 1 yang relevan buat modul ini
+    (lihat LAYER1_RELEVANCE). Influence text pakai narrative komponen APA
+    ADANYA (kalimat pertama saja, biar ringkas) — bukan interpretasi baru,
+    supaya tetap fakta bukan opini (sama prinsipnya dengan positive_factors/
+    negative_factors di modul ini)."""
+    if layer1 is None:
+        return []
+    result = []
+    for component_name in LAYER1_RELEVANCE.get(module, []):
+        comp = layer1.components.get(component_name)
+        if comp is None:
+            continue
+        if comp.status != "ok" or not comp.narrative:
+            influence = f"Data {component_name.replace('_', ' ')} {comp.status} — tidak bisa dipakai sebagai konteks saat ini"
+        else:
+            # Split di akhir kalimat asli (titik diikuti spasi), BUKAN titik
+            # pertama — narrative sering berisi angka desimal ("+10.5pp")
+            # yang juga punya titik tapi bukan akhir kalimat.
+            first_sentence = re.split(r"(?<=[.!?])\s+", comp.narrative.strip(), maxsplit=1)[0]
+            influence = first_sentence
+        result.append(ContextUsage(component=component_name, influence=influence))
+    return result
 
 # Field yang bisa muncul di missing_fields (lihat knowledge.py
 # _count_completed_fields) yang relevan untuk tiap modul, dibatasi akses D-12
@@ -121,6 +159,7 @@ def run_quality_lens(
     confidence: ConfidenceReport | None = None,
     risk: RiskAssessment | None = None,
     peer: PeerComparisonResult | None = None,
+    layer1: "MarketContextPackage | None" = None,
 ) -> ModuleOutput:
     """Quality/Compound Lens — "Ini mesin compounding?"
 
@@ -313,7 +352,7 @@ def run_quality_lens(
         stance_rationale=f"Quality score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Mixed signals")),
         confidence=_module_confidence(confidence, gaps),
         flag_responses=_build_flag_responses(risk),
-        context_used=[],
+        context_used=_build_context_used(layer1, "quality_compound"),
         knowledge_gaps=gaps,
         generated_at=datetime.now(timezone.utc).isoformat(),
         positive_factors=positive,
@@ -329,6 +368,7 @@ def run_speculative_lens(
     confidence: ConfidenceReport | None = None,
     risk: RiskAssessment | None = None,
     catalyst: CatalystSet | None = None,
+    layer1: "MarketContextPackage | None" = None,
 ) -> ModuleOutput:
     """Speculative Lens — "Ada asimetri berkatalis?"
 
@@ -434,7 +474,7 @@ def run_speculative_lens(
         stance_rationale=f"Speculative score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Neutral momentum")),
         confidence=_module_confidence(confidence, gaps),
         flag_responses=_build_flag_responses(risk),
-        context_used=[],
+        context_used=_build_context_used(layer1, "speculative"),
         knowledge_gaps=gaps,
         generated_at=datetime.now(timezone.utc).isoformat(),
         positive_factors=positive,
@@ -450,6 +490,7 @@ def run_multibagger_lens(
     confidence: ConfidenceReport | None = None,
     risk: RiskAssessment | None = None,
     peer: PeerComparisonResult | None = None,
+    layer1: "MarketContextPackage | None" = None,
 ) -> ModuleOutput:
     """Multibagger Lens — "Ada ruang untuk kelipatan besar?"
 
@@ -597,7 +638,7 @@ def run_multibagger_lens(
         stance_rationale=f"Multibagger score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Modest growth profile")),
         confidence=_module_confidence(confidence, gaps),
         flag_responses=_build_flag_responses(risk),
-        context_used=[],
+        context_used=_build_context_used(layer1, "multibagger"),
         knowledge_gaps=gaps,
         generated_at=datetime.now(timezone.utc).isoformat(),
         positive_factors=positive,
@@ -614,13 +655,14 @@ def run_reasoning_pipeline(
     risk: RiskAssessment | None = None,
     peer: PeerComparisonResult | None = None,
     catalyst: CatalystSet | None = None,
+    layer1: "MarketContextPackage | None" = None,
 ) -> ReasoningBundle:
     """Jalankan 3 reasoning lens independen — TIDAK diagregasi jadi satu
     skor/stance di sini (itu yang dilarang D-04). Sintesis non-memampatkan
     (agreements/divergences) dibangun terpisah di Fase 6 (aggregator.py)."""
-    quality = run_quality_lens(profile, confidence, risk, peer)
-    speculative = run_speculative_lens(profile, confidence, risk, catalyst)
-    multibagger = run_multibagger_lens(profile, confidence, risk, peer)
+    quality = run_quality_lens(profile, confidence, risk, peer, layer1)
+    speculative = run_speculative_lens(profile, confidence, risk, catalyst, layer1)
+    multibagger = run_multibagger_lens(profile, confidence, risk, peer, layer1)
 
     confidence_report_score = confidence.overall.score if confidence else None
     tinggi_flag_ids = [f.flag_id for f in risk.flags if f.severity == "tinggi"] if risk else []
