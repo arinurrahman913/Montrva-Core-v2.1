@@ -37,19 +37,22 @@ function topPicks(outs, moduleName, n = 3) {
 }
 
 function PickCard({ ticker, mo, onSelectTicker }) {
-  // AI narrative di-fetch lazy per kartu (reuse endpoint yang sama dipakai
-  // modal ticker -- ai_narrative.py sudah punya aturan wajib "jangan kasih
-  // rekomendasi beli/jual/hold, jangan mengarang data" sejak awal dibangun,
-  // jadi tidak perlu prompt/endpoint baru untuk fitur ini).
+  // AI narrative di-fetch lazy PAS user expand (bukan otomatis semua kartu
+  // sekaligus) -- reuse endpoint yang sama dipakai modal ticker, ai_narrative.py
+  // sudah punya aturan wajib "jangan kasih rekomendasi beli/jual/hold, jangan
+  // mengarang data" sejak awal dibangun, jadi tidak perlu prompt/endpoint baru.
+  const [expanded, setExpanded] = useState(false)
   const [narrative, setNarrative] = useState(null)
+
   useEffect(() => {
+    if (!expanded || narrative !== null) return
     let cancelled = false
     api
       .aiNarrative(ticker)
       .then((d) => { if (!cancelled) setNarrative(d) })
       .catch(() => { if (!cancelled) setNarrative({ available: false }) })
     return () => { cancelled = true }
-  }, [ticker])
+  }, [expanded, ticker, narrative])
 
   return (
     <div
@@ -61,18 +64,33 @@ function PickCard({ ticker, mo, onSelectTicker }) {
         <span style={{ fontSize: 10.5, color: 'var(--good)' }}>conf {mo.confidence?.score?.toFixed(0) ?? '—'}</span>
       </div>
       {mo.stance_rationale && (
-        <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 8, lineHeight: 1.4 }}>{mo.stance_rationale}</div>
+        <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.4 }}>{mo.stance_rationale}</div>
       )}
-      <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-        {narrative === null ? (
-          <span style={{ fontStyle: 'italic' }}>Memuat penjelasan AI…</span>
-        ) : narrative.available === false || !narrative.qualitative ? null : (
-          <>
-            <span style={{ fontStyle: 'italic', color: 'var(--faint)' }}>⚡ AI: </span>
-            {narrative.qualitative}
-          </>
-        )}
+      <div
+        onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--rule)' }}
+      >
+        <svg
+          width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{ color: expanded ? 'var(--accent)' : 'var(--faint)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+        <span style={{ fontSize: 10, color: expanded ? 'var(--accent)' : 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+          Penjelasan AI
+        </span>
       </div>
+      {expanded && (
+        <div style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.6, marginTop: 8, animation: 'fadein .2s ease' }}>
+          {narrative === null ? (
+            <span style={{ fontStyle: 'italic' }}>Memuat penjelasan AI…</span>
+          ) : narrative.available === false || !narrative.qualitative ? (
+            <span style={{ fontStyle: 'italic' }}>Belum ada penjelasan AI untuk ticker ini.</span>
+          ) : (
+            narrative.qualitative
+          )}
+        </div>
+      )}
     </div>
   )
 }
