@@ -441,7 +441,7 @@ const PEER_METRIC_GROUPS = [
   { title: 'Growth & Leverage', metrics: [['revenue_growth_comparison', 'Revenue growth'], ['debt_to_equity_comparison', 'Debt/Equity']] },
 ]
 
-function PercentileBar({ label, comp }) {
+function PercentileBar({ label, comp, groupSize }) {
   const has = comp && comp.percentile !== null && comp.percentile !== undefined
   // roe/roa disimpan sebagai fraksi (0.44 = 44%) di Knowledge, BUKAN persen
   // seperti margin lain -- lihat financial_health.roe docstring. Kalikan
@@ -474,7 +474,12 @@ function PercentileBar({ label, comp }) {
           />
         )}
       </div>
-      {has && <div style={{ textAlign: 'right', fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{ordinal(Math.round(comp.percentile))} percentile</div>}
+      {has && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>
+          <span>{comp.peer_group_count}/{groupSize ?? '—'} peer</span>
+          <span>{ordinal(Math.round(comp.percentile))} percentile</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -508,7 +513,7 @@ function PeerComparisonCard({ peer, aiNarrative }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {group.metrics.map(([key, label]) => (
-              <PercentileBar key={key} label={label} comp={peer[key]} />
+              <PercentileBar key={key} label={label} comp={peer[key]} groupSize={pg.group_size} />
             ))}
           </div>
         </div>
