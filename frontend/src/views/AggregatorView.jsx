@@ -1,9 +1,115 @@
+import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
 import HBarChart from '../components/HBarChart'
 import { bandClass } from '../format'
+
+// "Stance terbaik per lensa" -- filter+sort dari stance/confidence yang
+// SUDAH dihitung tiap lensa, BUKAN skor/ranking baru (D-04 melarang
+// AggregatorOutput/Synthesis punya field verdict/score/rank/recommendation).
+// Kategori "terbaik" di sini cuma kategori stance yang sudah ada di
+// STANCE_VOCAB masing-masing modul (reasoning_contracts.py), diurut by
+// confidence.score modul itu sendiri -- tidak menciptakan kriteria baru.
+const BEST_STANCE = {
+  multibagger: 'ruang_terbuka',
+  quality_compound: 'compounding_kuat',
+  speculative: 'asimetri_berkatalis',
+}
+
+const LENS_TITLES = {
+  multibagger: 'Multibagger — Ruang Terbuka',
+  quality_compound: 'Quality — Compounding Kuat',
+  speculative: 'Speculative — Asimetri Berkatalis',
+}
+
+function findModuleOutput(rec, moduleName) {
+  return (rec.module_outputs || []).find((m) => m.module === moduleName)
+}
+
+function topPicks(outs, moduleName, n = 3) {
+  return outs
+    .map((rec) => ({ rec, mo: findModuleOutput(rec, moduleName) }))
+    .filter(({ rec, mo }) => !rec.halted && mo && mo.stance === BEST_STANCE[moduleName])
+    .sort((a, b) => (b.mo.confidence?.score ?? 0) - (a.mo.confidence?.score ?? 0))
+    .slice(0, n)
+}
+
+function PickCard({ ticker, mo, onSelectTicker }) {
+  // AI narrative di-fetch lazy per kartu (reuse endpoint yang sama dipakai
+  // modal ticker -- ai_narrative.py sudah punya aturan wajib "jangan kasih
+  // rekomendasi beli/jual/hold, jangan mengarang data" sejak awal dibangun,
+  // jadi tidak perlu prompt/endpoint baru untuk fitur ini).
+  const [narrative, setNarrative] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api
+      .aiNarrative(ticker)
+      .then((d) => { if (!cancelled) setNarrative(d) })
+      .catch(() => { if (!cancelled) setNarrative({ available: false }) })
+    return () => { cancelled = true }
+  }, [ticker])
+
+  return (
+    <div
+      onClick={() => onSelectTicker(ticker)}
+      style={{ background: 'var(--panel2)', border: '1px solid var(--rule)', borderRadius: 10, padding: 12, marginBottom: 8, cursor: 'pointer' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <span className="ticker" style={{ fontSize: 13, fontWeight: 600 }}>{ticker}</span>
+        <span style={{ fontSize: 10.5, color: 'var(--good)' }}>conf {mo.confidence?.score?.toFixed(0) ?? '—'}</span>
+      </div>
+      {mo.stance_rationale && (
+        <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 8, lineHeight: 1.4 }}>{mo.stance_rationale}</div>
+      )}
+      <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+        {narrative === null ? (
+          <span style={{ fontStyle: 'italic' }}>Memuat penjelasan AI…</span>
+        ) : narrative.available === false || !narrative.qualitative ? null : (
+          <>
+            <span style={{ fontStyle: 'italic', color: 'var(--faint)' }}>⚡ AI: </span>
+            {narrative.qualitative}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TopPicksSection({ outs, onSelectTicker }) {
+  const lenses = ['multibagger', 'quality_compound', 'speculative']
+  const picksByLens = lenses.map((m) => ({ module: m, picks: topPicks(outs, m) }))
+  if (picksByLens.every((p) => p.picks.length === 0)) return null
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+        Contoh Ticker — Stance Terbaik per Lensa
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--faint)', margin: '2px 0 14px', lineHeight: 1.5 }}>
+        Filter dari stance + confidence tertinggi yang sudah dihitung tiap lensa — bukan rekomendasi beli/jual
+        atau ranking tunggal (Data Contracts D-04). Tetap cek Risk Flags &amp; Confidence sebelum kesimpulan.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+        {picksByLens.map(({ module, picks }) => (
+          <div key={module}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+              {LENS_TITLES[module]}
+            </div>
+            {picks.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--faint)' }}>Tidak ada ticker dengan stance ini saat ini.</div>
+            ) : (
+              picks.map(({ rec, mo }) => (
+                <PickCard key={rec.ticker} ticker={rec.ticker} mo={mo} onSelectTicker={onSelectTicker} />
+              ))
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // AggregatorOutput (Data Contracts §7, D-04): TIDAK ada rekomendasi/skor/
 // ranking tunggal — sengaja. Yang ditampilkan: 3 modul berdampingan (via
@@ -95,6 +201,7 @@ export default function AggregatorView({ onSelectTicker }) {
       <div className="chart-row">
         <HBarChart title="Distribusi Status Sintesis" data={statusChart} />
       </div>
+      <TopPicksSection outs={outs} onSelectTicker={onSelectTicker} />
       <p className="narrative" style={{ margin: '0 0 12px', color: 'var(--dim)', fontSize: 13 }}>
         Diurutkan berdasarkan <strong>surprise</strong> — kombinasi stance paling tidak biasa di populasi sesi ini di atas.
         Tidak ada skor rekomendasi tunggal (Data Contracts D-04): buka satu ticker untuk melihat ketiga lensa + sintesisnya.
