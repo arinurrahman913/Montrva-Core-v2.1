@@ -58,6 +58,7 @@ export default function ConfidenceView({ onSelectTicker }) {
         const tags = []
         if (r.peer_penalty?.applied) tags.push('peer')
         if (r.context_penalty?.applied) tags.push('context')
+        if (r.recency_penalty?.applied) tags.push('recency')
         return tags.length ? tags.join(' · ') : '—'
       },
     },

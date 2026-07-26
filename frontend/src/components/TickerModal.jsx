@@ -441,6 +441,76 @@ function PeerComparisonCard({ peer, aiNarrative }) {
   )
 }
 
+function sectionBarColor(score) {
+  if (score >= 70) return 'var(--good)'
+  if (score >= 40) return 'var(--warn)'
+  return 'var(--bad)'
+}
+
+function PenaltyRow({ label, applied, reasonText }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: applied ? 'var(--warn)' : 'var(--rule-strong)', flexShrink: 0 }} />
+      <span style={{ color: applied ? 'var(--text)' : 'var(--dim)' }}>{label}</span>
+      <span style={{ color: applied ? 'var(--warn)' : 'var(--faint)' }}>— {applied ? reasonText : 'tidak diterapkan'}</span>
+    </div>
+  )
+}
+
+function ConfidenceDetail({ confidence }) {
+  const overall = confidence.overall || {}
+  const sections = Object.entries(confidence.by_section || {})
+  const peerP = confidence.peer_penalty || {}
+  const contextP = confidence.context_penalty || {}
+  const recencyP = confidence.recency_penalty || {}
+
+  return (
+    <div className="mcell">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'var(--mono)' }}>{overall.score?.toFixed(1) ?? '—'}%</div>
+          <div style={{ fontSize: 11, color: 'var(--dim)' }}>Confidence keseluruhan</div>
+        </div>
+        <span className={`pill ${bandClass(overall.band)}`}>{overall.band || '—'}</span>
+      </div>
+
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+        Kelengkapan per Section
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+        {sections.map(([name, sec]) => (
+          <div key={name}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+              <span>{prettyLabel(name)}</span>
+              <span style={{ color: 'var(--dim)' }}>{sec.filled}/{sec.expected}</span>
+            </div>
+            <div style={{ height: 5, background: 'var(--panel3)', borderRadius: 3 }}>
+              <div style={{ height: '100%', width: `${sec.score}%`, background: sectionBarColor(sec.score), borderRadius: 3 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+        Penalti Tambahan
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+        <PenaltyRow label="Peer penalty" applied={peerP.applied} reasonText={peerP.reason} />
+        <PenaltyRow
+          label="Context penalty (Layer 1)"
+          applied={contextP.applied}
+          reasonText={`degraded: ${(contextP.components_degraded || []).join(', ')}`}
+        />
+        <PenaltyRow label="Recency penalty" applied={recencyP.applied} reasonText={recencyP.reason} />
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 11, color: 'var(--dim)' }}>
+        Evidence age: {confidence.evidence_age_days ?? '—'} hari · Dipakai semua 3 lensa Reasoning sebagai damper skor kalau confidence rendah.
+      </div>
+    </div>
+  )
+}
+
 function ModalBody({ data, context, aiNarrative }) {
   const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
@@ -598,23 +668,8 @@ function ModalBody({ data, context, aiNarrative }) {
 
       {showConfidence && confidence && (
         <div className="msection" id="sec-confidence">
-          <div className="msection-title">
-            Confidence Report — overall {confidence.overall?.score?.toFixed(0) ?? '—'}%{' '}
-            <span className={`pill ${bandClass(confidence.overall?.band)}`}>{confidence.overall?.band || '—'}</span>
-          </div>
-          <div className="mrow">
-            {Object.entries(confidence.by_section || {}).map(([name, sec]) => (
-              <div className="mcell" key={name}>
-                <div className="mcell-label">{prettyLabel(name)}</div>
-                <div className="mcell-val">{sec.score.toFixed(0)}%</div>
-              </div>
-            ))}
-          </div>
-          {(confidence.overall?.limiters || []).length > 0 && (
-            <p className="narrative" style={{ marginTop: 8 }}>
-              <strong>Pembatas:</strong> {confidence.overall.limiters.join(' · ')}
-            </p>
-          )}
+          <div className="msection-title">Confidence Report</div>
+          <ConfidenceDetail confidence={confidence} />
         </div>
       )}
 
