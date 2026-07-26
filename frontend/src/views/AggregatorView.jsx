@@ -54,14 +54,40 @@ function PickCard({ ticker, mo, onSelectTicker }) {
     return () => { cancelled = true }
   }, [expanded, ticker, narrative])
 
+  // Harga + sektor -- ringan (angka + label, bukan prosa AI) jadi tetap
+  // di-fetch langsung buat semua kartu (max 9), bukan di belakang toggle
+  // seperti narrative. Reuse endpoint /api/ticker/<X> yang sama dipakai
+  // modal detail -- sudah warm di cache backend, bukan panggilan baru.
+  const [profile, setProfile] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api
+      .ticker(ticker)
+      .then((d) => { if (!cancelled) setProfile(d) })
+      .catch(() => { if (!cancelled) setProfile({}) })
+    return () => { cancelled = true }
+  }, [ticker])
+  const price = profile?.evidence?.price_market?.last_price
+  const sector = profile?.knowledge?.sector
+
   return (
     <div
       onClick={() => onSelectTicker(ticker)}
       style={{ background: 'var(--panel2)', border: '1px solid var(--rule)', borderRadius: 10, padding: 12, marginBottom: 8, cursor: 'pointer' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <span className="ticker" style={{ fontSize: 13, fontWeight: 600 }}>{ticker}</span>
-        <span style={{ fontSize: 10.5, color: 'var(--good)' }}>conf {mo.confidence?.score?.toFixed(0) ?? '—'}</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span className="ticker" style={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{ticker}</span>
+          {price != null && (
+            <span style={{ fontSize: 11, color: 'var(--text)', flexShrink: 0 }}>${price.toFixed(2)}</span>
+          )}
+          {sector && (
+            <span style={{ fontSize: 10, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {sector}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 10.5, color: 'var(--good)', flexShrink: 0 }}>conf {mo.confidence?.score?.toFixed(0) ?? '—'}</span>
       </div>
       {mo.stance_rationale && (
         <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.4 }}>{mo.stance_rationale}</div>
