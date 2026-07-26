@@ -460,6 +460,7 @@ tbody tr:last-child td{border-bottom:none}
 .avail-dot.not_yet_reported{background:var(--accent2)}
 .avail-dot.not_applicable{background:var(--faint)}
 .avail-dot.insufficient_data{background:var(--warn)}
+.label-def{cursor:help;border-bottom:1px dotted var(--faint)}
 .tip-wrap{position:relative;display:inline-block}
 .avail-tip{visibility:hidden;opacity:0;position:absolute;left:0;bottom:calc(100% + 8px);z-index:5;width:210px;
   background:rgba(16,19,28,.97);border:1px solid var(--rule-strong);border-radius:9px;box-shadow:var(--shadow-sm);

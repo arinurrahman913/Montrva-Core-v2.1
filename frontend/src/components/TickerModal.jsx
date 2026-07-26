@@ -3,7 +3,7 @@ import { api } from '../api'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
-  AVAILABILITY_INFO, QUALITY_INFO,
+  AVAILABILITY_INFO, QUALITY_INFO, METRIC_DEFINITIONS,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -1052,6 +1052,17 @@ const RATIO_FIELDS = [
   ['shares_outstanding_change_12m', 'Shares Out. Δ12m', (v) => fmtPct(v, 1)],
 ]
 
+function MetricLabel({ field, label }) {
+  const def = METRIC_DEFINITIONS[field]
+  if (!def) return <div className="mcell-label">{label}</div>
+  return (
+    <div className="mcell-label tip-wrap">
+      <span className="label-def">{label}</span>
+      <span className="avail-tip" style={{ textTransform: 'none', letterSpacing: 'normal' }}>{def}</span>
+    </div>
+  )
+}
+
 function FundamentalRatiosGrid({ fundamental }) {
   if (!fundamental) return null
   const availability = fundamental.field_availability || {}
@@ -1064,7 +1075,7 @@ function FundamentalRatiosGrid({ fundamental }) {
           const info = AVAILABILITY_INFO[availability[key]] || AVAILABILITY_INFO.unavailable
           return (
             <div className="mcell dim" key={key}>
-              <div className="mcell-label">{label}</div>
+              <MetricLabel field={key} label={label} />
               <span className="tip-wrap">
                 <span className="reason-tag has-tip">
                   <span className={`avail-dot ${info.dot}`} />
@@ -1079,7 +1090,7 @@ function FundamentalRatiosGrid({ fundamental }) {
         return (
           <div className="mcell" key={key}>
             <span className={`quality-tag ${quality[key] || 'verified'}`} title={q.reason}>{q.label}</span>
-            <div className="mcell-label">{label}</div>
+            <MetricLabel field={key} label={label} />
             <div className="mcell-val" style={{ fontSize: 15 }}>{fmt(v)}</div>
           </div>
         )

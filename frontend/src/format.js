@@ -46,6 +46,27 @@ export const AVAILABILITY_INFO = {
 // Label untuk 4 tag kualitas data (contracts.py DataQuality) — dipakai
 // hanya saat field ADA nilainya. Default "verified" kalau field tidak ada
 // di field_quality map (mayoritas kasus — raw passthrough dari satu sumber).
+// Definisi teknis netral per metrik (§1 Evidence audit notes) — murni
+// "ini dihitung dari apa", TANPA interpretasi ("tinggi = bagus" dsb).
+// Evidence = fakta, bukan opini — lihat prinsip yang sama di catalyst/peer
+// AI prompt neutrality (ai_narrative.py).
+export const METRIC_DEFINITIONS = {
+  pe_ratio: 'Rasio harga saham terhadap laba per saham (EPS) 12 bulan terakhir.',
+  eps: 'Laba bersih dibagi jumlah saham beredar.',
+  book_value_per_share: 'Total ekuitas dibagi jumlah saham beredar.',
+  gross_margin: 'Laba kotor dibagi revenue.',
+  operating_margin: 'Laba operasional dibagi revenue.',
+  roe: 'Laba bersih dibagi ekuitas pemegang saham.',
+  roa: 'Laba bersih dibagi total aset.',
+  current_ratio: 'Aset lancar dibagi liabilitas lancar.',
+  quick_ratio: 'Aset lancar (tanpa persediaan) dibagi liabilitas lancar.',
+  free_cash_flow: 'Kas dari operasi dikurangi belanja modal (capex).',
+  payout_ratio: 'Persentase laba bersih yang dibagikan sebagai dividen.',
+  dividend_yield: 'Dividen tahunan dibagi harga saham saat ini.',
+  debt_to_equity: 'Total utang dibagi ekuitas pemegang saham.',
+  shares_outstanding_change_12m: 'Perubahan jumlah saham beredar dalam 12 bulan terakhir — indikator dilusi.',
+}
+
 export const QUALITY_INFO = {
   verified: { label: 'verified', reason: 'Langsung dari sumber primer, tanpa kalkulasi tambahan.' },
   partial: { label: 'partial', reason: 'Sebagian komponen dihitung, sebagian diasumsikan.' },
