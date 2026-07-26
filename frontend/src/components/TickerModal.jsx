@@ -1076,18 +1076,14 @@ function RawDataTable({ evidence }) {
             <button className="rawdata-btn" onClick={copyRows}>Salin</button>
           </div>
           <div className="rawdata-body">
-            <table className="rawdata-table">
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.field}>
-                    <td className="field">{r.field}</td>
-                    <td className={`val${r.value == null ? ' empty' : ''}`}>
-                      {r.value == null ? '(kosong)' : formatFlatValue(r.value)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {filtered.map((r) => (
+              <div className="rawdata-row" key={r.field}>
+                <div className="rawdata-field">{r.field}</div>
+                <div className={`rawdata-val${r.value == null ? ' empty' : ''}`}>
+                  {r.value == null ? '(kosong)' : formatFlatValue(r.value)}
+                </div>
+              </div>
+            ))}
           </div>
           <div className="rawdata-foot">Menampilkan {filtered.length} dari {rows.length} field</div>
         </div>
