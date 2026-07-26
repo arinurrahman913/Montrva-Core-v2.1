@@ -32,6 +32,27 @@ export function clampPct(pct) {
   return Math.max(0, Math.min(100, pct || 0))
 }
 
+// Label + alasan detail untuk 4 kategori "kenapa field ini kosong"
+// (contracts.py DataAvailability). Field yang None tapi tidak ada di
+// field_availability map (data lama sebelum fitur ini) fallback ke
+// "unavailable" — lihat AVAILABILITY_INFO.unavailable di bawah.
+export const AVAILABILITY_INFO = {
+  not_yet_reported: { label: 'Belum dilaporkan', reason: 'Periode berjalan belum dirilis oleh perusahaan.', dot: 'not_yet_reported' },
+  unavailable: { label: 'Tidak tersedia', reason: 'Sumber data gagal mengembalikan field ini pada fetch terakhir.', dot: 'unavailable' },
+  not_applicable: { label: 'Tidak berlaku', reason: 'Metrik ini memang tidak relevan untuk entity ini.', dot: 'not_applicable' },
+  insufficient_data: { label: 'Data belum cukup', reason: 'Sebagian data ada, belum cukup untuk dihitung.', dot: 'insufficient_data' },
+}
+
+// Label untuk 4 tag kualitas data (contracts.py DataQuality) — dipakai
+// hanya saat field ADA nilainya. Default "verified" kalau field tidak ada
+// di field_quality map (mayoritas kasus — raw passthrough dari satu sumber).
+export const QUALITY_INFO = {
+  verified: { label: 'verified', reason: 'Langsung dari sumber primer, tanpa kalkulasi tambahan.' },
+  partial: { label: 'partial', reason: 'Sebagian komponen dihitung, sebagian diasumsikan.' },
+  estimated: { label: 'estimated', reason: 'Hasil turunan/konsensus, bukan angka aktual dari sumber.' },
+  unverified: { label: 'unverified', reason: 'Ada nilai, tapi belum lolos cross-check keandalan.' },
+}
+
 // --- Kosakata stance per-modul (Data Contracts D-09) ---
 // Tiap modul reasoning punya kosakata sendiri yang TIDAK sebanding lintas
 // modul — tapi DI DALAM satu modul urutannya jelas (bullish→bearish). Peta

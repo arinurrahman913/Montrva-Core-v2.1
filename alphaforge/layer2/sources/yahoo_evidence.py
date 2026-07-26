@@ -47,6 +47,53 @@ def _safe_float(value) -> float | None:
     return f
 
 
+# Field yang None-nya kemungkinan besar "memang tidak berlaku" (perusahaan
+# tidak bagi dividen) bukan gagal fetch — Yahoo `.info` balikin None untuk
+# kedua kasus sekaligus, jadi ini heuristik nama-field, bukan kepastian dari
+# sumber. Field lain yang None dianggap "unavailable" (gagal fetch/kosong
+# tanpa pola jelas).
+_FUNDAMENTAL_NOT_APPLICABLE_FIELDS = ("dividend_yield", "payout_ratio")
+_FUNDAMENTAL_RATIO_FIELDS = (
+    "revenue", "net_income", "eps", "pe_ratio", "debt_to_equity", "current_ratio",
+    "quick_ratio", "roe", "roa", "operating_margin", "gross_margin", "free_cash_flow",
+    "dividend_yield", "payout_ratio", "book_value_per_share", "asset_turnover",
+    "inventory_turnover", "interest_coverage", "shares_outstanding_change_12m",
+)
+
+
+def _classify_fundamental_availability(data) -> dict:
+    reasons = {}
+    for f in _FUNDAMENTAL_RATIO_FIELDS:
+        if getattr(data, f) is None:
+            reasons[f] = "not_applicable" if f in _FUNDAMENTAL_NOT_APPLICABLE_FIELDS else "unavailable"
+    return reasons
+
+
+# Field ini secara sifat adalah konsensus/estimasi analis, bukan angka aktual
+# — ditandai "estimated" kalau ADA nilainya. recommendation_key ditandai
+# "unverified" terpisah karena dikenal sering stale/tidak konsisten di Yahoo.
+_ANALYST_ESTIMATED_FIELDS = (
+    "target_low", "target_high", "target_mean", "target_median",
+    "recommendation_mean", "num_analyst_opinions",
+)
+
+
+def _classify_analyst_estimates(data) -> tuple[dict, dict]:
+    availability = {}
+    quality = {}
+    for f in _ANALYST_ESTIMATED_FIELDS:
+        v = getattr(data, f)
+        if v is None:
+            availability[f] = "unavailable"
+        else:
+            quality[f] = "estimated"
+    if data.recommendation_key is None:
+        availability["recommendation_key"] = "unavailable"
+    else:
+        quality["recommendation_key"] = "unverified"
+    return availability, quality
+
+
 PRICE_CACHE_TTL = 6 * 3600  # 6 jam
 FUNDAMENTAL_CACHE_TTL = 24 * 3600  # 24 jam
 OWNERSHIP_CACHE_TTL = 24 * 3600  # 24 jam
@@ -249,7 +296,9 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             inventory_turnover=cached.get("inventory_turnover"),
             interest_coverage=cached.get("interest_coverage"),
             sector=cached.get("sector"),
-            industry=cached.get("industry")
+            industry=cached.get("industry"),
+            field_availability=cached.get("field_availability", {}),
+            field_quality=cached.get("field_quality", {}),
         )
 
     try:
@@ -284,6 +333,7 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             sector=info.get("sector"),
             industry=info.get("industry")
         )
+        data.field_availability = _classify_fundamental_availability(data)
 
         # Cache
         to_cache = {
@@ -307,6 +357,8 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             "interest_coverage": data.interest_coverage,
             "sector": data.sector,
             "industry": data.industry,
+            "field_availability": data.field_availability,
+            "field_quality": data.field_quality,
             "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status}
         }
         cache_set("fundamental_data", ticker, to_cache)
@@ -319,7 +371,7 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             fetched_at=datetime.now(timezone.utc).isoformat(),
             status="missing"
         )
-        return FundamentalData(
+        fallback = FundamentalData(
             metadata=metadata,
             revenue=None, net_income=None, eps=None, pe_ratio=None,
             debt_to_equity=None, current_ratio=None, quick_ratio=None,
@@ -328,6 +380,8 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             book_value_per_share=None, asset_turnover=None, inventory_turnover=None,
             interest_coverage=None
         )
+        fallback.field_availability = _classify_fundamental_availability(fallback)
+        return fallback
 
 
 def _fetch_institutional_holders_detail(ticker: str) -> list[dict]:
@@ -543,6 +597,8 @@ def fetch_analyst_estimates(ticker: str) -> AnalystEstimates:
             num_analyst_opinions=cached.get("num_analyst_opinions"),
             eps_surprise_history=[EpsSurprise(**e) for e in cached.get("eps_surprise_history", [])],
             revenue_estimates=[RevenueEstimatePeriod(**r) for r in cached.get("revenue_estimates", [])],
+            field_availability=cached.get("field_availability", {}),
+            field_quality=cached.get("field_quality", {}),
         )
 
     try:
@@ -579,6 +635,7 @@ def fetch_analyst_estimates(ticker: str) -> AnalystEstimates:
             eps_surprise_history=[EpsSurprise(**e) for e in eps_history_raw],
             revenue_estimates=[RevenueEstimatePeriod(**r) for r in revenue_est_raw],
         )
+        data.field_availability, data.field_quality = _classify_analyst_estimates(data)
 
         cache_set("analyst_estimates", ticker, {
             "target_low": data.target_low,
@@ -590,12 +647,16 @@ def fetch_analyst_estimates(ticker: str) -> AnalystEstimates:
             "num_analyst_opinions": data.num_analyst_opinions,
             "eps_surprise_history": eps_history_raw,
             "revenue_estimates": revenue_est_raw,
+            "field_availability": data.field_availability,
+            "field_quality": data.field_quality,
             "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status},
         })
 
         return data
     except Exception as e:
         print(f"[yahoo_analyst_estimates:{ticker}] gagal (post-processing/final): {e}", file=sys.stderr)
-        return AnalystEstimates(metadata=SourceMetadata(
+        fallback = AnalystEstimates(metadata=SourceMetadata(
             source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="missing"
         ))
+        fallback.field_availability, fallback.field_quality = _classify_analyst_estimates(fallback)
+        return fallback

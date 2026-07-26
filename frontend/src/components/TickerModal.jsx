@@ -3,6 +3,7 @@ import { api } from '../api'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
+  AVAILABILITY_INFO, QUALITY_INFO,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -1039,14 +1040,33 @@ const RATIO_FIELDS = [
 
 function FundamentalRatiosGrid({ fundamental }) {
   if (!fundamental) return null
+  const availability = fundamental.field_availability || {}
+  const quality = fundamental.field_quality || {}
   return (
     <div className="mrow" style={{ marginTop: 4, marginBottom: 4 }}>
       {RATIO_FIELDS.map(([key, label, fmt]) => {
         const v = fundamental[key]
+        if (v == null) {
+          const info = AVAILABILITY_INFO[availability[key]] || AVAILABILITY_INFO.unavailable
+          return (
+            <div className="mcell dim" key={key}>
+              <div className="mcell-label">{label}</div>
+              <span className="tip-wrap">
+                <span className="reason-tag has-tip">
+                  <span className={`avail-dot ${info.dot}`} />
+                  {info.label}
+                </span>
+                <span className="avail-tip">{info.reason}</span>
+              </span>
+            </div>
+          )
+        }
+        const q = QUALITY_INFO[quality[key]] || QUALITY_INFO.verified
         return (
-          <div className="mcell" key={key} style={v == null ? { opacity: 0.5 } : undefined}>
+          <div className="mcell" key={key}>
+            <span className={`quality-tag ${quality[key] || 'verified'}`} title={q.reason}>{q.label}</span>
             <div className="mcell-label">{label}</div>
-            <div className="mcell-val" style={{ fontSize: 15 }}>{v != null ? fmt(v) : 'tidak tersedia'}</div>
+            <div className="mcell-val" style={{ fontSize: 15 }}>{fmt(v)}</div>
           </div>
         )
       })}

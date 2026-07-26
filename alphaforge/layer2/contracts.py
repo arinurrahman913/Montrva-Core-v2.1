@@ -7,6 +7,14 @@ from datetime import datetime
 
 Exchange = Literal["NASDAQ", "NYSE"]
 
+# Kenapa satu field kosong (§1 Evidence audit notes) — hanya diisi untuk field
+# bernilai None; field yang tidak ada di map fallback ke "unavailable" di UI.
+DataAvailability = Literal["not_yet_reported", "unavailable", "not_applicable", "insufficient_data"]
+
+# Seberapa bisa dipercaya satu field yang BERISI nilai — hanya diisi untuk
+# field yang BUKAN "verified" (default kalau tidak ada di map = "verified").
+DataQuality = Literal["verified", "partial", "estimated", "unverified"]
+
 
 @dataclass
 class ListingRow:
@@ -136,6 +144,8 @@ class FundamentalData:
     industry: str | None = None
     quarterly_data: list[QuarterlyFundamental] = field(default_factory=list)  # Last 8 quarters dari EDGAR
     shares_outstanding_change_12m: float | None = None  # % perubahan ~12 bulan (SEC XBRL), baseline dilution
+    field_availability: dict[str, DataAvailability] = field(default_factory=dict)
+    field_quality: dict[str, DataQuality] = field(default_factory=dict)
 
 
 @dataclass
@@ -199,6 +209,8 @@ class AnalystEstimates:
     eps_surprise_history: list[EpsSurprise] = field(default_factory=list)
     revenue_estimates: list[RevenueEstimatePeriod] = field(default_factory=list)
     price_target_history: list[PriceTargetSnapshot] = field(default_factory=list)
+    field_availability: dict[str, DataAvailability] = field(default_factory=dict)
+    field_quality: dict[str, DataQuality] = field(default_factory=dict)
 
 
 @dataclass
