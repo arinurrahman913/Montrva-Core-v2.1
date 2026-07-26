@@ -49,8 +49,16 @@ RESPONSE_SCHEMA = {
                 "required": ["label", "value"],
             },
         },
+        "catalyst_note": {"type": "STRING", "nullable": True},
+        "peer_note": {"type": "STRING", "nullable": True},
     },
     "required": ["qualitative", "quantitative_highlights"],
+}
+
+PEER_METRIC_LABELS = {
+    "pe_ratio": "P/E", "ps_ratio": "P/S", "pb_ratio": "P/B", "fcf_yield": "FCF Yield",
+    "gross_margin": "Gross margin", "operating_margin": "Operating margin", "net_margin": "Net margin",
+    "revenue_growth": "Revenue growth", "roe": "ROE", "roa": "ROA", "debt_to_equity": "Debt/Equity",
 }
 
 
@@ -80,7 +88,39 @@ def _fmt_money(value) -> str:
     return f"{sign}${value:.0f}"
 
 
-def _build_prompt(evidence: dict, knowledge: dict) -> str:
+def _nearest_catalyst_txt(catalyst: dict | None) -> str:
+    upcoming = [
+        c for c in ((catalyst or {}).get("catalysts") or [])
+        if c.get("certainty") in ("scheduled", "expected")
+    ]
+    if not upcoming:
+        return "tidak ada katalis (earnings/event) mendatang dalam 90 hari"
+    nearest = min(upcoming, key=lambda c: c["expected_at"])
+    return f"{nearest['kind']} pada {nearest['expected_at']} ({nearest['certainty']})"
+
+
+def _peer_comparison_txt(peer: dict | None) -> str:
+    if not peer:
+        return "tidak tersedia"
+    pg = peer.get("peer_group") or {}
+    rows = []
+    for key, label in PEER_METRIC_LABELS.items():
+        comp = peer.get(f"{key}_comparison")
+        if not comp or comp.get("percentile") is None:
+            continue
+        rows.append(
+            f"{label}: {_fmt(comp.get('ticker_value'))} vs median peer {_fmt(comp.get('peer_group_median'))} "
+            f"(percentile {_fmt(comp.get('percentile'))})"
+        )
+    if not rows:
+        return f"data peer group ada ({pg.get('group_size', 0)} peer sektor {pg.get('sector') or 'tidak diketahui'}) tapi tidak ada metrik yang bisa dibandingkan"
+    header = f"Dibanding {pg.get('group_size', 0)} peer sektor {pg.get('sector') or 'tidak diketahui'}"
+    if peer.get("low_sample_size"):
+        header += " (CATATAN: jumlah sampel peer kecil, bandingkan dengan hati-hati)"
+    return header + ":\n" + "\n".join(rows)
+
+
+def _build_prompt(evidence: dict, knowledge: dict, catalyst: dict | None = None, peer: dict | None = None) -> str:
     pm = evidence.get("price_market") or {}
     fnd = evidence.get("fundamental") or {}
     quarters = (fnd.get("quarterly_data") or [])[:4]
@@ -120,14 +160,20 @@ def _build_prompt(evidence: dict, knowledge: dict) -> str:
         for r in rev_est
     ) or "tidak tersedia"
 
+    catalyst_txt = _nearest_catalyst_txt(catalyst)
+    peer_txt = _peer_comparison_txt(peer)
+
     return f"""Anda asisten analisis keuangan. Berdasarkan data di bawah untuk saham {evidence.get('ticker')} (sektor {fnd.get('sector') or 'tidak diketahui'}), hasilkan:
 1. "qualitative": narasi 4-6 kalimat Bahasa Indonesia yang menjelaskan kondisi perusahaan secara objektif untuk investor pemula — gabungkan konteks bisnis, kinerja keuangan, dan berita/filing terbaru kalau relevan.
 2. "quantitative_highlights": 5-6 angka PALING PENTING dari data di bawah (pilih sendiri mana yang paling menonjol/relevan untuk ticker ini spesifik — jangan selalu pilih urutan yang sama), format {{label, value}} singkat.
+3. "catalyst_note": KALAU ada katalis mendatang (lihat DATA -- KATALIS di bawah), tulis 1-2 kalimat kenapa katalis itu patut diperhatikan, dikaitkan dengan rekam jejak EPS/rating analis/momentum yang relevan. KALAU tidak ada katalis mendatang, isi null -- JANGAN mengarang katalis atau memaksakan catatan.
+4. "peer_note": KALAU ada data Peer Comparison (lihat DATA -- PEER COMPARISON di bawah), tulis 2-3 kalimat yang MENYINTESIS pola percentile-nya -- mis. kalau murah di valuasi tapi lemah di profitabilitas dibanding peer, sebutkan trade-off itu secara eksplisit, jangan cuma sebutin ulang angka satu-satu. KALAU data peer tidak tersedia atau tidak ada metrik yang bisa dibandingkan, isi null.
 
 ATURAN WAJIB:
 - HANYA gunakan angka/fakta yang diberikan di bawah. JANGAN mengarang data yang tidak ada.
 - JANGAN kasih rekomendasi beli/jual/hold — ini penjelasan fakta, bukan saran investasi.
 - Soal "Form 4 filing count": itu CUMA jumlah filing (termasuk grant/vesting rutin), BUKAN konfirmasi insider membeli saham — jangan disebut "insider membeli" atau "insider selling", cukup sebut faktanya sebagai "aktivitas filing".
+- Soal percentile peer: percentile TINGGI belum tentu "lebih baik" (mis. Debt/Equity tinggi = leverage lebih besar, bukan otomatis positif) -- deskripsikan posisi relatifnya, jangan otomatis nilai "bagus/jelek" kecuali arahnya memang jelas dari konteks (mis. FCF yield tinggi memang secara umum positif).
 - Kalau suatu data "tidak tersedia", jangan dipaksakan disebut.
 
 DATA -- COMPANY PROFILE:
@@ -170,13 +216,22 @@ DATA -- SEC FILINGS TERBARU:
 
 DATA -- GOVERNANCE:
 Perubahan saham beredar (12 bulan): {_fmt((knowledge.get('governance') or {}).get('shares_outstanding_change_12m'), '%')}
-Auditor changes: {len((knowledge.get('governance') or {}).get('auditor_changes') or [])}, Restatements: {len((knowledge.get('governance') or {}).get('restatements') or [])}"""
+Auditor changes: {len((knowledge.get('governance') or {}).get('auditor_changes') or [])}, Restatements: {len((knowledge.get('governance') or {}).get('restatements') or [])}
+
+DATA -- KATALIS:
+{catalyst_txt}
+
+DATA -- PEER COMPARISON:
+{peer_txt}"""
 
 
-def generate_narrative(evidence: dict, knowledge: dict) -> dict | None:
-    """Call Gemini to narrate `evidence`+`knowledge`. Best-effort — returns
-    None on missing key, SDK error, or invalid response; never raises
-    (caller falls back to "AI summary not available")."""
+def generate_narrative(
+    evidence: dict, knowledge: dict, catalyst: dict | None = None, peer: dict | None = None
+) -> dict | None:
+    """Call Gemini to narrate `evidence`+`knowledge`(+`catalyst`+`peer`).
+    Best-effort — returns None on missing key, SDK error, or invalid
+    response; never raises (caller falls back to "AI summary not
+    available")."""
     if not GEMINI_API_KEY:
         return None
 
@@ -186,7 +241,7 @@ def generate_narrative(evidence: dict, knowledge: dict) -> dict | None:
         from google.genai import types
 
         client = genai.Client(api_key=GEMINI_API_KEY)
-        prompt = _build_prompt(evidence, knowledge)
+        prompt = _build_prompt(evidence, knowledge, catalyst, peer)
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
@@ -201,6 +256,8 @@ def generate_narrative(evidence: dict, knowledge: dict) -> dict | None:
         return {
             "qualitative": parsed["qualitative"],
             "quantitative_highlights": parsed.get("quantitative_highlights") or [],
+            "catalyst_note": parsed.get("catalyst_note"),
+            "peer_note": parsed.get("peer_note"),
         }
     except Exception as exc:  # noqa: BLE001
         print(f"[ai_narrative:{ticker}] gagal generate: {exc}", file=sys.stderr)
@@ -225,12 +282,22 @@ def save_narrative_cache(cache: dict[str, dict], path: str | Path) -> None:
     os.replace(tmp, p)
 
 
-def get_or_generate_narrative(evidence: dict, knowledge: dict, cache_path: str | Path) -> dict:
+_EMPTY_RESULT = {"qualitative": None, "quantitative_highlights": [], "catalyst_note": None, "peer_note": None}
+
+
+def get_or_generate_narrative(
+    evidence: dict, knowledge: dict, cache_path: str | Path,
+    catalyst: dict | None = None, peer: dict | None = None,
+) -> dict:
     """Cache-first lookup keyed by ticker + evidence_date. Returns
-    {"qualitative": str|None, "quantitative_highlights": list, "cached": bool,
+    {"qualitative": str|None, "quantitative_highlights": list,
+    "catalyst_note": str|None, "peer_note": str|None, "cached": bool,
     "available": bool} — `available` is False only when GEMINI_API_KEY isn't
     configured at all (lets the frontend distinguish "not set up" from
-    "generated nothing this time")."""
+    "generated nothing this time"). `catalyst`/`peer` are optional — their
+    notes stay null if omitted or not applicable; both stages refresh
+    together with Evidence/Knowledge in the same pipeline run, so
+    evidence_date alone is still a valid cache fingerprint for them too."""
     ticker = evidence.get("ticker", "?")
     evidence_date = (knowledge.get("metadata") or {}).get("evidence_date")
 
@@ -240,22 +307,26 @@ def get_or_generate_narrative(evidence: dict, knowledge: dict, cache_path: str |
         return {
             "qualitative": entry["qualitative"],
             "quantitative_highlights": entry.get("quantitative_highlights") or [],
+            "catalyst_note": entry.get("catalyst_note"),
+            "peer_note": entry.get("peer_note"),
             "cached": True,
             "available": True,
         }
 
     if not GEMINI_API_KEY:
-        return {"qualitative": None, "quantitative_highlights": [], "cached": False, "available": False}
+        return {**_EMPTY_RESULT, "cached": False, "available": False}
 
-    result = generate_narrative(evidence, knowledge)
+    result = generate_narrative(evidence, knowledge, catalyst, peer)
     if result:
         cache[ticker] = {
             "evidence_date": evidence_date,
             "qualitative": result["qualitative"],
             "quantitative_highlights": result["quantitative_highlights"],
+            "catalyst_note": result.get("catalyst_note"),
+            "peer_note": result.get("peer_note"),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         save_narrative_cache(cache, cache_path)
         return {**result, "cached": False, "available": True}
 
-    return {"qualitative": None, "quantitative_highlights": [], "cached": False, "available": True}
+    return {**_EMPTY_RESULT, "cached": False, "available": True}

@@ -12,7 +12,7 @@ const MODULES = ['multibagger', 'quality_compound', 'speculative']
 // Kontext dari halaman asal klik menentukan section mana yang ditampilkan
 // (D-04 "jangan campur" — user eksplisit minta modal fokus per stage,
 // bukan dump semua sekaligus). Nama-nama di sini = key activeView di App.jsx.
-const STAGE_CONTEXTS = new Set(['reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical'])
+const STAGE_CONTEXTS = new Set(['reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical', 'peer'])
 
 export default function TickerModal({ ticker, context, onClose }) {
   const [data, setData] = useState(null)
@@ -56,9 +56,11 @@ export default function TickerModal({ ticker, context, onClose }) {
   }, [ticker])
 
   useEffect(() => {
-    // Cuma relevan buat modal Knowledge — jangan buang panggilan API (walau
-    // ada cache) buat context lain yang gak pernah nampilin ini.
-    if (context !== 'knowledge') {
+    // Relevan buat modal Knowledge (qualitative + quantitative_highlights)
+    // dan Catalyst (catalyst_note) — satu response yang sama dipakai dua
+    // context sekaligus (1 API call, bukan 2). Context lain gak butuh ini,
+    // jangan buang panggilan API walau ada cache.
+    if (context !== 'knowledge' && context !== 'catalyst' && context !== 'peer') {
       setAiNarrative(null)
       return
     }
@@ -277,8 +279,170 @@ function KnowledgeDetailCards({ knowledge, evidence }) {
   )
 }
 
+const CERTAINTY_TONE = { scheduled: 'ok', expected: 'warn', rumored: 'neutral' }
+
+function ordinal(n) {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1: return `${n}st`
+    case 2: return `${n}nd`
+    case 3: return `${n}rd`
+    default: return `${n}th`
+  }
+}
+
+function daysAway(dateStr) {
+  // dateStr ("2026-07-27") diparse sebagai UTC midnight -- "hari ini" juga
+  // harus dinormalisasi ke UTC midnight, bukan Date.now() lokal, supaya
+  // gak geser 1 hari tergantung timezone browser (lihat juga dateLabel di
+  // bawah yang pakai timeZone:'UTC' untuk alasan yang sama).
+  const target = new Date(dateStr + 'T00:00:00Z')
+  const now = new Date()
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return Math.max(0, Math.round((target.getTime() - todayUtc) / 86400000))
+}
+
+function CatalystCountdownCard({ catalyst, aiNarrative }) {
+  const upcoming = (catalyst.catalysts || []).filter((c) => c.certainty !== 'rumored')
+  if (upcoming.length === 0) return null
+
+  const sorted = [...upcoming].sort((a, b) => a.expected_at.localeCompare(b.expected_at))
+  const nearest = sorted[0]
+  const others = sorted.slice(1)
+  const days = daysAway(nearest.expected_at)
+  const horizon = catalyst.horizon_days || 90
+  const pct = Math.min(100, (days / horizon) * 100)
+  const dateLabel = new Date(nearest.expected_at + 'T00:00:00Z').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+  return (
+    <div>
+      <div className="mcell" style={{ marginBottom: others.length ? 10 : 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div className="mcell-label" style={{ marginBottom: 0, textTransform: 'capitalize' }}>{nearest.kind}</div>
+          <span className={`pill ${CERTAINTY_TONE[nearest.certainty]}`}>{nearest.certainty}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 26, fontWeight: 700, fontFamily: 'var(--mono)' }}>{days}</span>
+          <span style={{ fontSize: 12.5, color: 'var(--dim)' }}>hari lagi · {dateLabel}</span>
+        </div>
+        <div style={{ position: 'relative', height: 5, background: 'var(--panel3)', borderRadius: 3, marginBottom: 5 }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 3 }} />
+          <div style={{ position: 'absolute', left: `${pct}%`, top: -3, width: 11, height: 11, borderRadius: '50%', background: 'var(--accent)', transform: 'translateX(-50%)', border: '2px solid var(--panel2)' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--faint)', marginBottom: 12 }}>
+          <span>Hari ini</span><span>Horizon {horizon} hari</span>
+        </div>
+
+        {aiNarrative?.catalyst_note && (
+          <div style={{ background: 'var(--panel3)', borderRadius: 6, padding: '8px 10px', marginBottom: 10, fontSize: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 4 }}>Catatan AI</div>
+            {aiNarrative.catalyst_note}
+          </div>
+        )}
+
+        <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 11, color: 'var(--dim)' }}>
+          Dipakai lensa <strong style={{ color: 'var(--text)' }}>Speculative</strong> sebagai dasar stance "asimetri berkatalis".
+        </div>
+      </div>
+
+      {others.map((c, i) => (
+        <div className="factor" key={i} style={{ color: 'var(--faint)', fontSize: 11.5 }}>
+          {c.kind} · {c.expected_at} ({c.certainty})
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const PEER_METRIC_GROUPS = [
+  { title: 'Valuasi', metrics: [['pe_ratio_comparison', 'P/E'], ['ps_ratio_comparison', 'P/S'], ['pb_ratio_comparison', 'P/B'], ['fcf_yield_comparison', 'FCF Yield']] },
+  { title: 'Profitabilitas', metrics: [['gross_margin_comparison', 'Gross margin'], ['operating_margin_comparison', 'Operating margin'], ['net_margin_comparison', 'Net margin'], ['roe_comparison', 'ROE'], ['roa_comparison', 'ROA']] },
+  { title: 'Growth & Leverage', metrics: [['revenue_growth_comparison', 'Revenue growth'], ['debt_to_equity_comparison', 'Debt/Equity']] },
+]
+
+function PercentileBar({ label, comp }) {
+  const has = comp && comp.percentile !== null && comp.percentile !== undefined
+  // roe/roa disimpan sebagai fraksi (0.44 = 44%) di Knowledge, BUKAN persen
+  // seperti margin lain -- lihat financial_health.roe docstring. Kalikan
+  // 100 + tanda % di sini biar konsisten sama tampilan metrik lain.
+  const isFraction = label === 'ROE' || label === 'ROA'
+  const tickerVal = has ? (isFraction ? comp.ticker_value * 100 : comp.ticker_value) : null
+  const medianVal = has ? (isFraction ? comp.peer_group_median * 100 : comp.peer_group_median) : null
+  const suffix = isFraction ? '%' : ''
+  return (
+    <div style={{ opacity: has ? 1 : 0.45 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+        <span>{label}</span>
+        {has ? (
+          <span style={{ color: 'var(--dim)' }}>
+            {fmtNum(tickerVal)}{suffix} <span style={{ color: 'var(--faint)' }}>vs median {fmtNum(medianVal)}{suffix}</span>
+          </span>
+        ) : (
+          <span style={{ color: 'var(--faint)' }}>tidak tersedia</span>
+        )}
+      </div>
+      <div style={{ position: 'relative', height: 5, background: 'var(--panel3)', borderRadius: 3 }}>
+        {has && <div style={{ position: 'absolute', left: '50%', top: -2, width: 1, height: 9, background: 'var(--rule-strong)' }} />}
+        {has && (
+          <div
+            style={{
+              position: 'absolute', left: `${Math.max(0, Math.min(100, comp.percentile))}%`, top: -2,
+              width: 9, height: 9, borderRadius: '50%', background: 'var(--accent)',
+              transform: 'translateX(-50%)', border: '2px solid var(--panel2)',
+            }}
+          />
+        )}
+      </div>
+      {has && <div style={{ textAlign: 'right', fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>{ordinal(Math.round(comp.percentile))} percentile</div>}
+    </div>
+  )
+}
+
+function PeerComparisonCard({ peer, aiNarrative }) {
+  if (!peer) return <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>Belum ada data peer comparison untuk ticker ini.</p>
+
+  const pg = peer.peer_group || {}
+
+  return (
+    <div className="mcell">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <div className="mcell-label" style={{ marginBottom: 0 }}>vs {pg.group_size ?? 0} peer{pg.sector ? ` · ${pg.sector}` : ''}</div>
+        {peer.low_sample_size && <span className="pill warn">sampel kecil</span>}
+      </div>
+      <p style={{ margin: '0 0 14px', fontSize: 10.5, color: 'var(--faint)' }}>
+        Posisi diukur pakai percentile, bukan skala nilai mentah — beberapa metrik punya outlier ekstrem di peer group.
+      </p>
+
+      {aiNarrative?.peer_note && (
+        <div style={{ background: 'var(--panel3)', borderRadius: 6, padding: '8px 10px', marginBottom: 14, fontSize: 12, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 4 }}>Catatan AI</div>
+          {aiNarrative.peer_note}
+        </div>
+      )}
+
+      {PEER_METRIC_GROUPS.map((group) => (
+        <div key={group.title} style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+            {group.title}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {group.metrics.map(([key, label]) => (
+              <PercentileBar key={key} label={label} comp={peer[key]} />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 11, color: 'var(--dim)' }}>
+        Dipakai lensa <strong style={{ color: 'var(--text)' }}>Quality</strong> (P/E) &amp; <strong style={{ color: 'var(--text)' }}>Multibagger</strong> (revenue growth) sebagai sinyal tambahan.
+      </div>
+    </div>
+  )
+}
+
 function ModalBody({ data, context, aiNarrative }) {
-  const { aggregator, reasoning, risk, confidence, catalyst, knowledge, evidence, historical } = data
+  const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
 
   if (!anySection) return <div className="empty">Tidak ada detail untuk ticker ini.</div>
@@ -295,6 +459,7 @@ function ModalBody({ data, context, aiNarrative }) {
   const showCatalyst = context === 'catalyst'
   const showKnowledge = context === 'knowledge'
   const showHistorical = context === 'historical'
+  const showPeer = context === 'peer'
   const showEvidence = !STAGE_CONTEXTS.has(context)
 
   return (
@@ -456,19 +621,14 @@ function ModalBody({ data, context, aiNarrative }) {
       {showCatalyst && catalyst && (catalyst.catalysts || []).length > 0 && (
         <div className="msection" id="sec-catalyst">
           <div className="msection-title">Katalis Mendatang</div>
-          {catalyst.catalysts.map((c, i) => (
-            <div className="lens-box" key={i}>
-              <div className="lens-head">
-                <span>{c.kind} · {c.expected_at}{c.expected_at_end ? `–${c.expected_at_end}` : ''}</span>
-                <span className={`pill ${c.certainty === 'scheduled' ? 'ok' : c.certainty === 'expected' ? 'warn' : 'neutral'}`}>
-                  {c.certainty}
-                </span>
-              </div>
-              <div className="factor" style={{ color: 'var(--faint)', fontSize: 11 }}>
-                berlaku sampai {c.expires_at}
-              </div>
-            </div>
-          ))}
+          <CatalystCountdownCard catalyst={catalyst} aiNarrative={aiNarrative} />
+        </div>
+      )}
+
+      {showPeer && (
+        <div className="msection" id="sec-peer">
+          <div className="msection-title">Peer Comparison</div>
+          <PeerComparisonCard peer={peer} aiNarrative={aiNarrative} />
         </div>
       )}
 

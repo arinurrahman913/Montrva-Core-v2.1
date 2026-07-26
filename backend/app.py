@@ -114,6 +114,7 @@ def get_ticker_detail(ticker: str):
     evidence = _index_by_ticker(_get_stage("evidence").get("packages", []))
     knowledge = _index_by_ticker(_get_stage("knowledge").get("profiles", []))
     catalyst = _index_by_ticker(_get_stage("catalyst").get("catalyst_sets", []))
+    peer = _index_by_ticker(_get_stage("peer").get("comparisons", []))
     confidence = _index_by_ticker(_get_stage("confidence").get("scores", []))
     risk = _index_by_ticker(_get_stage("risk").get("assessments", []))
     reasoning = _index_by_ticker(_get_stage("reasoning").get("reasoning_outputs", []))
@@ -136,6 +137,7 @@ def get_ticker_detail(ticker: str):
         "evidence": evidence_entry,
         "knowledge": knowledge.get(ticker),
         "catalyst": catalyst.get(ticker),
+        "peer": peer.get(ticker),
         "confidence": confidence.get(ticker),
         "risk": risk.get(ticker),
         "reasoning": reasoning.get(ticker),
@@ -174,7 +176,13 @@ def get_ticker_ai_narrative(ticker: str):
     if not evidence_entry:
         return jsonify({"narrative": None, "available": False, "error": "no evidence package"}), 404
 
-    result = get_or_generate_narrative(evidence_entry, profile, DATA_DIR / "ai_narrative_cache.json")
+    catalyst = _index_by_ticker(_get_stage("catalyst").get("catalyst_sets", []))
+    catalyst_entry = catalyst.get(ticker)
+
+    peer = _index_by_ticker(_get_stage("peer").get("comparisons", []))
+    peer_entry = peer.get(ticker)
+
+    result = get_or_generate_narrative(evidence_entry, profile, DATA_DIR / "ai_narrative_cache.json", catalyst_entry, peer_entry)
     return jsonify(result)
 
 
