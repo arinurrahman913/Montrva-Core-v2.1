@@ -718,6 +718,195 @@ function ConfidenceDetail({ confidence }) {
   )
 }
 
+const ROOT_CAUSE_LABELS = {
+  different_fields: 'Field data berbeda',
+  different_weights: 'Bobot faktor berbeda',
+  knowledge_gap: 'Data tidak lengkap',
+  flag_response: 'Respons ke risk flag berbeda',
+  context_reading: 'Interpretasi konteks makro berbeda',
+}
+
+function LensGrid({ reasoning }) {
+  return (
+    <div className="lens-grid">
+      {MODULES.map((key) => {
+        const o = reasoning[key]
+        if (!o) return null
+        const metricEntries = Object.entries(o.key_metrics || {})
+        const weightEntries = Object.entries(o.score_breakdown || {})
+        const maxWeight = weightEntries.length > 0 ? Math.max(...weightEntries.map(([, v]) => Math.abs(v)), 1) : 1
+        const hasDetail =
+          (o.positive_factors || []).length > 0 ||
+          (o.negative_factors || []).length > 0 ||
+          (o.knowledge_gaps || []).length > 0 ||
+          (o.flag_responses || []).length > 0 ||
+          weightEntries.length > 0 ||
+          (o.context_used || []).length > 0 ||
+          (o.fields_accessed || []).length > 0
+        return (
+          <div className="lens-card" key={key}>
+            <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
+            <span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span>
+            {o.stance_rationale && <p className="lens-card-rationale">{o.stance_rationale}</p>}
+            {metricEntries.length > 0 && (
+              <div className="lens-card-metrics">
+                {metricEntries.slice(0, 3).map(([k, v]) => (
+                  <div className="lens-card-metric" key={k}>
+                    <span>{prettyLabel(k)}</span>
+                    <b>{fmtMetricValue(v)}</b>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--faint)' }}>
+              conf {o.confidence?.score?.toFixed(0) ?? '—'}/{o.confidence?.band ?? '—'}
+            </div>
+            {hasDetail && (
+              <details className="lens-details">
+                <summary>Detail lainnya</summary>
+                {weightEntries.length > 0 && (
+                  <div style={{ margin: '2px 0 10px' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                      Bobot Faktor
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {weightEntries.map(([k, v]) => (
+                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0, minWidth: 88 }}>{prettyLabel(k)}</span>
+                          <div style={{ flex: 1, height: 4, background: 'var(--panel3)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(Math.abs(v) / maxWeight) * 100}%`, background: 'var(--accent2)' }} />
+                          </div>
+                          <span style={{ fontSize: 9.5, color: 'var(--faint)', width: 26, textAlign: 'right' }}>{fmtMetricValue(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(o.context_used || []).length > 0 && (
+                  <div style={{ margin: '2px 0 10px' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                      Konteks Layer 1
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {o.context_used.map((c, i) => (
+                        <div key={i} style={{ fontSize: 10.5, color: 'var(--dim)' }}>
+                          <span style={{ color: 'var(--accent)' }}>{prettyLabel(c.component)}</span> — {c.influence}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(o.fields_accessed || []).length > 0 && (
+                  <div style={{ margin: '2px 0 10px' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                      Ditelusuri dari (Knowledge)
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {o.fields_accessed.map((f, i) => (
+                        <span key={i} style={{ fontSize: 9.5, color: 'var(--dim)', background: 'var(--panel3)', padding: '2px 6px', borderRadius: 3 }}>
+                          {prettyLabel(f)}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+                      Section Knowledge yang dibaca lensa ini — belum sampai ke field/Evidence individual.
+                    </div>
+                  </div>
+                )}
+                {(o.positive_factors || []).map((f, i) => (
+                  <div className="factor pos" key={`p${i}`}>+ {f}</div>
+                ))}
+                {(o.negative_factors || []).map((f, i) => (
+                  <div className="factor neg" key={`n${i}`}>− {f}</div>
+                ))}
+                {(o.knowledge_gaps || []).length > 0 && (
+                  <div className="factor" style={{ color: 'var(--faint)' }}>
+                    ⓘ Data belum tersedia (bukan sinyal negatif): {o.knowledge_gaps.join(', ')}
+                  </div>
+                )}
+                {(o.flag_responses || []).map((fr, i) => (
+                  <div className="factor" key={`fr${i}`} style={{ color: 'var(--warn)' }}>
+                    ⚑ {fr.flag_id} ({fr.impact}): {fr.rationale}
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SynthesisSection({ synthesis }) {
+  const agreements = synthesis?.agreements || []
+  const divergences = synthesis?.divergences || []
+  if (agreements.length === 0 && divergences.length === 0) return null
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {agreements.length > 0 && (
+        <div style={{ marginBottom: divergences.length > 0 ? 12 : 0 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--good)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+            ✓ Kesepakatan ({agreements.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {agreements.map((a, i) => (
+              <div key={`agr${i}`} style={{ background: 'rgba(74,222,128,.06)', border: '1px solid rgba(74,222,128,.2)', borderRadius: 8, padding: '9px 11px' }}>
+                <div style={{ fontSize: 12, color: 'var(--text)' }}>{a.claim}</div>
+                {(a.modules || []).length > 0 && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+                    {a.modules.map((m, j) => (
+                      <span key={j} style={{ fontSize: 9, color: 'var(--faint)', background: 'var(--panel3)', padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase' }}>
+                        {MODULE_LABELS[m] || m}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(a.citations || []).length > 0 && (
+                  <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+                    ↳ {a.citations.join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {divergences.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--warn)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+            ⚠ Perbedaan ({divergences.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {divergences.map((d, i) => (
+              <div key={`div${i}`} style={{ background: 'rgba(251,191,122,.06)', border: '1px solid rgba(251,191,122,.2)', borderRadius: 8, padding: '9px 11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text)' }}>{d.claim}</span>
+                  <span style={{ fontSize: 9.5, color: 'var(--warn)', background: 'rgba(251,191,122,.15)', padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap' }}>
+                    akar: {ROOT_CAUSE_LABELS[d.root_cause] || d.root_cause}
+                  </span>
+                </div>
+                {(d.modules || []).map((m, j) => (
+                  <div key={j} style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 2 }}>
+                    <b style={{ color: 'var(--text)' }}>{MODULE_LABELS[m.module] || m.module}:</b> {m.position}
+                  </div>
+                ))}
+                {(d.citations || []).length > 0 && (
+                  <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+                    ↳ {d.citations.join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BullBearCase({ reasoning }) {
   const bulls = []
   const bears = []
@@ -856,7 +1045,7 @@ function ModalBody({ data, context, aiNarrative }) {
       {showReasoning && (synthesis || (reasoning && !aggregator?.halted)) && (
         <div className="msection" id="sec-reasoning">
           <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>Reasoning — 3 Lensa</span>
+            <span>{context === 'aggregator' ? 'Aggregator — Sintesis Final' : 'Reasoning — 3 Lensa'}</span>
             {synthesis && (
               <span className={`pill ${synthesis.full_convergence ? 'ok' : 'neutral'}`}>
                 {synthesis.full_convergence ? 'konvergen' : 'divergen'}
@@ -874,139 +1063,30 @@ function ModalBody({ data, context, aiNarrative }) {
 
           {synthesis?.narrative && <p className="narrative" style={{ marginBottom: 12 }}>{synthesis.narrative}</p>}
 
-          {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
-
-          {reasoning && !aggregator?.halted && (
-            <div className="lens-grid">
-              {MODULES.map((key) => {
-                const o = reasoning[key]
-                if (!o) return null
-                const metricEntries = Object.entries(o.key_metrics || {})
-                const weightEntries = Object.entries(o.score_breakdown || {})
-                const maxWeight = weightEntries.length > 0 ? Math.max(...weightEntries.map(([, v]) => Math.abs(v)), 1) : 1
-                const hasDetail =
-                  (o.positive_factors || []).length > 0 ||
-                  (o.negative_factors || []).length > 0 ||
-                  (o.knowledge_gaps || []).length > 0 ||
-                  (o.flag_responses || []).length > 0 ||
-                  weightEntries.length > 0 ||
-                  (o.context_used || []).length > 0 ||
-                  (o.fields_accessed || []).length > 0
-                return (
-                  <div className="lens-card" key={key}>
-                    <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
-                    <span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span>
-                    {o.stance_rationale && <p className="lens-card-rationale">{o.stance_rationale}</p>}
-                    {metricEntries.length > 0 && (
-                      <div className="lens-card-metrics">
-                        {metricEntries.slice(0, 3).map(([k, v]) => (
-                          <div className="lens-card-metric" key={k}>
-                            <span>{prettyLabel(k)}</span>
-                            <b>{fmtMetricValue(v)}</b>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--faint)' }}>
-                      conf {o.confidence?.score?.toFixed(0) ?? '—'}/{o.confidence?.band ?? '—'}
-                    </div>
-                    {hasDetail && (
-                      <details className="lens-details">
-                        <summary>Detail lainnya</summary>
-                        {weightEntries.length > 0 && (
-                          <div style={{ margin: '2px 0 10px' }}>
-                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
-                              Bobot Faktor
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {weightEntries.map(([k, v]) => (
-                                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0, minWidth: 88 }}>{prettyLabel(k)}</span>
-                                  <div style={{ flex: 1, height: 4, background: 'var(--panel3)', borderRadius: 2, overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: `${(Math.abs(v) / maxWeight) * 100}%`, background: 'var(--accent2)' }} />
-                                  </div>
-                                  <span style={{ fontSize: 9.5, color: 'var(--faint)', width: 26, textAlign: 'right' }}>{fmtMetricValue(v)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {(o.context_used || []).length > 0 && (
-                          <div style={{ margin: '2px 0 10px' }}>
-                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
-                              Konteks Layer 1
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                              {o.context_used.map((c, i) => (
-                                <div key={i} style={{ fontSize: 10.5, color: 'var(--dim)' }}>
-                                  <span style={{ color: 'var(--accent)' }}>{prettyLabel(c.component)}</span> — {c.influence}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {(o.fields_accessed || []).length > 0 && (
-                          <div style={{ margin: '2px 0 10px' }}>
-                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
-                              Ditelusuri dari (Knowledge)
-                            </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                              {o.fields_accessed.map((f, i) => (
-                                <span key={i} style={{ fontSize: 9.5, color: 'var(--dim)', background: 'var(--panel3)', padding: '2px 6px', borderRadius: 3 }}>
-                                  {prettyLabel(f)}
-                                </span>
-                              ))}
-                            </div>
-                            <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
-                              Section Knowledge yang dibaca lensa ini — belum sampai ke field/Evidence individual.
-                            </div>
-                          </div>
-                        )}
-                        {(o.positive_factors || []).map((f, i) => (
-                          <div className="factor pos" key={`p${i}`}>+ {f}</div>
-                        ))}
-                        {(o.negative_factors || []).map((f, i) => (
-                          <div className="factor neg" key={`n${i}`}>− {f}</div>
-                        ))}
-                        {(o.knowledge_gaps || []).length > 0 && (
-                          <div className="factor" style={{ color: 'var(--faint)' }}>
-                            ⓘ Data belum tersedia (bukan sinyal negatif): {o.knowledge_gaps.join(', ')}
-                          </div>
-                        )}
-                        {(o.flag_responses || []).map((fr, i) => (
-                          <div className="factor" key={`fr${i}`} style={{ color: 'var(--warn)' }}>
-                            ⚑ {fr.flag_id} ({fr.impact}): {fr.rationale}
-                          </div>
-                        ))}
-                      </details>
-                    )}
+          {context === 'aggregator' ? (
+            <>
+              {/* Aggregator's job is synthesis, not raw lenses -- SynthesisSection
+                  (agreements/divergences) leads, 3-lens detail is secondary/collapsed. */}
+              <SynthesisSection synthesis={synthesis} />
+              {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
+              {reasoning && !aggregator?.halted && (
+                <details className="lens-details" style={{ marginTop: 4 }}>
+                  <summary style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                    Detail 3 Lensa (Multibagger / Quality / Speculative)
+                  </summary>
+                  <div style={{ marginTop: 12 }}>
+                    <LensGrid reasoning={reasoning} />
                   </div>
-                )
-              })}
-            </div>
+                </details>
+              )}
+            </>
+          ) : (
+            <>
+              {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
+              {reasoning && !aggregator?.halted && <LensGrid reasoning={reasoning} />}
+              <SynthesisSection synthesis={synthesis} />
+            </>
           )}
-
-          {(synthesis?.agreements || []).length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              {synthesis.agreements.map((a, i) => (
-                <div className="agreement-item" key={`agr${i}`}>→ {a.claim}</div>
-              ))}
-            </div>
-          )}
-
-          {(synthesis?.divergences || []).map((d, i) => (
-            <div className="lens-box" key={`div${i}`}>
-              <div className="lens-head">
-                <span>{d.claim}</span>
-                <span style={{ color: 'var(--faint)', fontSize: 11 }}>akar: {d.root_cause}</span>
-              </div>
-              {(d.modules || []).map((m, j) => (
-                <div className="factor" key={j} style={{ color: 'var(--dim)' }}>
-                  {MODULE_LABELS[m.module] || m.module}: {m.position}
-                </div>
-              ))}
-            </div>
-          ))}
         </div>
       )}
 
