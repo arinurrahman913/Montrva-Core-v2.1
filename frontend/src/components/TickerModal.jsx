@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
@@ -700,12 +700,7 @@ function ModalBody({ data, context, aiNarrative }) {
 
       {showEvidence && evidence && (
         <div className="msection" id="sec-evidence">
-          <div className="msection-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            Evidence — Sumber Data
-            <a onClick={() => exportEvidenceJSON(evidence)} style={{ cursor: 'pointer', fontSize: 11, textTransform: 'none', letterSpacing: 'normal', fontWeight: 600 }}>
-              Export JSON
-            </a>
-          </div>
+          <div className="msection-title">Evidence — Sumber Data</div>
 
           <PriceSnapshotBlock priceMarket={evidence.price_market} />
 
@@ -730,6 +725,8 @@ function ModalBody({ data, context, aiNarrative }) {
             <SecFilingsBlock filings={evidence.sec_filings} />
             <NewsBlock news={evidence.news} />
           </div>
+
+          <RawDataTable evidence={evidence} />
         </div>
       )}
 
@@ -1018,14 +1015,85 @@ function AnalystEstimatesBlock({ estimates, currentPrice }) {
   )
 }
 
-function exportEvidenceJSON(evidence) {
-  const blob = new Blob([JSON.stringify(evidence, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `evidence_${evidence.ticker || 'ticker'}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+// Ratakan object evidence yang nested jadi baris {field, value} dot-path.
+// Array (quarterly_data, news.items, dst) SENGAJA tidak di-drill — sudah
+// punya tampilan sendiri di block lain modal ini, drill di sini cuma bikin
+// tabel meledak baris-nya tanpa tambahan info.
+function flattenEvidence(obj, prefix = '') {
+  const rows = []
+  for (const [k, v] of Object.entries(obj || {})) {
+    const path = prefix ? `${prefix}.${k}` : k
+    if (Array.isArray(v)) {
+      rows.push({ field: path, value: v.length > 0 ? `[${v.length} item]` : null })
+    } else if (v !== null && typeof v === 'object') {
+      rows.push(...flattenEvidence(v, path))
+    } else {
+      rows.push({ field: path, value: v })
+    }
+  }
+  return rows
+}
+
+function formatFlatValue(v) {
+  if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : String(Number(v.toFixed(4)))
+  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  return String(v)
+}
+
+function RawDataTable({ evidence }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const rows = useMemo(() => (open ? flattenEvidence(evidence) : []), [open, evidence])
+  const filtered = useMemo(() => {
+    if (!search.trim()) return rows
+    const q = search.toLowerCase()
+    return rows.filter((r) => r.field.toLowerCase().includes(q))
+  }, [rows, search])
+
+  function copyRows() {
+    const text = filtered.map((r) => `${r.field}\t${r.value == null ? '' : formatFlatValue(r.value)}`).join('\n')
+    navigator.clipboard?.writeText(text)
+  }
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className={`rawdata-bar${open ? ' open' : ''}`} onClick={() => setOpen(!open)}>
+        <span>Lihat Semua Data (Tabel)</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {open && <span className="rawdata-meta">{rows.length} field</span>}
+          <span className="rawdata-chev">▾</span>
+        </span>
+      </div>
+      {open && (
+        <div className="rawdata-panel">
+          <div className="rawdata-panel-head">
+            <input
+              className="rawdata-search"
+              placeholder='Cari field… misal "roe"'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button className="rawdata-btn" onClick={copyRows}>Salin</button>
+          </div>
+          <div className="rawdata-body">
+            <table className="rawdata-table">
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.field}>
+                    <td className="field">{r.field}</td>
+                    <td className={`val${r.value == null ? ' empty' : ''}`}>
+                      {r.value == null ? '(kosong)' : formatFlatValue(r.value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="rawdata-foot">Menampilkan {filtered.length} dari {rows.length} field</div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function DilutionCallout({ changePct }) {

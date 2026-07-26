@@ -466,6 +466,32 @@ tbody tr:last-child td{border-bottom:none}
   background:rgba(16,19,28,.97);border:1px solid var(--rule-strong);border-radius:9px;box-shadow:var(--shadow-sm);
   padding:9px 11px;font-size:11px;line-height:1.5;color:var(--dim);font-weight:400;transition:opacity .12s ease;pointer-events:none}
 .tip-wrap:hover .avail-tip{visibility:visible;opacity:1}
+.rawdata-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  background:var(--panel2);border:1px solid var(--rule-strong);border-radius:9px;padding:10px 14px;
+  cursor:pointer;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--dim)}
+.rawdata-bar:hover{background:var(--panel3)}
+.rawdata-bar.open{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
+.rawdata-meta{font-family:var(--mono);font-size:10.5px;color:var(--faint);font-weight:500}
+.rawdata-chev{color:var(--faint);font-size:11px;transition:transform .15s ease}
+.rawdata-bar.open .rawdata-chev{transform:rotate(180deg)}
+.rawdata-panel{background:var(--panel3);border:1px solid var(--rule-strong);border-top:none;
+  border-bottom-left-radius:9px;border-bottom-right-radius:9px;overflow:hidden}
+.rawdata-panel-head{display:flex;gap:8px;padding:9px 10px;border-bottom:1px solid var(--rule)}
+.rawdata-search{flex:1;background:var(--panel2);border:1px solid var(--rule);border-radius:7px;padding:6px 10px;
+  color:var(--text);font-family:var(--sans);font-size:12px}
+.rawdata-search::placeholder{color:var(--faint)}
+.rawdata-btn{font-family:var(--sans);font-size:10.5px;font-weight:600;color:var(--dim);background:transparent;
+  border:1px solid var(--rule-strong);border-radius:6px;padding:0 11px;cursor:pointer;flex-shrink:0}
+.rawdata-btn:hover{color:var(--text);background:var(--panel2)}
+.rawdata-body{max-height:300px;overflow:auto}
+.rawdata-table{width:100%;border-collapse:collapse}
+.rawdata-table td{padding:6px 10px;font-family:var(--mono);font-size:11.5px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.rawdata-table td.field{color:var(--dim)}
+.rawdata-table td.val{color:var(--text);text-align:right;width:1%}
+.rawdata-table td.val.empty{color:var(--faint);font-style:italic}
+.rawdata-table tr:hover td{background:var(--panel2)}
+.rawdata-table tr:last-child td{border-bottom:none}
+.rawdata-foot{padding:7px 10px;font-family:var(--sans);font-size:10.5px;color:var(--faint);border-top:1px solid var(--rule)}
 .msection{margin-bottom:20px}
 .msection-title{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:12px}
 /* Market Regime aggregation section */
