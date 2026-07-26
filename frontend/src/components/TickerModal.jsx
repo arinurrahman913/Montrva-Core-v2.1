@@ -712,6 +712,98 @@ function ConfidenceDetail({ confidence }) {
   )
 }
 
+function BullBearCase({ reasoning }) {
+  const bulls = []
+  const bears = []
+  MODULES.forEach((key) => {
+    const o = reasoning[key]
+    if (!o) return
+    ;(o.positive_factors || []).forEach((f) => bulls.push({ text: f, module: key }))
+    ;(o.negative_factors || []).forEach((f) => bears.push({ text: f, module: key }))
+  })
+  if (bulls.length === 0 && bears.length === 0) return null
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+      <div style={{ background: 'rgba(74,222,128,.06)', border: '1px solid rgba(74,222,128,.2)', borderRadius: 8, padding: 10 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--good)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+          Bull Case ({bulls.length})
+        </div>
+        {bulls.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--faint)' }}>Tidak ada argumen positif dari 3 lensa.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {bulls.map((b, i) => (
+              <div key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.4 }}>
+                <span style={{ fontSize: 9.5, color: 'var(--faint)', textTransform: 'uppercase', marginRight: 4 }}>[{MODULE_LABELS[b.module] || b.module}]</span>
+                {b.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ background: 'rgba(251,113,133,.06)', border: '1px solid rgba(251,113,133,.2)', borderRadius: 8, padding: 10 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--bad)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+          Bear Case ({bears.length})
+        </div>
+        {bears.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--faint)' }}>Tidak ada argumen negatif dari 3 lensa.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {bears.map((b, i) => (
+              <div key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.4 }}>
+                <span style={{ fontSize: 9.5, color: 'var(--faint)', textTransform: 'uppercase', marginRight: 4 }}>[{MODULE_LABELS[b.module] || b.module}]</span>
+                {b.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DecisionFlow({ data }) {
+  const { evidence, knowledge, catalyst, peer, risk, confidence, reasoning, aggregator } = data
+  const halted = !!aggregator?.halted
+  const stages = [
+    { label: 'Market Context', ok: true },
+    { label: 'Evidence', ok: !!evidence },
+    { label: 'Knowledge', ok: !!knowledge },
+    { label: 'Catalyst & Peer', ok: !!(catalyst || peer) },
+    { label: 'Risk & Red Flags', ok: !!risk, halt: halted },
+    { label: 'Confidence', ok: !!confidence && !halted, skipped: halted },
+    { label: 'Reasoning', ok: !!reasoning && !halted, skipped: halted },
+  ]
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 14, fontSize: 10.5 }}>
+      {stages.map((s, i) => (
+        <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              padding: '3px 8px',
+              borderRadius: 4,
+              background: s.halt ? 'rgba(251,113,133,.15)' : s.skipped ? 'var(--panel3)' : s.ok ? 'rgba(74,222,128,.1)' : 'var(--panel3)',
+              color: s.halt ? 'var(--bad)' : s.skipped ? 'var(--faint)' : s.ok ? 'var(--good)' : 'var(--faint)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {s.halt ? '⛔ ' : s.skipped ? '— ' : s.ok ? '✓ ' : '○ '}
+            {s.label}
+          </span>
+          {i < stages.length - 1 && <span style={{ color: 'var(--faint)' }}>→</span>}
+        </div>
+      ))}
+      {halted && (
+        <span style={{ color: 'var(--bad)', marginLeft: 4 }}>
+          Berhenti di Risk — {aggregator?.halt_reason || 'red flag severity ekstrem terpicu'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function ModalBody({ data, context, aiNarrative }) {
   const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
@@ -737,6 +829,13 @@ function ModalBody({ data, context, aiNarrative }) {
     <>
       {showEvidence && (
         <CompanyHeaderSection profile={evidence?.company_profile} fundamental={evidence?.fundamental} />
+      )}
+
+      {showReasoning && (
+        <div className="msection">
+          <div className="msection-title">Decision Flow</div>
+          <DecisionFlow data={data} />
+        </div>
       )}
 
       {showReasoning && aggregator?.halted && (
@@ -769,6 +868,8 @@ function ModalBody({ data, context, aiNarrative }) {
 
           {synthesis?.narrative && <p className="narrative" style={{ marginBottom: 12 }}>{synthesis.narrative}</p>}
 
+          {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
+
           {reasoning && !aggregator?.halted && (
             <div className="lens-grid">
               {MODULES.map((key) => {
@@ -783,7 +884,8 @@ function ModalBody({ data, context, aiNarrative }) {
                   (o.knowledge_gaps || []).length > 0 ||
                   (o.flag_responses || []).length > 0 ||
                   weightEntries.length > 0 ||
-                  (o.context_used || []).length > 0
+                  (o.context_used || []).length > 0 ||
+                  (o.fields_accessed || []).length > 0
                 return (
                   <div className="lens-card" key={key}>
                     <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
@@ -837,6 +939,23 @@ function ModalBody({ data, context, aiNarrative }) {
                             </div>
                           </div>
                         )}
+                        {(o.fields_accessed || []).length > 0 && (
+                          <div style={{ margin: '2px 0 10px' }}>
+                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                              Ditelusuri dari (Knowledge)
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {o.fields_accessed.map((f, i) => (
+                                <span key={i} style={{ fontSize: 9.5, color: 'var(--dim)', background: 'var(--panel3)', padding: '2px 6px', borderRadius: 3 }}>
+                                  {prettyLabel(f)}
+                                </span>
+                              ))}
+                            </div>
+                            <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+                              Section Knowledge yang dibaca lensa ini — belum sampai ke field/Evidence individual.
+                            </div>
+                          </div>
+                        )}
                         {(o.positive_factors || []).map((f, i) => (
                           <div className="factor pos" key={`p${i}`}>+ {f}</div>
                         ))}
@@ -845,7 +964,7 @@ function ModalBody({ data, context, aiNarrative }) {
                         ))}
                         {(o.knowledge_gaps || []).length > 0 && (
                           <div className="factor" style={{ color: 'var(--faint)' }}>
-                            Data kurang: {o.knowledge_gaps.join(', ')}
+                            ⓘ Data belum tersedia (bukan sinyal negatif): {o.knowledge_gaps.join(', ')}
                           </div>
                         )}
                         {(o.flag_responses || []).map((fr, i) => (
