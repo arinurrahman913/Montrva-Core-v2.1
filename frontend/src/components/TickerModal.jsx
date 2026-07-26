@@ -441,7 +441,7 @@ const PEER_METRIC_GROUPS = [
   { title: 'Growth & Leverage', metrics: [['revenue_growth_comparison', 'Revenue growth'], ['debt_to_equity_comparison', 'Debt/Equity']] },
 ]
 
-function PercentileBar({ label, comp, groupSize }) {
+function PercentileBar({ label, comp, groupSize, benchmark }) {
   const has = comp && comp.percentile !== null && comp.percentile !== undefined
   // roe/roa disimpan sebagai fraksi (0.44 = 44%) di Knowledge, BUKAN persen
   // seperti margin lain -- lihat financial_health.roe docstring. Kalikan
@@ -490,7 +490,7 @@ function PercentileBar({ label, comp, groupSize }) {
       {has && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>
           <span>{comp.peer_group_count}/{groupSize ?? '—'} peer</span>
-          <span title={directionText}>{ordinal(Math.round(displayPercentile))} percentile</span>
+          <span title={directionText}>{ordinal(Math.round(displayPercentile))} percentile ({benchmark})</span>
         </div>
       )}
     </div>
@@ -501,12 +501,31 @@ function PeerComparisonCard({ peer, aiNarrative }) {
   if (!peer) return <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>Belum ada data peer comparison untuk ticker ini.</p>
 
   const pg = peer.peer_group || {}
+  const [benchmark, setBenchmark] = useState('sector')
 
   return (
     <div className="mcell">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <div className="mcell-label" style={{ marginBottom: 0 }}>vs {pg.group_size ?? 0} peer{pg.sector ? ` · ${pg.sector}` : ''}</div>
-        {peer.low_sample_size && <span className="pill warn">sampel kecil</span>}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={benchmark}
+            onChange={(e) => setBenchmark(e.target.value)}
+            style={{
+              fontSize: 11,
+              padding: '4px 8px',
+              background: 'var(--panel2)',
+              border: '0.5px solid var(--rule)',
+              borderRadius: 4,
+              color: 'var(--text)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="sector">Benchmark: Sector</option>
+            <option value="universe" disabled>Benchmark: Universe (Phase 2)</option>
+          </select>
+          {peer.low_sample_size && <span className="pill warn">sampel kecil</span>}
+        </div>
       </div>
       <p style={{ margin: '0 0 14px', fontSize: 10.5, color: 'var(--faint)' }}>
         Posisi diukur pakai percentile, bukan skala nilai mentah — beberapa metrik punya outlier ekstrem di peer group.
@@ -526,7 +545,7 @@ function PeerComparisonCard({ peer, aiNarrative }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {group.metrics.map(([key, label]) => (
-              <PercentileBar key={key} label={label} comp={peer[key]} groupSize={pg.group_size} />
+              <PercentileBar key={key} label={label} comp={peer[key]} groupSize={pg.group_size} benchmark={benchmark} />
             ))}
           </div>
         </div>
