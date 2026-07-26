@@ -2,13 +2,16 @@ import Icon from './Icon'
 
 // Urutan + tampilan tetap dari 6 field EvidencePackage (kunci harus sama
 // dengan alphaforge/layer2/source_health.py SOURCES supaya `history` cocok).
+// cadence = seberapa sering data jenis ini SEHARUSNYA berubah (properti
+// dari jenis sumbernya sendiri, sama untuk semua ticker — bukan hasil
+// fetch), dipakai buat label freshness indicator di footer card.
 export const SOURCE_META = [
-  { key: 'price_market', label: 'Price/Market', icon: 'dollar', color: '#e8b84b' },
-  { key: 'fundamental', label: 'Fundamental', icon: 'chartline', color: '#4fd1e0' },
-  { key: 'institutional_ownership', label: 'Institutional Own', icon: 'bond', color: '#C4B5FD' },
-  { key: 'institutional_activity', label: 'Insider Activity', icon: 'clipboard', color: '#FBBF7A' },
-  { key: 'news', label: 'News', icon: 'newspaper', color: '#60A5FA' },
-  { key: 'sec_filings', label: 'SEC Filings', icon: 'filedoc', color: '#4ADE80' },
+  { key: 'price_market', label: 'Price/Market', icon: 'dollar', color: '#e8b84b', cadence: 'Harian' },
+  { key: 'fundamental', label: 'Fundamental', icon: 'chartline', color: '#4fd1e0', cadence: 'Kuartalan' },
+  { key: 'institutional_ownership', label: 'Institutional Own', icon: 'bond', color: '#C4B5FD', cadence: 'Kuartalan' },
+  { key: 'institutional_activity', label: 'Insider Activity', icon: 'clipboard', color: '#FBBF7A', cadence: 'Event-based' },
+  { key: 'news', label: 'News', icon: 'newspaper', color: '#60A5FA', cadence: 'Event-based' },
+  { key: 'sec_filings', label: 'SEC Filings', icon: 'filedoc', color: '#4ADE80', cadence: 'Event-based' },
 ]
 
 // Sparkline data ASLI (bukan dekoratif seperti components/Sparkline.jsx) —
@@ -77,8 +80,8 @@ export default function SourceHealthCards({ stats, history, activeSource, onSele
               <MiniTrend values={trendValues} color={meta.color} />
             </div>
             <p className="l1a-foot">
-              {meta.key === 'institutional_activity' ? 'ada filing insider (30 hari)' : 'status ok'} · klik untuk
-              filter tabel
+              {meta.cadence} · {meta.key === 'institutional_activity' ? 'ada filing insider (30 hari)' : 'status ok'} · klik
+              untuk filter tabel
             </p>
           </div>
         )
