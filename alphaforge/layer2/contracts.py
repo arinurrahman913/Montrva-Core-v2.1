@@ -241,6 +241,7 @@ class CompanyNews:
     source: str
     published_at: str  # ISO datetime
     url: str | None
+    evidence_id: str | None = None  # Finnhub's own article id (stabil, tidak berubah antar-fetch)
 
 
 @dataclass
@@ -286,6 +287,7 @@ class InstitutionalTrade:
     transaction_date: str  # ISO date
     form_type: str  # "4" (insider) atau "144" (affiliate sale)
     filing_date: str  # ISO date Form 4 was filed
+    evidence_id: str | None = None  # SEC accession number — satu-satunya field yang genuinely unik per filing (lihat catatan MVP di atas, field lain sering placeholder/identik)
 
 
 @dataclass

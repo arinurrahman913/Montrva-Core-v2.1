@@ -117,11 +117,13 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
 
         news_list = []
         for item in data:
+            news_id = item.get("id")
             news_list.append(CompanyNews(
                 headline=item.get("headline", ""),
                 source=item.get("source", ""),
                 published_at=datetime.fromtimestamp(item.get("datetime", 0), tz=timezone.utc).isoformat(),
-                url=item.get("url")
+                url=item.get("url"),
+                evidence_id=str(news_id) if news_id is not None else None,
             ))
 
         metadata = SourceMetadata(

@@ -76,6 +76,7 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
     recent = data.get("filings", {}).get("recent", {})
     forms = recent.get("form", [])
     dates = recent.get("filingDate", [])
+    accessions = recent.get("accessionNumber", [])
 
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_lookback)).date()
     trades: list[InstitutionalTrade] = []
@@ -85,7 +86,7 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
 
     # MVP approach: Form 4 filings = indicator of insider activity (yang pasti ada)
     # Detail transaction parsing deferred (SEC archive structure too complex)
-    for form, date_str in zip(forms, dates):
+    for i, (form, date_str) in enumerate(zip(forms, dates)):
         if form != "4":
             continue
         try:
@@ -106,6 +107,7 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
                 transaction_date=date_str,
                 form_type="4",
                 filing_date=date_str,
+                evidence_id=accessions[i] if i < len(accessions) else None,
             )
             trades.append(trade)
             # For MVP, just track that filing occurred
