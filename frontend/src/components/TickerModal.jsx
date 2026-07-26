@@ -219,6 +219,7 @@ function KnowledgeDetailCards({ knowledge, evidence }) {
   const val = knowledge.valuation || {}
   const pt = val.price_target || {}
   const gov = knowledge.governance || {}
+  const cs = knowledge.competitive_structure || {}
 
   const fundamental = evidence?.fundamental || {}
   const io = evidence?.institutional_ownership || {}
@@ -230,19 +231,32 @@ function KnowledgeDetailCards({ knowledge, evidence }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-      <DetailCard title="Pertumbuhan & Margin">
+      <DetailCard title="Business Profile">
+        <DetailRow label="Sektor" value={knowledge.sector || '—'} />
+        <DetailRow label="Business model" value={cs.business_model || '—'} />
+        <DetailRow label="Karyawan" value={cs.employees_count != null ? fmtCompact(cs.employees_count) : '—'} />
+        <DetailRow label="TAM estimate" value={cs.tam_estimate != null ? fmtMoney(cs.tam_estimate) : '—'} />
+      </DetailCard>
+
+      <DetailCard title="Growth">
         <DetailRow label="Revenue YoY (kini)" value={fmtPct(rt.yoy_q4)} />
+        <DetailRow label="CAGR 3Y" value={fmtPct(rt.cagr_3y)} />
+        <DetailRow label="CAGR 5Y" value={fmtPct(rt.cagr_5y)} />
+      </DetailCard>
+
+      <DetailCard title="Profitability">
         <DetailRow label="Net margin (kini)" value={fmtPct(fh.net_margin_trend?.q4)} />
-        <DetailRow label="Revenue (kini)" value={fmtMoney(fundamental.revenue)} />
+        <DetailRow label="Gross margin (kini)" value={fmtPct(fh.gross_margin_trend?.q4)} />
+        <DetailRow label="ROE · ROA" value={`${fmtPct(fh.roe != null ? fh.roe * 100 : null)} · ${fmtPct(fh.roa != null ? fh.roa * 100 : null)}`} />
       </DetailCard>
 
-      <DetailCard title="Performa & Risiko">
-        <DetailRow label="Return 1Y" value={fmtPct(ht.return_1y)} valueColor={ht.return_1y >= 0 ? 'var(--good)' : 'var(--bad)'} />
-        <DetailRow label="Volatilitas harian" value={fmtPct(ht.volatility_daily)} />
-        <DetailRow label="D/E · Current ratio" value={`${fmtNum(bs.debt_to_equity)} · ${fmtNum(bs.current_ratio)}`} />
+      <DetailCard title="Balance Sheet & Liquidity">
+        <DetailRow label="Debt/Equity" value={fmtNum(bs.debt_to_equity)} />
+        <DetailRow label="Current · Quick ratio" value={`${fmtNum(bs.current_ratio)} · ${fmtNum(bs.quick_ratio)}`} />
+        <DetailRow label="Cash & equiv." value={bs.cash_and_equivalents != null ? fmtMoney(bs.cash_and_equivalents) : '—'} />
       </DetailCard>
 
-      <DetailCard title="Valuasi & Analis">
+      <DetailCard title="Valuation">
         <DetailRow label="P/E · P/S · P/B" value={`${fmtNum(val.pe_ratio_trailing)}x · ${fmtNum(val.ps_ratio)}x · ${fmtNum(val.pb_ratio)}x`} />
         <DetailRow
           label={`Target (${pt.num_analysts ?? '—'} analis)`}
@@ -250,6 +264,12 @@ function KnowledgeDetailCards({ knowledge, evidence }) {
           valueColor="var(--accent)"
         />
         {revEst && <DetailRow label="Revenue est. Q depan" value={fmtPct(revEst.growth)} />}
+      </DetailCard>
+
+      <DetailCard title="Performa Historis">
+        <DetailRow label="Return 1Y" value={fmtPct(ht.return_1y)} valueColor={ht.return_1y >= 0 ? 'var(--good)' : 'var(--bad)'} />
+        <DetailRow label="Volatilitas harian" value={fmtPct(ht.volatility_daily)} />
+        <DetailRow label="Beta" value={fmtNum(ht.beta)} />
       </DetailCard>
 
       <DetailCard title="Kepemilikan">
