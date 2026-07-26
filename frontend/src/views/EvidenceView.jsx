@@ -29,6 +29,39 @@ function completeness(pkg) {
   return { okCount, total: SOURCE_META.length }
 }
 
+const CSV_COLUMNS = [
+  ['Ticker', (r) => r.ticker],
+  ['Price', (r) => r.price_market?.close],
+  ['Market Cap', (r) => r.price_market?.market_cap],
+  ['Revenue', (r) => r.fundamental?.revenue],
+  ['Net Income', (r) => r.fundamental?.net_income],
+  ['P/E', (r) => r.fundamental?.pe_ratio],
+  ['SEC Qtrly', (r) => r.fundamental?.quarterly_count || 0],
+  ['SEC Filings Status', (r) => r.sec_filings?.metadata?.status || ''],
+  ['Institutional %', (r) => r.institutional_ownership?.percentage],
+  ['News Count', (r) => r.news?.count ?? 0],
+  ['Insider Filings (30d)', (r) => r.institutional_activity?.buy_count_30d || 0],
+  ['Completeness', (r) => `${completeness(r).okCount}/${completeness(r).total}`],
+]
+
+function csvEscape(v) {
+  const s = v === null || v === undefined ? '' : String(v)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+function exportEvidenceCSV(pkgs) {
+  const header = CSV_COLUMNS.map(([label]) => csvEscape(label)).join(',')
+  const rows = pkgs.map((r) => CSV_COLUMNS.map(([, get]) => csvEscape(get(r))).join(','))
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `evidence_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function EvidenceView({ onSelectTicker }) {
   // Versi ringan (bukan api.evidence mentah) — evidence.json penuh bisa
   // ~275MB di skala full-market (price_history/quarterly_data/news/trades
@@ -158,6 +191,11 @@ export default function EvidenceView({ onSelectTicker }) {
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button className="btn-back" onClick={() => exportEvidenceCSV(filteredPkgs)}>
+          Export CSV ({filteredPkgs.length})
+        </button>
+      </div>
       <StatCards stats={stats} />
       <SourceHealthCards
         stats={sourceStats}

@@ -700,7 +700,12 @@ function ModalBody({ data, context, aiNarrative }) {
 
       {showEvidence && evidence && (
         <div className="msection" id="sec-evidence">
-          <div className="msection-title">Evidence — Sumber Data</div>
+          <div className="msection-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Evidence — Sumber Data
+            <a onClick={() => exportEvidenceJSON(evidence)} style={{ cursor: 'pointer', fontSize: 11, textTransform: 'none', letterSpacing: 'normal', fontWeight: 600 }}>
+              Export JSON
+            </a>
+          </div>
 
           <PriceSnapshotBlock priceMarket={evidence.price_market} />
 
@@ -1011,6 +1016,16 @@ function AnalystEstimatesBlock({ estimates, currentPrice }) {
       </p>
     </div>
   )
+}
+
+function exportEvidenceJSON(evidence) {
+  const blob = new Blob([JSON.stringify(evidence, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `evidence_${evidence.ticker || 'ticker'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function DilutionCallout({ changePct }) {
