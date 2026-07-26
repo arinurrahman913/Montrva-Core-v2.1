@@ -775,11 +775,15 @@ function ModalBody({ data, context, aiNarrative }) {
                 const o = reasoning[key]
                 if (!o) return null
                 const metricEntries = Object.entries(o.key_metrics || {})
+                const weightEntries = Object.entries(o.score_breakdown || {})
+                const maxWeight = weightEntries.length > 0 ? Math.max(...weightEntries.map(([, v]) => Math.abs(v)), 1) : 1
                 const hasDetail =
                   (o.positive_factors || []).length > 0 ||
                   (o.negative_factors || []).length > 0 ||
                   (o.knowledge_gaps || []).length > 0 ||
-                  (o.flag_responses || []).length > 0
+                  (o.flag_responses || []).length > 0 ||
+                  weightEntries.length > 0 ||
+                  (o.context_used || []).length > 0
                 return (
                   <div className="lens-card" key={key}>
                     <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
@@ -801,6 +805,38 @@ function ModalBody({ data, context, aiNarrative }) {
                     {hasDetail && (
                       <details className="lens-details">
                         <summary>Detail lainnya</summary>
+                        {weightEntries.length > 0 && (
+                          <div style={{ margin: '2px 0 10px' }}>
+                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                              Bobot Faktor
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {weightEntries.map(([k, v]) => (
+                                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0, minWidth: 88 }}>{prettyLabel(k)}</span>
+                                  <div style={{ flex: 1, height: 4, background: 'var(--panel3)', borderRadius: 2, overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${(Math.abs(v) / maxWeight) * 100}%`, background: 'var(--accent2)' }} />
+                                  </div>
+                                  <span style={{ fontSize: 9.5, color: 'var(--faint)', width: 26, textAlign: 'right' }}>{fmtMetricValue(v)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(o.context_used || []).length > 0 && (
+                          <div style={{ margin: '2px 0 10px' }}>
+                            <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                              Konteks Layer 1
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {o.context_used.map((c, i) => (
+                                <div key={i} style={{ fontSize: 10.5, color: 'var(--dim)' }}>
+                                  <span style={{ color: 'var(--accent)' }}>{prettyLabel(c.component)}</span> — {c.influence}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {(o.positive_factors || []).map((f, i) => (
                           <div className="factor pos" key={`p${i}`}>+ {f}</div>
                         ))}
