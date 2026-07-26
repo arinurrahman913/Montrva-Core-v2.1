@@ -329,12 +329,14 @@ def _check_dilution(profile: KnowledgeProfile) -> Flag | None:
             flag_id="dilution_12m", category="dilution", severity="tinggi", status="undetermined",
             knowledge_refs=["governance.shares_outstanding_change_12m"],
             evidence_note="Shares outstanding 12-month baseline not available from current Evidence sources",
+            source="Yahoo Finance fundamentals",
         )
     if change > DILUTION_THRESHOLD_PCT:
         return Flag(
             flag_id="dilution_12m", category="dilution", severity="tinggi", status="triggered",
             knowledge_refs=["governance.shares_outstanding_change_12m"],
             evidence_note=f"Shares outstanding increased {change:.1f}% in the last 12 months",
+            source="Yahoo Finance fundamentals",
         )
     return None
 
@@ -346,6 +348,7 @@ def _check_auditor_change(profile: KnowledgeProfile) -> Flag | None:
             flag_id="auditor_change_3y", category="governance", severity="tinggi", status="undetermined",
             knowledge_refs=["governance.auditor_changes"],
             evidence_note="Auditor change history not available — Evidence tracks filing form_type/date only, not item-level content",
+            source="SEC EDGAR filings",
         )
     recent = _events_within(changes, years=AUDITOR_CHANGE_WINDOW_YEARS)
     if len(recent) > AUDITOR_CHANGE_MIN_COUNT:
@@ -353,6 +356,7 @@ def _check_auditor_change(profile: KnowledgeProfile) -> Flag | None:
             flag_id="auditor_change_3y", category="governance", severity="tinggi", status="triggered",
             knowledge_refs=["governance.auditor_changes"],
             evidence_note=f"{len(recent)} auditor change(s) in the last {AUDITOR_CHANGE_WINDOW_YEARS} years",
+            source="SEC EDGAR filings",
         )
     return None
 
@@ -364,6 +368,7 @@ def _check_restatement(profile: KnowledgeProfile) -> Flag | None:
             flag_id="restatement_2y", category="accounting", severity="tinggi", status="undetermined",
             knowledge_refs=["governance.restatements"],
             evidence_note="Restatement history not available — Evidence tracks filing form_type/date only, not item-level content",
+            source="SEC EDGAR filings",
         )
     recent = _events_within(restatements, years=RESTATEMENT_WINDOW_YEARS)
     if recent:
@@ -371,6 +376,7 @@ def _check_restatement(profile: KnowledgeProfile) -> Flag | None:
             flag_id="restatement_2y", category="accounting", severity="tinggi", status="triggered",
             knowledge_refs=["governance.restatements"],
             evidence_note=f"{len(recent)} restatement(s) in the last {RESTATEMENT_WINDOW_YEARS} years",
+            source="SEC EDGAR filings",
         )
     return None
 
@@ -382,11 +388,13 @@ def _check_litigation(profile: KnowledgeProfile) -> Flag | None:
             flag_id="litigation_material", category="litigation", severity="tinggi", status="undetermined",
             knowledge_refs=["governance.material_litigation"],
             evidence_note="Material litigation status not available — Evidence tracks filing form_type/date only, not item-level content",
+            source="SEC EDGAR filings",
         )
     return Flag(
         flag_id="litigation_material", category="litigation", severity="tinggi", status="triggered",
         knowledge_refs=["governance.material_litigation"],
         evidence_note=f"{len(litigation)} material litigation record(s) on file",
+        source="SEC EDGAR filings",
     )
 
 
@@ -397,6 +405,7 @@ def _check_insider_selling(profile: KnowledgeProfile) -> Flag | None:
             flag_id="insider_selling_90d", category="insider", severity="tinggi", status="undetermined",
             knowledge_refs=["ownership.insider_transactions"],
             evidence_note="Insider transaction data not available — SEC EDGAR fetcher excludes Form 3/4/144",
+            source="SEC EDGAR filings",
         )
     recent_sells = [
         t for t in _events_within(transactions, days=90)
@@ -408,6 +417,7 @@ def _check_insider_selling(profile: KnowledgeProfile) -> Flag | None:
             flag_id="insider_selling_90d", category="insider", severity="tinggi", status="triggered",
             knowledge_refs=["ownership.insider_transactions"],
             evidence_note=f"${total_usd:,.0f} in insider selling over the last 90 days ({len(recent_sells)} transaction(s))",
+            source="SEC EDGAR filings",
         )
     return None
 
@@ -424,6 +434,7 @@ def _check_fraud_or_delisting(profile: KnowledgeProfile) -> Flag | None:
         flag_id="confirmed_fraud_or_delisting", category="listing_status", severity="ekstrem", status="undetermined",
         knowledge_refs=["governance.unusual_filings", "identity.instrument_status"],
         evidence_note="Confirmed fraud / delisting / bankruptcy status not available — Evidence does not fetch 8-K item numbers or Form 15",
+        source="SEC EDGAR filings",
     )
 
 

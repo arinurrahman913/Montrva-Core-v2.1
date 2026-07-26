@@ -558,6 +558,69 @@ function PeerComparisonCard({ peer, aiNarrative }) {
   )
 }
 
+const RISK_SEVERITY_META = {
+  ekstrem: { label: 'Ekstrem', color: 'var(--bad)', bg: 'rgba(251,113,133,.08)' },
+  tinggi: { label: 'Tinggi', color: 'var(--warn)', bg: 'rgba(251,191,122,.08)' },
+}
+
+function flagLabel(flagId) {
+  return String(flagId || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function RiskFlagCard({ flag, assessedAt }) {
+  const meta = RISK_SEVERITY_META[flag.severity] || RISK_SEVERITY_META.tinggi
+  const isUndetermined = flag.status === 'undetermined'
+  return (
+    <div style={{ padding: 10, background: meta.bg, borderRadius: 6, borderLeft: `3px solid ${meta.color}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{flagLabel(flag.flag_id)}</div>
+        <span style={{ background: meta.color, color: 'var(--ink)', fontSize: 10, padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>
+          {flag.status === 'triggered' ? 'Triggered' : 'Undetermined'}
+        </span>
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 6, lineHeight: 1.5 }}>
+        {isUndetermined ? <><span style={{ color: 'var(--faint)' }}>ⓘ Data belum cukup —</span> {flag.evidence_note}</> : flag.evidence_note}
+      </div>
+      <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--faint)' }}>
+        {flag.source && <span>Sumber: {flag.source}</span>}
+        {assessedAt && <span>Dicek: {fmtIdDate(new Date(assessedAt))}</span>}
+      </div>
+    </div>
+  )
+}
+
+function RiskFlagsBySeverity({ flags, assessedAt }) {
+  const list = flags || []
+  if (list.length === 0) return null
+
+  const ekstrem = list.filter((f) => f.severity === 'ekstrem')
+  const tinggi = list.filter((f) => f.severity === 'tinggi')
+  const groups = [
+    ['ekstrem', ekstrem],
+    ['tinggi', tinggi],
+  ].filter(([, items]) => items.length > 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: (list.length ? 10 : 0) }}>
+      {groups.map(([severity, items]) => {
+        const meta = RISK_SEVERITY_META[severity]
+        return (
+          <div key={severity}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: meta.color, textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
+              {meta.label} ({items.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {items.map((f, i) => (
+                <RiskFlagCard flag={f} assessedAt={assessedAt} key={`${severity}${i}`} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function sectionBarColor(score) {
   if (score >= 70) return 'var(--good)'
   if (score >= 40) return 'var(--warn)'
@@ -770,11 +833,7 @@ function ModalBody({ data, context, aiNarrative }) {
           <div className="msection-title">
             Risk / Red Flags{risk.risk_score != null ? ` (score ${risk.risk_score.toFixed(0)})` : ''}
           </div>
-          {(risk.flags || []).map((f, i) => (
-            <div className={`flag${f.severity === 'tinggi' ? ' medium' : ''}`} key={`f${i}`}>
-              <strong>{f.flag_id}</strong> ({f.severity} · {f.status}) — {f.evidence_note}
-            </div>
-          ))}
+          <RiskFlagsBySeverity flags={risk.flags} assessedAt={risk.assessed_at} />
           {(risk.red_flags || []).map((f, i) => (
             <div className={`flag${f.severity === 'medium' ? ' medium' : ''}`} key={`rf${i}`}>
               <strong>{f.flag_type}</strong> ({f.severity}) — {f.description}

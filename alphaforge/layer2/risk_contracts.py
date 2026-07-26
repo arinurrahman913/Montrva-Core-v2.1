@@ -49,6 +49,7 @@ class Flag:
     status: FlagStatus
     knowledge_refs: list[str]  # field Knowledge yang memicunya
     evidence_note: str  # fakta pemicunya, bukan penilaian
+    source: str = ""  # sumber data mentah yang memicu (mis. "SEC EDGAR filings") — untuk transparansi, beda dari knowledge_refs yang nunjuk field internal
     method_version: str = "1.0"
 
 
