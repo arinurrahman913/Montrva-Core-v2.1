@@ -453,9 +453,15 @@ function PercentileBar({ label, comp, groupSize, benchmark }) {
 
   // Flip percentile untuk metrik "lower is better" — higher percentile = better
   // P/E tinggi (mahal) → percentile rendah → di-flip jadi tinggi (signal "baik")
-  const displayPercentile = has && comp.direction === 'lower_is_better'
-    ? 100 - comp.percentile
-    : comp.percentile
+  // Guard eksplisit di SEMUA cabang (bukan cuma yang lower_is_better) --
+  // comp bisa null (bukan cuma comp.percentile) kalau peer group kurang
+  // dari 3 buat metrik itu; tanpa guard ini "comp.percentile" di cabang
+  // else meledak duluan sebelum sempat sampai ke `has && (...)` di JSX.
+  const displayPercentile = !has
+    ? null
+    : comp.direction === 'lower_is_better'
+      ? 100 - comp.percentile
+      : comp.percentile
 
   // Tooltip: jelaskan direction logic
   const directionText = comp?.direction === 'lower_is_better'
