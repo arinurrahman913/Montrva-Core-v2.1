@@ -30,9 +30,9 @@ export default function ReasoningView({ onSelectTicker }) {
   ).length
 
   const stats = [
-    { label: 'Total', value: outs.length },
-    { label: 'Konvergen (3 lensa searah)', value: convergent, tone: 'good' },
-    { label: 'Ada lensa tak-terbaca', value: anyUnreadable, tone: anyUnreadable ? 'warn' : undefined },
+    { label: 'Total', value: outs.length, icon: 'layers', accent: '#818CF8' },
+    { label: 'Konvergen (3 lensa searah)', value: convergent, tone: 'good', icon: 'check', accent: '#4ADE80' },
+    { label: 'Ada lensa tak-terbaca', value: anyUnreadable, tone: anyUnreadable ? 'warn' : undefined, icon: 'alert', accent: '#FBBF7A' },
   ]
 
   const moduleCol = (m) => ({
@@ -93,8 +93,6 @@ export default function ReasoningView({ onSelectTicker }) {
       <div className="chart-row">
         <HBarChart title="Multibagger — distribusi stance" data={stanceDist('multibagger')} />
         <HBarChart title="Quality/Compound — distribusi stance" data={stanceDist('quality_compound')} />
-      </div>
-      <div className="chart-row">
         <HBarChart title="Speculative — distribusi stance" data={stanceDist('speculative')} />
       </div>
       <DataTable columns={columns} rows={outs} onRowClick={(r) => onSelectTicker(r.ticker)} />
