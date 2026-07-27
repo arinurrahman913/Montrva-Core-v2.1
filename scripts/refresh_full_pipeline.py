@@ -45,6 +45,21 @@ from alphaforge.layer2.aggregator import run_aggregator  # noqa: E402
 from alphaforge.layer2.historical import load_historical_timeline, update_timeline  # noqa: E402
 from alphaforge.layer2 import source_health  # noqa: E402
 
+# Lapisan pribadi -- OPSIONAL secara desain (lihat alphaforge/personal/
+# __init__.py docstring). Kalau folder ini dihapus (mis. rilis publik),
+# pipeline publik di bawah harus tetap jalan utuh tanpa personal_calls/
+# personal_history sama sekali -- itulah yang membuat pemisahannya nyata,
+# bukan cuma klaim di dokumen.
+try:
+    from alphaforge.personal import (  # noqa: E402
+        load_holdings, build_personal_call_sets,
+        load_personal_history, update_personal_timeline, save_personal_history,
+        evaluate_due_entries,
+    )
+    PERSONAL_ENABLED = True
+except ImportError:
+    PERSONAL_ENABLED = False
+
 DATA_DIR = ROOT / "dashboard" / "data"
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -162,6 +177,36 @@ def main() -> int:
         timelines = load_historical_timeline(str(DATA_DIR / "historical_timeline.json"))
         timelines = update_timeline(timelines, recommendations)
         log.info(f"Historical: {len(timelines)} tickers tracked")
+
+        # Lapisan pribadi (opsional) -- baca reasonings+catalyst_map+evidence
+        # yang SUDAH dihitung di atas, tidak menghitung ulang apa pun dari
+        # Knowledge (draft §10: "tidak ada mesin skor kedua"). Kegagalan di
+        # sini TIDAK boleh menggagalkan pipeline publik -- dicoba, dicatat,
+        # dilanjut, bukan try/except di level Exception luar yang sama.
+        personal_call_sets = []
+        personal_timelines = {}
+        if PERSONAL_ENABLED:
+            try:
+                holdings = load_holdings(DATA_DIR / "personal" / "holdings.json")
+                personal_call_sets = build_personal_call_sets(
+                    reasonings, holdings, catalyst_map, evidence_by_ticker,
+                )
+                log.info(f"Personal: {len(personal_call_sets)} call sets ({len(holdings)} holdings loaded)")
+
+                personal_timelines = load_personal_history(DATA_DIR / "personal" / "personal_history.json")
+                personal_timelines = update_personal_timeline(personal_timelines, personal_call_sets)
+
+                # Evaluasi outcome untuk entry lama yang sudah jatuh tempo --
+                # disetujui pengguna 2026-07-27, BEDA dari Historical publik
+                # yang outcome-nya sengaja None selamanya (v2.1). Pakai
+                # evidence_by_ticker yang SUDAH dihitung di atas, bukan fetch baru.
+                n_evaluated = evaluate_due_entries(personal_timelines, evidence_by_ticker)
+                if n_evaluated:
+                    log.info(f"Personal: {n_evaluated} entry lama dievaluasi outcome-nya")
+            except Exception:
+                log.exception("Personal layer failed -- pipeline publik tetap lanjut tanpanya")
+                personal_call_sets = []
+                personal_timelines = {}
     except Exception:
         log.exception("Pipeline failed — dashboard/data left untouched")
         return 1
@@ -236,6 +281,23 @@ def main() -> int:
     _atomic_write(DATA_DIR / "reasoning_outputs.json", reasoning_data)
     _atomic_write(DATA_DIR / "final_recommendations.json", aggregator_data)
     _atomic_write(DATA_DIR / "historical_timeline.json", timeline_data)
+
+    # Lapisan pribadi -- file terpisah, folder terpisah (dashboard/data/
+    # personal/), TIDAK ikut menyentuh file publik di atas sama sekali.
+    # Ditulis best-effort: kegagalan di sini tidak boleh membuat pipeline
+    # publik yang sudah selesai di atas jadi ikut gagal/rollback.
+    if PERSONAL_ENABLED and personal_call_sets:
+        personal_dir = DATA_DIR / "personal"
+        personal_dir.mkdir(exist_ok=True)
+        personal_data = {
+            "profiles_count": len(profiles),
+            "call_sets_generated": len(personal_call_sets),
+            "generated_at": personal_call_sets[0].generated_at if personal_call_sets else None,
+            "call_sets": [c.to_dict() for c in personal_call_sets],
+        }
+        _atomic_write(personal_dir / "personal_calls.json", personal_data)
+        save_personal_history(personal_timelines, personal_dir / "personal_history.json")
+        log.info(f"Personal: wrote {len(personal_call_sets)} call sets + history for {len(personal_timelines)} tickers")
     _atomic_write(DATA_DIR / "layer1_context.json", layer1_data)
     layer1_historical.append_entry(DATA_DIR / "layer1_history.json", layer1_pkg)
     source_health.append_entry(DATA_DIR / "source_health_history.json", evidence_packages)

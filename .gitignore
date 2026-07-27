@@ -16,3 +16,9 @@ frontend/node_modules/
 .tools/
 logs/
 *.log
+
+# Lapisan pribadi (personal layer) -- portofolio, harga beli, dan rekomendasi
+# tindakan pribadi. Non-negosiabel, bukan cuma "aman kalau lupa exclude saat
+# publish" seperti dashboard/data/*.json lainnya: holdings.json membocorkan
+# portofolio riil kalau sampai ter-commit, bahkan di repo privat sekalipun.
+dashboard/data/personal/

@@ -25,6 +25,7 @@ const ICONS = {
   newspaper: '<path d="M4 6h13a2 2 0 0 1 2 2v11a1.5 1.5 0 0 1-1.5 1.5H6a2 2 0 0 1-2-2z"/><path d="M19 9v9a1.5 1.5 0 0 0 1.5 1.5"/><path d="M7 9h7"/><path d="M7 12.5h7"/><path d="M7 16h4"/>',
   filedoc: '<path d="M7 2.5h7L18.5 7v14.5H7z"/><path d="M14 2.5V7h4.5"/><path d="M9.5 12.5h5"/><path d="M9.5 15.5h5"/><path d="M9.5 18.5h3"/>',
   dot: '<circle cx="12" cy="12" r="4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 }
 
 export default function Icon({ name, size = 18 }) {

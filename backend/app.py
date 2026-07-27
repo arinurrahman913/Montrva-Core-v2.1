@@ -36,6 +36,17 @@ from alphaforge.layer2.sources.sector_map import (  # noqa: E402
 from alphaforge.layer2.ai_narrative import get_or_generate_narrative  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
+
+# Lapisan pribadi -- OPSIONAL. Kalau alphaforge/personal/ atau
+# backend/personal_routes.py dihapus (rilis publik), import ini gagal dan
+# PERSONAL_ENABLED jadi False -- sisa route di bawah tidak terpengaruh sama
+# sekali. Frontend membaca PERSONAL_ENABLED lewat /api/capabilities untuk
+# tahu apakah grup nav "Pribadi" perlu ditampilkan.
+try:
+    from backend.personal_routes import register as register_personal_routes  # noqa: E402
+    PERSONAL_ENABLED = True
+except ImportError:
+    PERSONAL_ENABLED = False
 FRONTEND_DIST = ROOT / "frontend" / "dist"
 
 STAGE_FILES = {
@@ -473,6 +484,19 @@ def get_evidence_summary():
             },
         })
     return jsonify({"packages": rows, "total": len(rows)})
+
+
+@app.get("/api/capabilities")
+def get_capabilities():
+    """Dibaca frontend sekali di startup untuk tahu apakah grup nav
+    "Pribadi" perlu ditampilkan (§8/§9 draft personal layer) -- rilis publik
+    (folder alphaforge/personal/ dihapus) otomatis membuat ini False, tanpa
+    perlu env var atau config terpisah."""
+    return jsonify({"personal_enabled": PERSONAL_ENABLED})
+
+
+if PERSONAL_ENABLED:
+    register_personal_routes(app, DATA_DIR)
 
 
 @app.get("/api/sectors")

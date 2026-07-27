@@ -1,0 +1,279 @@
+"""Personal reasoning — turns existing ModuleOutput (public, reasoning.py)
+into PersonalCall (action + horizon) per lens.
+
+Prinsip desain (draft §10): TIDAK ADA mesin skor kedua. action/horizon tidak
+menghitung ulang dari Knowledge — keduanya cuma tabel keputusan dari stance +
+confidence.band yang SUDAH dihasilkan reasoning.py, plus CatalystSet untuk
+Speculative. Ini menjaga P2 (horizon_basis harus merujuk field nyata)
+terpenuhi by construction: field yang disebut di horizon_basis selalu diambil
+dari ModuleOutput.key_metrics (yang sudah ada), bukan dikarang.
+
+holdings.json TIDAK PERNAH masuk git (lihat .gitignore) — file ini kalau
+bocor ke commit publik langsung membocorkan portofolio & harga beli riil,
+beda kelas dari file pribadi lain yang "cuma" pendapat sistem.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from .personal_contracts import PersonalCall, validate_personal_call
+
+if TYPE_CHECKING:
+    from ..layer2.reasoning_contracts import ModuleOutput
+    from ..layer2.catalyst_contracts import CatalystSet
+    from ..layer2.contracts import EvidencePackage
+
+METHOD_VERSION = "1.0"
+
+from ..layer2.reasoning_contracts import UNREADABLE_STANCE  # noqa: E402
+
+# Batas atas (hari) tiap bucket horizon — dipakai buat horizon_status
+# (§11: "sudah lewat horizon perkiraan atau belum"), BUKAN buat menentukan
+# action (yang tetap 100% dari stance+faktor, lihat catatan di
+# compute_horizon_status di bawah — larangan eksplisit dari draft).
+HORIZON_UPPER_DAYS = {
+    "mingguan": 28,
+    "bulanan": 180,
+    "enam_bulan": 365,
+    "satu_dua_tahun": 730,
+    "lima_tahun": 1825,
+}
+
+# --- Tabel keputusan `action` (draft §10) — lookup murni dari stance yang
+# sudah dihasilkan reasoning.py (threshold score sudah terjadi di sana) +
+# confidence.band. Baris "*_tak_terbaca" sengaja disamakan dengan
+# PASSIVE_ACTION (P3) dan tidak pernah memilih action ACTION_FULL_EXPOSURE
+# di kolom "low" (P4) -- keduanya lolos by construction, validate_personal_
+# call() cuma jaring pengaman regresi, bukan jalur utama penegakan.
+ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
+    "no_holding": {
+        "multibagger": {
+            "ruang_terbuka": {"high": "mulai_posisi", "medium": "cicil_bertahap", "low": "cicil_bertahap"},
+            "ruang_sempit": {"high": "cicil_bertahap", "medium": "pantau", "low": "pantau"},
+            "ruang_tertutup": {"high": "lewati", "medium": "lewati", "low": "lewati"},
+            "ruang_tak_terbaca": {"high": "pantau", "medium": "pantau", "low": "pantau"},
+        },
+        "quality_compound": {
+            "compounding_kuat": {"high": "akumulasi", "medium": "akumulasi_saat_koreksi", "low": "akumulasi_saat_koreksi"},
+            "compounding_rapuh": {"high": "akumulasi_saat_koreksi", "medium": "pantau", "low": "pantau"},
+            "bukan_compounder": {"high": "lewati", "medium": "lewati", "low": "lewati"},
+            "mesin_tak_terbaca": {"high": "pantau", "medium": "pantau", "low": "pantau"},
+        },
+        "speculative": {
+            "asimetri_berkatalis": {"high": "masuk_spekulatif", "medium": "masuk_spekulatif", "low": "tunggu_katalis"},
+            "asimetri_tanpa_katalis": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
+            "tanpa_asimetri": {"high": "lewati", "medium": "lewati", "low": "lewati"},
+            "asimetri_tak_terbaca": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
+        },
+    },
+    "holding": {
+        "multibagger": {
+            "ruang_terbuka": {"high": "tambah_bertahap", "medium": "tahan", "low": "tahan"},
+            "ruang_sempit": {"high": "tahan", "medium": "tahan", "low": "kurangi"},
+            "ruang_tertutup": {"high": "kurangi", "medium": "jual", "low": "jual"},
+            "ruang_tak_terbaca": {"high": "tahan", "medium": "tahan", "low": "tahan"},
+        },
+        "quality_compound": {
+            "compounding_kuat": {"high": "tambah", "medium": "tahan", "low": "tahan"},
+            "compounding_rapuh": {"high": "tahan", "medium": "tahan", "low": "kurangi"},
+            "bukan_compounder": {"high": "kurangi", "medium": "jual", "low": "jual"},
+            "mesin_tak_terbaca": {"high": "tahan", "medium": "tahan", "low": "tahan"},
+        },
+        "speculative": {
+            "asimetri_berkatalis": {"high": "tahan_sampai_katalis", "medium": "tahan_sampai_katalis", "low": "tahan_sampai_katalis"},
+            "asimetri_tanpa_katalis": {"high": "jual", "medium": "jual", "low": "jual"},
+            "tanpa_asimetri": {"high": "jual", "medium": "jual", "low": "jual"},
+            "asimetri_tak_terbaca": {"high": "tahan_sampai_katalis", "medium": "tahan_sampai_katalis", "low": "tahan_sampai_katalis"},
+        },
+    },
+}
+
+# Klasifikasi key_metrics per modul buat horizon (§10): "structural"/
+# "fundamental" -> horizon lebih panjang, "momentum"/"valuation" -> lebih
+# pendek. Key-key ini persis yang sudah ditulis reasoning.py ke key_metrics,
+# BUKAN nama baru -- itulah yang bikin horizon_basis otomatis lolos P2.
+_MULTIBAGGER_STRUCTURAL_KEYS = ("tam_estimate", "segment_growth", "acceleration_signal")
+_MULTIBAGGER_MOMENTUM_KEYS = ("return_1y", "analyst_upside_pct", "analyst_recommendation", "price_target_trend_3m", "eps_beat_streak")
+_QUALITY_FUNDAMENTAL_KEYS = ("net_margin_q4", "current_ratio", "debt_to_equity")
+_QUALITY_VALUATION_KEYS = ("pe_ratio", "pb_ratio", "pe_peer_percentile", "analyst_upside_pct", "analyst_recommendation", "price_target_trend_3m")
+
+
+def load_holdings(path: str | Path) -> dict[str, dict]:
+    """Baca holdings.json -> {ticker: {avg_cost, buy_date, quantity?}}.
+    File tidak wajib ada (default: tidak ada holding sama sekali)."""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    with open(p, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return {h["ticker"].upper(): h for h in data.get("holdings", [])}
+
+
+def compute_position(
+    ticker: str, holdings: dict[str, dict], current_price: float | None,
+) -> tuple[str, str | None, float | None]:
+    """Status portofolio untuk satu ticker -- properti portofolio, bukan
+    properti lens, jadi dihitung sekali dan dipakai ketiga lens (lihat
+    personal_aggregator.build_personal_call_set)."""
+    h = holdings.get(ticker.upper())
+    if not h:
+        return "no_holding", None, None
+    avg_cost = h.get("avg_cost")
+    buy_date = h.get("buy_date")
+    unrealized = None
+    if current_price is not None and avg_cost:
+        unrealized = (current_price - avg_cost) / avg_cost * 100.0
+    return "holding", buy_date, unrealized
+
+
+def _compute_horizon_status(position_status: str, holding_since: str | None, horizon: str, today: date) -> str:
+    """MURNI INFORMASIONAL (draft §11, keputusan final) -- fungsi ini TIDAK
+    PERNAH dipanggil dari jalur yang menentukan `action`. Kalau nanti ada
+    yang menggabungkannya "biar praktis", itu melanggar keputusan yang sudah
+    diambil sadar: telat dari jadwal bukan alasan otomatis jual selama
+    stance-nya sendiri belum berubah."""
+    if position_status != "holding" or not holding_since:
+        return "tidak_berlaku"
+    try:
+        since = date.fromisoformat(holding_since)
+    except ValueError:
+        return "tidak_berlaku"
+    age_days = (today - since).days
+    return "horizon_terlewati" if age_days > HORIZON_UPPER_DAYS[horizon] else "dalam_horizon"
+
+
+def _speculative_horizon(
+    catalyst: "CatalystSet | None", today: date,
+) -> tuple[str, str, str | None]:
+    """Return (horizon, horizon_basis, horizon_anchor). Satu-satunya lens
+    dengan jangkar tanggal nyata (CatalystSet.catalysts[].expected_at)."""
+    if catalyst is not None and catalyst.has_upcoming:
+        upcoming = [c for c in catalyst.catalysts if c.certainty in ("scheduled", "expected")]
+        nearest = min(upcoming, key=lambda c: c.expected_at)
+        try:
+            days = (date.fromisoformat(nearest.expected_at) - today).days
+        except ValueError:
+            days = 90  # fallback konservatif kalau format tanggal tak terduga
+        if days <= 28:
+            horizon = "mingguan"
+        elif days <= 180:
+            horizon = "bulanan"
+        else:
+            horizon = "enam_bulan"
+        basis = (
+            f"Katalis {nearest.kind} diperkirakan {nearest.expected_at} ({nearest.certainty}) "
+            f"— sekitar {max(days, 0)} hari lagi."
+        )
+        return horizon, basis, nearest.expected_at
+    # Tidak ada katalis kalender -- horizon di sini "kapan cek ulang", bukan
+    # estimasi resolusi tesis (draft §10, catatan eksplisit).
+    return "bulanan", (
+        "Tidak ada katalis kalender terjadwal saat ini — horizon ini menandai kapan cek ulang, "
+        "bukan estimasi resolusi tesis."
+    ), None
+
+
+def _structural_vs_momentum_horizon(
+    key_metrics: dict, structural_keys: tuple[str, ...], momentum_keys: tuple[str, ...],
+    structural_horizon: str, momentum_horizon: str, default_horizon: str,
+    structural_note: str, momentum_note: str, default_note: str,
+) -> tuple[str, str]:
+    present_structural = [k for k in structural_keys if k in key_metrics]
+    present_momentum = [k for k in momentum_keys if k in key_metrics]
+    if present_structural and not present_momentum:
+        return structural_horizon, f"Didorong {structural_note} ({', '.join(present_structural)})."
+    if present_momentum and not present_structural:
+        return momentum_horizon, f"Didorong {momentum_note} ({', '.join(present_momentum)})."
+    if present_structural and present_momentum:
+        # Campuran -- default modul yang menang (§10: Multibagger -> tengah,
+        # Quality -> yang lebih panjang), bukan salah satu faktor dipaksa menang.
+        return default_horizon, (
+            f"Faktor campuran: struktural ({', '.join(present_structural)}) dan "
+            f"momentum ({', '.join(present_momentum)}). {default_note}"
+        )
+    return default_horizon, default_note
+
+
+def _multibagger_horizon(key_metrics: dict) -> tuple[str, str]:
+    return _structural_vs_momentum_horizon(
+        key_metrics, _MULTIBAGGER_STRUCTURAL_KEYS, _MULTIBAGGER_MOMENTUM_KEYS,
+        structural_horizon="lima_tahun", momentum_horizon="enam_bulan", default_horizon="satu_dua_tahun",
+        structural_note="faktor struktural (TAM/segment growth) — ruang tumbuh butuh waktu tercermin penuh di harga",
+        momentum_note="momentum terukur — tesis sudah mulai kelihatan, tinggal dikonfirmasi kuartal berikutnya",
+        default_note="Horizon default jangka menengah karena tidak ada faktor dominan jelas.",
+    )
+
+
+def _quality_horizon(key_metrics: dict) -> tuple[str, str]:
+    return _structural_vs_momentum_horizon(
+        key_metrics, _QUALITY_FUNDAMENTAL_KEYS, _QUALITY_VALUATION_KEYS,
+        structural_horizon="lima_tahun", momentum_horizon="satu_dua_tahun", default_horizon="lima_tahun",
+        structural_note="fundamental murni (margin/current ratio/leverage) — compounding perlu beberapa siklus laporan",
+        momentum_note="valuasi/analyst — repricing bisa lebih cepat begitu pasar sadar",
+        default_note="Default ke horizon lebih panjang karena tesis lens ini memang jangka panjang.",
+    )
+
+
+def build_personal_call(
+    module_output: "ModuleOutput",
+    position_status: str,
+    holding_since: str | None,
+    unrealized_return_pct: float | None,
+    catalyst: "CatalystSet | None" = None,
+    today: date | None = None,
+) -> PersonalCall:
+    """Bangun satu PersonalCall dari satu ModuleOutput (satu lens). Tidak
+    membaca Knowledge/Evidence langsung -- semua yang dibutuhkan sudah ada
+    di ModuleOutput (stance, confidence, key_metrics)."""
+    today = today or datetime.now(timezone.utc).date()
+    module = module_output.module
+    band = module_output.confidence.band
+    is_unreadable = module_output.stance == UNREADABLE_STANCE[module]
+
+    action = ACTION_TABLE[position_status][module][module_output.stance][band]
+
+    if module == "speculative":
+        horizon, horizon_basis, horizon_anchor = _speculative_horizon(catalyst, today)
+    elif module == "multibagger":
+        horizon, horizon_basis = _multibagger_horizon(module_output.key_metrics)
+        horizon_anchor = None
+    else:
+        horizon, horizon_basis = _quality_horizon(module_output.key_metrics)
+        horizon_anchor = None
+
+    horizon_status = _compute_horizon_status(position_status, holding_since, horizon, today)
+
+    call = PersonalCall(
+        module=module,
+        ticker=module_output.ticker,
+        exchange=module_output.exchange,
+        method_version=METHOD_VERSION,
+        action=action,
+        action_rationale=f"Stance '{module_output.stance}' (confidence {band}): {module_output.stance_rationale}",
+        horizon=horizon,
+        horizon_basis=horizon_basis,
+        horizon_anchor=horizon_anchor,
+        source_stance=module_output.stance,
+        source_confidence=module_output.confidence.score,
+        position_status=position_status,
+        holding_since=holding_since,
+        unrealized_return_pct=unrealized_return_pct,
+        horizon_status=horizon_status,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    call.violations = validate_personal_call(call, is_unreadable, band)
+    return call
+
+
+def current_price_from_evidence(evidence: "EvidencePackage | None") -> float | None:
+    """EvidencePackage.price_market.last_price -- dipilih daripada
+    KnowledgeProfile.valuation.price_target.current_price karena yang kedua
+    cuma terisi kalau evidence.analyst_estimates ada (minoritas ticker saat
+    ini, lihat catatan sesi 2026-07-25), sedangkan last_price difetch untuk
+    setiap ticker yang lolos Screening."""
+    if evidence is None:
+        return None
+    return evidence.price_market.last_price

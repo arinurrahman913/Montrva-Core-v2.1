@@ -30,6 +30,14 @@ export const api = {
   liveQuote: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/live`),
   aiNarrative: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/ai-narrative`),
   sectors: () => getJSON('/api/sectors'),
+  capabilities: () => getJSON('/api/capabilities'),
+  // Lapisan pribadi -- cuma ada kalau backend PERSONAL_ENABLED (lihat
+  // capabilities di atas). Frontend menyembunyikan nav-nya kalau false,
+  // tapi fungsi ini tetap aman dipanggil (404 di-throw seperti biasa).
+  personalCalls: () => getJSON('/api/personal/calls'),
+  personalTicker: (ticker) => getJSON(`/api/personal/ticker/${encodeURIComponent(ticker)}`),
+  personalHistory: () => getJSON('/api/personal/history'),
+  personalDueForReview: () => getJSON('/api/personal/due-for-review'),
   // Trigger refresh pipeline dari dashboard. Tidak throw pada 409 (sudah jalan).
   // `sector` opsional — filter Screening ke satu sektor GICS (butuh sector_map,
   // lihat scripts/build_sector_map.py) supaya run jauh lebih cepat dari full-market.

@@ -125,6 +125,151 @@ export const MODULE_LABELS = {
   speculative: 'Speculative',
 }
 
+// --- Lapisan pribadi (personal layer) -- action/horizon per lens ---
+// action TIDAK sebanding lintas modul (sama alasan dengan stance, D-09-
+// style) -- kategorinya (warna) yang sebanding, bukan nilai literalnya.
+const ACTION_CATEGORY = {
+  // menambah eksposur (penuh atau bertahap)
+  mulai_posisi: 'masuk', cicil_bertahap: 'masuk', akumulasi: 'masuk', akumulasi_saat_koreksi: 'masuk',
+  masuk_spekulatif: 'masuk', tambah: 'masuk', tambah_bertahap: 'masuk',
+  // pantau/tahan -- tidak menambah, tidak keluar
+  pantau: 'netral', tahan: 'netral', tahan_sampai_katalis: 'netral', tunggu_katalis: 'netral',
+  // keluar/hindari
+  lewati: 'keluar', kurangi: 'keluar', jual: 'keluar',
+}
+
+export function personalActionClass(action) {
+  const cat = ACTION_CATEGORY[action] || 'netral'
+  if (cat === 'masuk') return 'ok'
+  if (cat === 'keluar') return 'bad'
+  return 'neutral'
+}
+
+// "cicil_bertahap" -> "Cicil Bertahap"
+export function prettyAction(action) {
+  return prettyStance(action)
+}
+
+// Label horizon kontekstual (draft §10) -- horizon TETAP satu field, cuma
+// labelnya berubah tergantung kategori action: tesis (masuk/tahan), cek
+// ulang (pantau/lewati/tunggu_katalis), atau keluar (kurangi/jual).
+const HORIZON_REVIEW_ACTIONS = new Set(['pantau', 'lewati', 'tunggu_katalis'])
+const HORIZON_EXIT_ACTIONS = new Set(['kurangi', 'jual'])
+
+export function horizonLabel(action) {
+  if (HORIZON_REVIEW_ACTIONS.has(action)) return 'Cek ulang dalam'
+  if (HORIZON_EXIT_ACTIONS.has(action)) return 'Sarankan keluar dalam'
+  return 'Estimasi tesis'
+}
+
+const HORIZON_RANGE = {
+  mingguan: '1-4 minggu',
+  bulanan: '1-6 bulan',
+  enam_bulan: '6-12 bulan',
+  satu_dua_tahun: '1-2 tahun',
+  lima_tahun: '3-5 tahun+',
+}
+
+export function prettyHorizon(horizon) {
+  return HORIZON_RANGE[horizon] || horizon || '—'
+}
+
+const HORIZON_STATUS_INFO = {
+  dalam_horizon: null, // tidak perlu badge kalau normal
+  horizon_terlewati: { label: 'horizon terlewati', tone: 'warn' },
+  tidak_berlaku: null,
+}
+
+export function horizonStatusInfo(status) {
+  return HORIZON_STATUS_INFO[status] || null
+}
+
+// Sama persis dengan HORIZON_UPPER_DAYS di alphaforge/personal/
+// personal_reasoning.py -- dipakai FE buat highlight "layak ditinjau ulang"
+// per snapshot histori (bukan cuma per ticker seperti /api/personal/
+// due-for-review), tanpa perlu round-trip API tambahan per entry.
+const HORIZON_UPPER_DAYS = {
+  mingguan: 28,
+  bulanan: 180,
+  enam_bulan: 365,
+  satu_dua_tahun: 730,
+  lima_tahun: 1825,
+}
+
+// Outcome evaluasi (§12 lanjutan, disetujui 2026-07-27) -- cuma action
+// berklaim arah yang dapat terbukti/meleset, sisanya "tidak_berlaku".
+const OUTCOME_TONE = {
+  terbukti: 'ok',
+  meleset: 'bad',
+  ambigu: 'warn',
+  tidak_berlaku: 'neutral',
+}
+
+export function outcomeClass(classification) {
+  return OUTCOME_TONE[classification] || 'neutral'
+}
+
+export function prettyOutcome(classification) {
+  if (!classification) return 'menunggu evaluasi'
+  return prettyStance(classification)
+}
+
+// Sama persis dengan HORIZON_OUTCOME_THRESHOLD_PCT + ACTION_CATEGORY_ENTRY di
+// alphaforge/personal/personal_evaluation.py -- makin panjang horizon, makin
+// besar target return-nya (horizon pendek tidak boleh "menang" cuma karena
+// noise harian). Dipakai FE buat nunjukin target harga/return SEBELUM call
+// itu jatuh tempo -- backend baru menghitung classification ini SETELAH due.
+const HORIZON_OUTCOME_THRESHOLD_PCT = {
+  mingguan: 3.0,
+  bulanan: 5.0,
+  enam_bulan: 10.0,
+  satu_dua_tahun: 15.0,
+  lima_tahun: 30.0,
+}
+
+const ACTION_CATEGORY_ENTRY = new Set([
+  'mulai_posisi', 'cicil_bertahap', 'akumulasi', 'akumulasi_saat_koreksi',
+  'masuk_spekulatif', 'tambah', 'tambah_bertahap',
+])
+
+// Target harga + return% supaya tesis ini dibilang "terbukti" -- cuma untuk
+// action ENTRY (klaim harga naik); action pasif/keluar tidak punya target
+// harga tunggal yang jujur (lihat _classify di personal_evaluation.py: exit
+// dinilai dari "gak naik", bukan dari mencapai satu angka). `startPrice`
+// harus harga SAAT since (bukan harga sekarang) -- sama basis dengan yang
+// dipakai backend buat menilai outcome nanti.
+export function horizonTargetPrice(startPrice, action, horizon) {
+  if (!ACTION_CATEGORY_ENTRY.has(action) || startPrice == null) return null
+  const thresholdPct = HORIZON_OUTCOME_THRESHOLD_PCT[horizon]
+  if (thresholdPct == null) return null
+  return { thresholdPct, targetPrice: startPrice * (1 + thresholdPct / 100) }
+}
+
+export function isEntryDueForReview(analyzedAt, callSet) {
+  if (!analyzedAt || !callSet) return false
+  const ageDays = Math.floor((Date.now() - new Date(analyzedAt).getTime()) / 86400000)
+  return ['multibagger', 'quality_compound', 'speculative'].some((m) => {
+    const horizon = callSet[m]?.horizon
+    const upper = HORIZON_UPPER_DAYS[horizon]
+    return upper != null && ageDays > upper
+  })
+}
+
+// Progres "hari ke-berapa dari horizon" untuk satu action -- dipakai buat
+// progress bar live di Aggregator Pribadi + expand row di Riwayat Pribadi
+// (dua tempat yang sama-sama butuh bar ini, lihat ThesisProof.jsx). `since`
+// = firstSeenAt() action ini pertama muncul, BUKAN analyzed_at entry
+// terakhir -- horizon dihitung sejak tesisnya mulai, bukan sejak snapshot
+// terbaru.
+export function horizonProgress(sinceIso, horizon) {
+  const upperDays = HORIZON_UPPER_DAYS[horizon]
+  if (!sinceIso || upperDays == null) return null
+  const ageDays = Math.floor((Date.now() - new Date(sinceIso).getTime()) / 86400000)
+  const pct = Math.min((ageDays / upperDays) * 100, 100)
+  const status = ageDays > upperDays ? 'over' : pct >= 80 ? 'near' : 'ok'
+  return { ageDays, upperDays, pct, status }
+}
+
 // Label human-readable untuk key/field yang tersimpan snake_case di data.
 // Mapping eksplisit untuk istilah yang butuh kapitalisasi/akronim khusus;
 // selain itu fallback generik (pisah '_', Title Case, rapikan akronim umum).

@@ -1,3 +1,5 @@
+import Icon from './Icon'
+
 const NAV_GROUPS = [
   { title: 'Market', items: [{ id: 'layer1', label: 'Layer 1 — Context' }] },
   {
@@ -22,7 +24,21 @@ const NAV_GROUPS = [
   { title: 'Tracking', items: [{ id: 'historical', label: 'Historical' }] },
 ]
 
-export default function Sidebar({ activeView, onSelect }) {
+// Grup terpisah, dirender cuma kalau personalEnabled (backend /api/
+// capabilities) -- rilis publik (folder alphaforge/personal/ dihapus)
+// membuat capabilities.personal_enabled otomatis false, grup ini hilang
+// total tanpa menyentuh NAV_GROUPS publik di atas sama sekali.
+const PERSONAL_NAV_GROUP = {
+  title: 'Pribadi',
+  items: [
+    { id: 'personal_aggregator', label: 'Agregator Pribadi' },
+    { id: 'personal_historical', label: 'Riwayat Pribadi' },
+  ],
+}
+
+export default function Sidebar({ activeView, onSelect, personalEnabled }) {
+  const groups = personalEnabled ? [...NAV_GROUPS, PERSONAL_NAV_GROUP] : NAV_GROUPS
+
   return (
     <div className="sidebar">
       <div className="brand">
@@ -32,9 +48,14 @@ export default function Sidebar({ activeView, onSelect }) {
         <div className="brand-sub">pipeline dashboard · data live</div>
       </div>
 
-      {NAV_GROUPS.map((group) => (
-        <div className="nav-group" key={group.title}>
-          <div className="nav-group-title">{group.title}</div>
+      {groups.map((group) => (
+        <div className={`nav-group${group === PERSONAL_NAV_GROUP ? ' nav-group-personal' : ''}`} key={group.title}>
+          <div className="nav-group-title">
+            {group === PERSONAL_NAV_GROUP && (
+              <span className="nav-lock"><Icon name="lock" size={11} /></span>
+            )}
+            {group.title}
+          </div>
           {group.items.map((item) => (
             <div
               key={item.id}

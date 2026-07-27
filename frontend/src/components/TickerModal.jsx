@@ -4,6 +4,8 @@ import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
   AVAILABILITY_INFO, QUALITY_INFO, METRIC_DEFINITIONS,
+  personalActionClass, prettyAction, horizonLabel, prettyHorizon, horizonStatusInfo, isEntryDueForReview,
+  outcomeClass, prettyOutcome,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -13,13 +15,22 @@ const MODULES = ['multibagger', 'quality_compound', 'speculative']
 // Kontext dari halaman asal klik menentukan section mana yang ditampilkan
 // (D-04 "jangan campur" — user eksplisit minta modal fokus per stage,
 // bukan dump semua sekaligus). Nama-nama di sini = key activeView di App.jsx.
-const STAGE_CONTEXTS = new Set(['reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical', 'peer'])
+// personal_aggregator/personal_historical BUKAN pengecualian dari aturan ini
+// (§9 draft personal layer): tetap fokus, cuma sumber datanya beda endpoint
+// (/api/personal/ticker/<t>, bukan /api/ticker/<t>) -- lihat useEffect terpisah
+// di bawah, sama pola dengan aiNarrative yang juga context-gated.
+const STAGE_CONTEXTS = new Set([
+  'reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical', 'peer',
+  'personal_aggregator', 'personal_historical',
+])
+const PERSONAL_CONTEXTS = new Set(['personal_aggregator', 'personal_historical'])
 
 export default function TickerModal({ ticker, context, onClose }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [live, setLive] = useState(null) // null = loading, {stale:true} = failed, else fresh quote
   const [aiNarrative, setAiNarrative] = useState(null) // null = loading/n.a., else {narrative, cached, available}
+  const [personalData, setPersonalData] = useState(null) // null = loading/n.a. (context bukan personal_*)
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +92,23 @@ export default function TickerModal({ ticker, context, onClose }) {
   }, [ticker, context])
 
   useEffect(() => {
+    // Endpoint TERPISAH dari api.ticker() di atas (§3 draft personal layer:
+    // lapisan pribadi tidak boleh ikut nebeng ke response publik). Cuma
+    // di-fetch kalau modal dibuka dari salah satu view pribadi.
+    if (!PERSONAL_CONTEXTS.has(context)) {
+      setPersonalData(null)
+      return
+    }
+    let cancelled = false
+    setPersonalData(null)
+    api
+      .personalTicker(ticker)
+      .then((d) => { if (!cancelled) setPersonalData(d) })
+      .catch((e) => { if (!cancelled) setPersonalData({ error: String(e) }) })
+    return () => { cancelled = true }
+  }, [ticker, context])
+
+  useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose()
     }
@@ -103,7 +131,7 @@ export default function TickerModal({ ticker, context, onClose }) {
         <div className="modal-body">
           {error && <div className="empty">Gagal memuat detail: {error}</div>}
           {!error && !data && <div className="loading">Memuat detail…</div>}
-          {data && <ModalBody data={data} context={context} aiNarrative={aiNarrative} />}
+          {data && <ModalBody data={data} context={context} aiNarrative={aiNarrative} personalData={personalData} />}
         </div>
       </div>
     </div>
@@ -838,6 +866,143 @@ function LensGrid({ reasoning }) {
   )
 }
 
+// Blok "Pribadi" di ticker modal — SATU-SATUNYA tempat frontend baca
+// /api/personal/ticker/<ticker> (§9 draft: tetap terpisah dari data publik
+// di atas, cuma render bersebelahan di modal yang sama). Kalau backend tidak
+// PERSONAL_ENABLED, view yang membuka modal dengan context ini tidak akan
+// pernah ada di nav (Sidebar.jsx) -- tapi komponen ini tetap defensif kalau
+// dipanggil manual/context lama.
+function PersonalCallCard({ module, call }) {
+  if (!call) {
+    return (
+      <div className="lens-card">
+        <div className="lens-card-mod">{MODULE_LABELS[module]}</div>
+        <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Belum ada data.</span>
+      </div>
+    )
+  }
+  const statusInfo = horizonStatusInfo(call.horizon_status)
+  return (
+    <div className="lens-card">
+      <div className="lens-card-mod">{MODULE_LABELS[module]}</div>
+      <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
+      {call.action_rationale && <p className="lens-card-rationale">{call.action_rationale}</p>}
+
+      <div style={{ marginTop: 8, fontSize: 11 }}>
+        <span style={{ color: 'var(--faint)' }}>{horizonLabel(call.action)}: </span>
+        <span style={{ color: 'var(--dim)' }}>{prettyHorizon(call.horizon)}</span>
+      </div>
+      {call.horizon_basis && (
+        <p style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: 4 }}>{call.horizon_basis}</p>
+      )}
+      {call.horizon_anchor && (
+        <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>Jangkar: {call.horizon_anchor}</div>
+      )}
+
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--rule)', fontSize: 10.5, color: 'var(--faint)' }}>
+        {call.position_status === 'holding' ? (
+          <>
+            Dipegang sejak {call.holding_since || '—'}
+            {call.unrealized_return_pct != null && (
+              <span style={{ color: call.unrealized_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+                {' '}· {call.unrealized_return_pct >= 0 ? '+' : ''}{call.unrealized_return_pct.toFixed(1)}%
+              </span>
+            )}
+            {statusInfo && <div style={{ color: 'var(--warn)', marginTop: 2 }}>{statusInfo.label}</div>}
+          </>
+        ) : (
+          'Belum dipegang'
+        )}
+      </div>
+      <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
+        Berdasarkan stance: {call.source_stance} (confidence {call.source_confidence?.toFixed(0) ?? '—'})
+      </div>
+    </div>
+  )
+}
+
+function PersonalDetailSection({ personalData, showHistory }) {
+  if (!personalData) return <div className="loading">Memuat data pribadi…</div>
+  if (personalData.error) return <div className="empty">Gagal memuat data pribadi: {personalData.error}</div>
+
+  const callSet = personalData.call_set
+  const history = personalData.history
+
+  return (
+    <>
+      <div className="msection" id="sec-personal">
+        <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Agregator Pribadi</span>
+          <span className="pill neutral">privat · tidak dipublikasikan</span>
+        </div>
+        {!callSet ? (
+          <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>
+            Belum ada rekomendasi pribadi untuk ticker ini — jalankan pipeline (Generate) dulu.
+          </p>
+        ) : (
+          <div className="lens-grid">
+            {MODULES.map((m) => <PersonalCallCard key={m} module={m} call={callSet[m]} />)}
+          </div>
+        )}
+      </div>
+
+      {showHistory && history && (history.entries || []).length > 0 && (
+        <div className="msection" id="sec-personal-history">
+          <div className="msection-title">
+            Riwayat Pribadi ({history.total_entries || history.entries.length} snapshot)
+          </div>
+          {history.entries.slice().reverse().map((e, i, arr) => {
+            const cs = e.personal_call_set || {}
+            const due = isEntryDueForReview(e.analyzed_at, cs)
+            return (
+              <div
+                className="lens-box"
+                key={i}
+                style={due ? { background: 'rgba(251,191,122,.08)', border: '1px solid rgba(251,191,122,.25)' } : undefined}
+              >
+                <div className="lens-head">
+                  <span>
+                    {e.analyzed_at?.slice(0, 10) || '—'}
+                    {i === 0 && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> · terbaru</span>}
+                    {i === arr.length - 1 && arr.length > 1 && (
+                      <span style={{ color: 'var(--faint)', fontWeight: 400 }}> · snapshot pertama</span>
+                    )}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5 }}>
+                    {due && !e.outcome && <span className="pill warn">layak ditinjau ulang</span>}
+                    {!e.outcome && <span style={{ color: 'var(--faint)' }}>outcome: menunggu evaluasi</span>}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                  {MODULES.map((m) => {
+                    if (!cs[m]) return null
+                    const oc = e.outcome?.[m]
+                    return (
+                      <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
+                        <span style={{ color: 'var(--faint)', minWidth: 110 }}>{MODULE_LABELS[m]}</span>
+                        <span className={`pill ${personalActionClass(cs[m].action)}`} style={{ fontSize: 10 }}>
+                          {prettyAction(cs[m].action)}
+                        </span>
+                        <span style={{ color: 'var(--faint)' }}>{prettyHorizon(cs[m].horizon)}</span>
+                        {oc && (
+                          <span className={`pill ${outcomeClass(oc.classification)}`} style={{ fontSize: 10 }}>
+                            {prettyOutcome(oc.classification)}
+                            {oc.return_pct != null && ` (${oc.return_pct >= 0 ? '+' : ''}${oc.return_pct.toFixed(1)}%)`}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
 function SynthesisSection({ synthesis }) {
   const agreements = synthesis?.agreements || []
   const divergences = synthesis?.divergences || []
@@ -999,11 +1164,13 @@ function DecisionFlow({ data }) {
   )
 }
 
-function ModalBody({ data, context, aiNarrative }) {
+function ModalBody({ data, context, aiNarrative, personalData }) {
   const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
   const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
 
-  if (!anySection) return <div className="empty">Tidak ada detail untuk ticker ini.</div>
+  if (!anySection && !PERSONAL_CONTEXTS.has(context)) {
+    return <div className="empty">Tidak ada detail untuk ticker ini.</div>
+  }
 
   const synthesis = aggregator?.synthesis
 
@@ -1018,12 +1185,20 @@ function ModalBody({ data, context, aiNarrative }) {
   const showKnowledge = context === 'knowledge'
   const showHistorical = context === 'historical'
   const showPeer = context === 'peer'
+  const showPersonal = PERSONAL_CONTEXTS.has(context)
   const showEvidence = !STAGE_CONTEXTS.has(context)
 
   return (
     <>
       {showEvidence && (
         <CompanyHeaderSection profile={evidence?.company_profile} fundamental={evidence?.fundamental} />
+      )}
+
+      {showPersonal && (
+        <PersonalDetailSection
+          personalData={personalData}
+          showHistory={context === 'personal_historical'}
+        />
       )}
 
       {showReasoning && (
