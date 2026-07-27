@@ -16,7 +16,13 @@ const MODULES = ['multibagger', 'quality_compound', 'speculative']
 function ExpandedTimeline({ ticker, entry }) {
   const callSet = entry?.personal_call_set || {}
   const outcome = entry?.outcome || null
-  const lenses = MODULES.map((m) => ({ module: m, call: callSet[m] })).filter((l) => l.call)
+  // Cuma lensa yang BENERAN jadi alasan ticker ini kesimpen di sini (action
+  // top-pick, no_holding) -- lensa lain punya action juga (pantau/cicil_
+  // bertahap/dll) tapi itu bukan kenapa ticker ini ada di Riwayat, jadi cuma
+  // bikin bising kalau ikut ditampilkan.
+  const lenses = MODULES
+    .map((m) => ({ module: m, call: callSet[m] }))
+    .filter((l) => l.call && l.call.position_status === 'no_holding' && l.call.action === BEST_ACTION[l.module])
 
   if (lenses.length === 0) {
     return <div style={{ padding: '12px 14px 14px 30px', fontSize: 11, color: 'var(--faint)' }}>Tidak ada data lens untuk snapshot ini.</div>
