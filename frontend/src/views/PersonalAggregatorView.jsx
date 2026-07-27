@@ -1,23 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
-import DataTable from '../components/DataTable'
 import ThesisProof from '../components/ThesisProof'
-import {
-  MODULE_LABELS, personalActionClass, prettyAction, horizonLabel, prettyHorizon, horizonStatusInfo,
-} from '../format'
+import { prettyAction, horizonLabel, prettyHorizon, BEST_ACTION } from '../format'
 
 const LENSES = ['multibagger', 'quality_compound', 'speculative']
-
-// "Top pick" pribadi = action entry TERKUAT per lens (bukan skor/ranking
-// baru -- cuma filter dari action yang sudah dihitung personal_reasoning.py,
-// sama semangatnya dengan BEST_STANCE di AggregatorView.jsx publik/D-04).
-// Cuma no_holding: begitu sudah dipegang, itu bukan "ide baru" lagi.
-const BEST_ACTION = {
-  multibagger: 'mulai_posisi',
-  quality_compound: 'akumulasi',
-  speculative: 'masuk_spekulatif',
-}
 
 const LENS_TITLES = {
   multibagger: 'Multibagger — Mulai Posisi',
@@ -170,25 +157,11 @@ function TopPicksSection({ callSets, onSelectTicker }) {
   )
 }
 
-// Satu kolom = satu lens: badge action (warna per kategori masuk/netral/
-// keluar, TIDAK sebanding lintas modul) + badge horizon dengan label
-// kontekstual (§10: tesis/cek ulang/keluar tergantung kategori action-nya).
-function LensCell({ call }) {
-  if (!call) return <span className="pill neutral">—</span>
-  const statusInfo = horizonStatusInfo(call.horizon_status)
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-      <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
-      <div style={{ fontSize: 10, color: 'var(--faint)' }}>
-        {horizonLabel(call.action)}: <span style={{ color: 'var(--dim)' }}>{prettyHorizon(call.horizon)}</span>
-      </div>
-      {statusInfo && (
-        <span className={`pill ${statusInfo.tone}`} style={{ fontSize: 9.5 }}>{statusInfo.label}</span>
-      )}
-    </div>
-  )
-}
-
+// Halaman ini SENGAJA cuma nampilin Top Pick (action entry terkuat per
+// lensa) -- bukan tabel semua ticker x 3 lensa (kepenuhan, mayoritas isinya
+// pantau/lewati yang bukan "ide baru"). Ticker yang lewat dari sini (jadi
+// holding, atau action-nya berubah) TETAP kesimpen -- itu tugas Riwayat
+// Pribadi, bukan dobel di sini.
 export default function PersonalAggregatorView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalCalls)
 
@@ -197,38 +170,5 @@ export default function PersonalAggregatorView({ onSelectTicker }) {
 
   const callSets = data.call_sets || []
 
-  const columns = [
-    { key: 'ticker', label: 'Ticker', render: (r) => <span className="ticker">{r.ticker}</span> },
-    ...LENSES.map((m) => ({
-      key: m,
-      label: MODULE_LABELS[m],
-      render: (r) => <LensCell call={r[m]} />,
-    })),
-    {
-      key: 'position',
-      label: 'Posisi',
-      render: (r) => {
-        const any = r.multibagger || r.quality_compound || r.speculative
-        if (!any || any.position_status !== 'holding') return <span style={{ color: 'var(--faint)' }}>—</span>
-        const pct = any.unrealized_return_pct
-        return (
-          <span style={{ fontSize: 11.5, color: pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>
-            {pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : 'holding'}
-          </span>
-        )
-      },
-    },
-  ]
-
-  return (
-    <>
-      <TopPicksSection callSets={callSets} onSelectTicker={onSelectTicker} />
-      <p className="narrative" style={{ margin: '0 0 12px', color: 'var(--dim)', fontSize: 13 }}>
-        Tiap lens kasih <code>action</code> + <code>horizon</code> sendiri, dibaca dari <code>stance</code> Reasoning
-        Umum — tidak dikompresi jadi satu verdict. Horizon = perkiraan kapan tesis lens ini terbukti/gugur (untuk
-        action pasif: kapan sebaiknya dievaluasi ulang), <strong>bukan</strong> janji waktu untung.
-      </p>
-      <DataTable columns={columns} rows={callSets} onRowClick={(r) => onSelectTicker(r.ticker)} />
-    </>
-  )
+  return <TopPicksSection callSets={callSets} onSelectTicker={onSelectTicker} />
 }

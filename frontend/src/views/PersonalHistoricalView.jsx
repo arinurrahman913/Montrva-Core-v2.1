@@ -3,7 +3,7 @@ import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
 import ThesisProof from '../components/ThesisProof'
-import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction } from '../format'
+import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, BEST_ACTION } from '../format'
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -67,6 +67,23 @@ function outcomeSummary(entry) {
   return counts
 }
 
+// Halaman ini cuma nampilin ticker yang PERNAH jadi Top Pick (action entry
+// terkuat, no_holding) di SALAH SATU snapshot-nya -- bukan semua ticker yang
+// pernah dianalisis (mayoritas isinya pantau/lewati, bukan "ide baru").
+// Begitu satu ticker pernah lolos jadi top pick, dia tetap kesimpen di sini
+// SELAMANYA walau kemudian keluar dari daftar top pick Agregator (holding,
+// atau action-nya melemah) -- itu justru intinya: record utuh sampai
+// jatuh tempo, apa pun hasilnya nanti (terbukti/meleset).
+function wasEverTopPick(timeline) {
+  return (timeline.entries || []).some((e) => {
+    const callSet = e.personal_call_set || {}
+    return MODULES.some((m) => {
+      const call = callSet[m]
+      return call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]
+    })
+  })
+}
+
 export default function PersonalHistoricalView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalHistory)
   const { data: dueData } = useStageData(api.personalDueForReview)
@@ -74,9 +91,13 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   if (error) return <div className="empty">Gagal memuat data/personal/personal_history.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
 
-  const timelines = Object.values(data)
+  const timelines = Object.values(data).filter(wasEverTopPick)
   const totalEntries = timelines.reduce((s, t) => s + (t.total_entries || 0), 0)
-  const dueSet = new Set(dueData?.due_for_review || [])
+  // /api/personal/due-for-review menghitung lintas SEMUA ticker (bukan cuma
+  // yang pernah top pick) -- irisan ke timelines yang sudah difilter di atas
+  // supaya angka "Layak Ditinjau Ulang" konsisten dengan baris yang tampil.
+  const trackedTickers = new Set(timelines.map((t) => t.ticker))
+  const dueSet = new Set((dueData?.due_for_review || []).filter((t) => trackedTickers.has(t)))
 
   const lastEntry = (t) => (t.entries && t.entries.length ? t.entries[t.entries.length - 1] : null)
 
@@ -99,7 +120,7 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   const accuracyPct = evaluatedTotal > 0 ? (terbukti / evaluatedTotal) * 100 : null
 
   const stats = [
-    { label: 'Tickers Tracked', value: timelines.length },
+    { label: 'Pernah Jadi Top Pick', value: timelines.length },
     { label: 'Total Snapshots', value: totalEntries },
     { label: 'Layak Ditinjau Ulang', value: dueSet.size, tone: dueSet.size ? 'warn' : undefined },
     {
@@ -161,10 +182,12 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
     <>
       <StatCards stats={stats} />
       <p className="narrative" style={{ margin: '0 0 12px', color: 'var(--dim)', fontSize: 13 }}>
+        Cuma ticker yang PERNAH jadi Top Pick (lihat Agregator Pribadi) yang tercatat di sini — begitu lolos jadi top
+        pick sekali, dia tetap kesimpen walau kemudian keluar dari daftar top pick (holding, atau action-nya melemah).
         Outcome dievaluasi otomatis begitu call jatuh tempo (umur snapshot &gt; batas atas horizon-nya), dibandingkan
-        pergerakan harga sejak action itu pertama muncul terhadap threshold per horizon. Cuma action berklaim arah
-        (masuk/keluar) yang dievaluasi — <code>pantau</code>/<code>tahan</code>/<code>tunggu_katalis</code> selalu
-        "tidak berlaku". Klik baris untuk lihat rincian live snapshot terakhir, klik nama ticker untuk buka detail lengkap.
+        pergerakan harga sejak action itu pertama muncul terhadap threshold per horizon — hasilnya (terbukti/meleset)
+        jadi referensi track-record ke depan. Klik baris untuk lihat rincian live snapshot terakhir, klik nama ticker
+        untuk buka detail lengkap.
       </p>
       <DataTable
         columns={columns}

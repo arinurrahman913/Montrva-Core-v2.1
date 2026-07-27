@@ -138,6 +138,18 @@ const ACTION_CATEGORY = {
   lewati: 'keluar', kurangi: 'keluar', jual: 'keluar',
 }
 
+// "Top pick" pribadi = action entry TERKUAT per lens (bukan skor/ranking
+// baru -- cuma filter dari action yang sudah dihitung personal_reasoning.py,
+// sama semangatnya dengan BEST_STANCE di AggregatorView.jsx publik/D-04).
+// Cuma no_holding: begitu sudah dipegang, itu bukan "ide baru" lagi. Dipakai
+// bareng oleh PersonalAggregatorView (nampilin top pick sekarang) dan
+// PersonalHistoricalView (filter ke ticker yang PERNAH jadi top pick).
+export const BEST_ACTION = {
+  multibagger: 'mulai_posisi',
+  quality_compound: 'akumulasi',
+  speculative: 'masuk_spekulatif',
+}
+
 export function personalActionClass(action) {
   const cat = ACTION_CATEGORY[action] || 'netral'
   if (cat === 'masuk') return 'ok'
