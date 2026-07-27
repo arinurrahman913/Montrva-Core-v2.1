@@ -67,20 +67,49 @@ function outcomeSummary(entry) {
   return counts
 }
 
-// Halaman ini cuma nampilin ticker yang PERNAH jadi Top Pick (action entry
-// terkuat, no_holding) di SALAH SATU snapshot-nya -- bukan semua ticker yang
-// pernah dianalisis (mayoritas isinya pantau/lewati, bukan "ide baru").
-// Begitu satu ticker pernah lolos jadi top pick, dia tetap kesimpen di sini
-// SELAMANYA walau kemudian keluar dari daftar top pick Agregator (holding,
-// atau action-nya melemah) -- itu justru intinya: record utuh sampai
-// jatuh tempo, apa pun hasilnya nanti (terbukti/meleset).
-function wasEverTopPick(timeline) {
-  return (timeline.entries || []).some((e) => {
-    const callSet = e.personal_call_set || {}
-    return MODULES.some((m) => {
-      const call = callSet[m]
-      return call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]
-    })
+// Top pick "beneran" = TEPAT sama dengan yang dihitung PersonalAggregatorView
+// (topPicks(): urutan confidence, top 3 per lensa) -- BUKAN sekadar "action-nya
+// cocok kategori" (itu terlalu longgar, bisa puluhan ticker per lensa lolos
+// kategori tapi cuma 3 yang beneran tampil sebagai card). Karena
+// personal_history.json disimpan PER TICKER (bukan per hari lintas semua
+// ticker), top-3 per hari harus dihitung ULANG di sini dengan menggabungkan
+// SEMUA timeline dulu, dikelompokkan per (tanggal, lensa) -- br baru bisa tahu
+// siapa saja yang benar-benar masuk 3 besar pada tanggal itu.
+const TOP_N = 3
+
+function buildTopThreeIndex(allTimelines) {
+  const byDayModule = new Map() // "YYYY-MM-DD|module" -> [{ticker, confidence}]
+  for (const timeline of allTimelines) {
+    for (const entry of timeline.entries || []) {
+      const day = (entry.analyzed_at || '').slice(0, 10)
+      if (!day) continue
+      const callSet = entry.personal_call_set || {}
+      for (const m of MODULES) {
+        const call = callSet[m]
+        if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) {
+          const key = `${day}|${m}`
+          if (!byDayModule.has(key)) byDayModule.set(key, [])
+          byDayModule.get(key).push({ ticker: timeline.ticker, confidence: call.source_confidence ?? 0 })
+        }
+      }
+    }
+  }
+  const topSetByDayModule = new Map()
+  for (const [key, list] of byDayModule) {
+    list.sort((a, b) => b.confidence - a.confidence)
+    topSetByDayModule.set(key, new Set(list.slice(0, TOP_N).map((x) => x.ticker)))
+  }
+  return topSetByDayModule
+}
+
+// Begitu satu ticker PERNAH beneran masuk 3 besar (hari mana pun, lensa mana
+// pun), dia tetap kesimpen di sini SELAMANYA walau sekarang sudah keluar dari
+// daftar top pick Agregator (holding, atau kesalip confidence ticker lain) --
+// itu justru intinya: record utuh sampai jatuh tempo, apa pun hasilnya nanti.
+function wasEverTopThree(timeline, topSetByDayModule) {
+  return (timeline.entries || []).some((entry) => {
+    const day = (entry.analyzed_at || '').slice(0, 10)
+    return MODULES.some((m) => topSetByDayModule.get(`${day}|${m}`)?.has(timeline.ticker))
   })
 }
 
@@ -91,7 +120,9 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   if (error) return <div className="empty">Gagal memuat data/personal/personal_history.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
 
-  const timelines = Object.values(data).filter(wasEverTopPick)
+  const allTimelines = Object.values(data)
+  const topThreeIndex = buildTopThreeIndex(allTimelines)
+  const timelines = allTimelines.filter((t) => wasEverTopThree(t, topThreeIndex))
   const totalEntries = timelines.reduce((s, t) => s + (t.total_entries || 0), 0)
   // /api/personal/due-for-review menghitung lintas SEMUA ticker (bukan cuma
   // yang pernah top pick) -- irisan ke timelines yang sudah difilter di atas
