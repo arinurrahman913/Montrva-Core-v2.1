@@ -90,6 +90,16 @@ class ModuleOutput:
     score_breakdown: dict[str, float] = field(default_factory=dict)
     fields_accessed: list[str] = field(default_factory=list)
 
+    # Skor mentah lens ini (0-100, netral di 50) — angka yang sama yang sudah
+    # dipakai internal reasoning.py untuk memilih stance, dan yang selama ini
+    # cuma ditulis sebagai teks di stance_rationale ("Speculative score 63")
+    # lalu dibuang. Dikeluarkan sebagai field supaya konsumen bisa MEMBANDINGKAN
+    # kekuatan tesis antar-ticker DALAM satu lens tanpa mem-parsing string.
+    # Tetap TIDAK sebanding lintas modul (tiap lens punya faktor & bobotnya
+    # sendiri) — sama batasannya dengan stance, jadi ini bukan verdict tunggal
+    # yang dilarang D-04.
+    thesis_score: float = 50.0
+
     def to_dict(self) -> dict:
         from dataclasses import asdict
         return asdict(self)

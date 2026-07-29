@@ -145,13 +145,35 @@ def _compute_horizon_status(position_status: str, holding_since: str | None, hor
     return "horizon_terlewati" if age_days > HORIZON_UPPER_DAYS[horizon] else "dalam_horizon"
 
 
+def _not_past(expected_at: str | None, today: date) -> bool:
+    """False kalau tanggalnya sudah lewat. Tanggal tak terbaca dianggap masih
+    berlaku (konservatif: lebih baik horizon terlalu panjang daripada sebuah
+    katalis nyata terbuang cuma karena formatnya aneh)."""
+    if not expected_at:
+        return False
+    try:
+        return date.fromisoformat(expected_at) >= today
+    except ValueError:
+        return True
+
+
 def _speculative_horizon(
     catalyst: "CatalystSet | None", today: date,
 ) -> tuple[str, str, str | None]:
     """Return (horizon, horizon_basis, horizon_anchor). Satu-satunya lens
     dengan jangkar tanggal nyata (CatalystSet.catalysts[].expected_at)."""
     if catalyst is not None and catalyst.has_upcoming:
-        upcoming = [c for c in catalyst.catalysts if c.certainty in ("scheduled", "expected")]
+        # Buang katalis yang tanggalnya sudah LEWAT — tanpa ini `min()` bisa
+        # memilih katalis basi (mis. kalau pipeline telat jalan berhari-hari),
+        # lalu `max(days, 0)` di bawah menyamarkannya jadi "sekitar 0 hari lagi"
+        # dan horizon dilabeli "mingguan" seolah-olah masih akan datang.
+        upcoming = [
+            c for c in catalyst.catalysts
+            if c.certainty in ("scheduled", "expected") and _not_past(c.expected_at, today)
+        ]
+    else:
+        upcoming = []
+    if upcoming:
         nearest = min(upcoming, key=lambda c: c.expected_at)
         try:
             days = (date.fromisoformat(nearest.expected_at) - today).days
@@ -217,6 +239,33 @@ def _quality_horizon(key_metrics: dict) -> tuple[str, str]:
     )
 
 
+def summarize_risk(risk) -> tuple[int, int, list[str]]:
+    """(jumlah high, jumlah medium, daftar tipe unik) dari RiskAssessment.
+    Cuma MERINGKAS apa yang sudah dihitung risk.py -- tidak menilai ulang dan
+    tidak pernah mengubah `action` (action tetap murni dari stance+band, lihat
+    ACTION_TABLE). Dipakai untuk peringkat & badge di kartu top pick, supaya
+    'cek Risk Flags dulu' tidak lagi jadi beban manual pengguna."""
+    if risk is None:
+        return 0, 0, []
+    red_flags = getattr(risk, "red_flags", None) or []
+    high = sum(1 for f in red_flags if getattr(f, "severity", None) == "high")
+    medium = sum(1 for f in red_flags if getattr(f, "severity", None) == "medium")
+    types: list[str] = []
+    for f in red_flags:
+        t = getattr(f, "flag_type", None)
+        if t and t not in types:
+            types.append(t)
+    # Flag spesifikasi (severity tinggi/ekstrem) yang benar-benar triggered
+    # ikut dihitung sebagai high -- beda daftar, sama artinya buat pengguna.
+    for f in getattr(risk, "flags", None) or []:
+        if getattr(f, "status", None) == "triggered":
+            high += 1
+            fid = getattr(f, "flag_id", None)
+            if fid and fid not in types:
+                types.append(fid)
+    return high, medium, types
+
+
 def build_personal_call(
     module_output: "ModuleOutput",
     position_status: str,
@@ -224,6 +273,9 @@ def build_personal_call(
     unrealized_return_pct: float | None,
     catalyst: "CatalystSet | None" = None,
     today: date | None = None,
+    current_price: float | None = None,
+    benchmark_price: float | None = None,
+    risk=None,
 ) -> PersonalCall:
     """Bangun satu PersonalCall dari satu ModuleOutput (satu lens). Tidak
     membaca Knowledge/Evidence langsung -- semua yang dibutuhkan sudah ada
@@ -245,6 +297,7 @@ def build_personal_call(
         horizon_anchor = None
 
     horizon_status = _compute_horizon_status(position_status, holding_since, horizon, today)
+    risk_high, risk_medium, risk_types = summarize_risk(risk)
 
     call = PersonalCall(
         module=module,
@@ -258,6 +311,12 @@ def build_personal_call(
         horizon_anchor=horizon_anchor,
         source_stance=module_output.stance,
         source_confidence=module_output.confidence.score,
+        thesis_score=getattr(module_output, "thesis_score", 50.0),
+        price_at_call=current_price,
+        benchmark_at_call=benchmark_price,
+        risk_flags_high=risk_high,
+        risk_flags_medium=risk_medium,
+        risk_flag_types=risk_types,
         position_status=position_status,
         holding_since=holding_since,
         unrealized_return_pct=unrealized_return_pct,

@@ -26,18 +26,24 @@ def build_personal_call_set(
     catalyst: "CatalystSet | None" = None,
     evidence: "EvidencePackage | None" = None,
     today: date | None = None,
+    risk=None,
+    benchmark_price: float | None = None,
 ) -> PersonalCallSet:
     """3 PersonalCall untuk satu ticker. position_status/holding_since/
     unrealized_return_pct dihitung SEKALI (properti portofolio, bukan per
     lens) lalu dipakai ketiga lens; horizon_status tetap dihitung per lens
-    karena bucket horizon-nya beda-beda per modul."""
+    karena bucket horizon-nya beda-beda per modul.
+
+    `risk` & `benchmark_price` juga properti per-ticker/per-run (bukan per
+    lens), jadi diteruskan apa adanya ke ketiganya."""
     current_price = current_price_from_evidence(evidence)
     position_status, holding_since, unrealized = compute_position(bundle.ticker, holdings, current_price)
+    common = dict(today=today, current_price=current_price, benchmark_price=benchmark_price, risk=risk)
 
-    multibagger = build_personal_call(bundle.multibagger, position_status, holding_since, unrealized, today=today)
-    quality = build_personal_call(bundle.quality_compound, position_status, holding_since, unrealized, today=today)
+    multibagger = build_personal_call(bundle.multibagger, position_status, holding_since, unrealized, **common)
+    quality = build_personal_call(bundle.quality_compound, position_status, holding_since, unrealized, **common)
     speculative = build_personal_call(
-        bundle.speculative, position_status, holding_since, unrealized, catalyst=catalyst, today=today,
+        bundle.speculative, position_status, holding_since, unrealized, catalyst=catalyst, **common,
     )
 
     return PersonalCallSet(
@@ -60,14 +66,21 @@ def build_personal_call_sets(
     holdings: dict[str, dict],
     catalyst_map: dict[str, "CatalystSet"],
     evidence_map: dict[str, "EvidencePackage"],
+    risk_map: dict | None = None,
+    benchmark_price: float | None = None,
 ) -> list[PersonalCallSet]:
     """Batch version dipakai refresh_full_pipeline.py -- satu holdings dict
-    di-load sekali, dipakai untuk semua ticker dalam satu run."""
+    di-load sekali, dipakai untuk semua ticker dalam satu run. `benchmark_price`
+    (harga S&P 500 saat run ini) sama untuk semua ticker: itu justru gunanya,
+    supaya tiap call punya titik banding indeks yang identik."""
+    risk_map = risk_map or {}
     return [
         build_personal_call_set(
             bundle, holdings,
             catalyst=catalyst_map.get(bundle.ticker),
             evidence=evidence_map.get(bundle.ticker),
+            risk=risk_map.get(bundle.ticker),
+            benchmark_price=benchmark_price,
         )
         for bundle in bundles
     ]

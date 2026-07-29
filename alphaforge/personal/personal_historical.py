@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -95,24 +95,56 @@ def save_personal_history(timelines: dict[str, dict], output_file: str | Path) -
         f.write(dumps_safe(timelines, indent=2, ensure_ascii=False))
 
 
-def due_for_review(entry: dict, today: date | None = None) -> bool:
-    """True kalau SALAH SATU dari 3 lens di entry ini sudah lebih tua dari
-    batas atas bucket horizon-nya sendiri. Murni umur snapshot vs horizon --
-    tidak melihat apakah tesisnya benar/salah (itu belum bisa dijawab sistem,
-    lihat docstring modul)."""
-    today = today or datetime.now().date()
-    try:
-        analyzed = datetime.fromisoformat(entry["analyzed_at"]).date()
-    except (KeyError, ValueError):
-        return False
-    age_days = (today - analyzed).days
+# Berapa lama setelah tanggal katalis sebuah tesis Speculative dinilai.
+# Tanpa ini, call yang eksplisit berjangkar ke "earnings 4 Agustus" baru
+# dievaluasi di hari ke-28 (24 Agustus) — 20 hari setelah peristiwa yang
+# jadi dasar tesisnya lewat, jadi yang terukur sudah bercampur hal lain.
+# Buffer kecil, bukan nol: reaksi harga terhadap earnings butuh beberapa
+# hari perdagangan untuk mengendap.
+ANCHOR_BUFFER_DAYS = 5
 
+
+def call_due_date(call: dict, analyzed_at: str | None) -> date | None:
+    """Kapan SATU call (satu lens) layak dinilai.
+
+    Kalau call punya `horizon_anchor` (cuma Speculative yang punya — tanggal
+    katalis nyata), jatuh temponya dipatok ke tanggal itu + buffer. Kalau
+    tidak, jatuh dari umur snapshot + batas atas bucket horizon-nya.
+    """
+    anchor = call.get("horizon_anchor")
+    if anchor:
+        try:
+            return date.fromisoformat(anchor) + timedelta(days=ANCHOR_BUFFER_DAYS)
+        except ValueError:
+            pass  # format aneh — jatuh balik ke perhitungan berbasis umur
+    upper = HORIZON_UPPER_DAYS.get(call.get("horizon"))
+    if upper is None or not analyzed_at:
+        return None
+    try:
+        analyzed = datetime.fromisoformat(analyzed_at).date()
+    except ValueError:
+        return None
+    return analyzed + timedelta(days=upper)
+
+
+def due_for_review(entry: dict, today: date | None = None) -> bool:
+    """True kalau SALAH SATU dari 3 lens di entry ini sudah lewat jatuh
+    temponya sendiri (lihat call_due_date). Murni soal waktu -- tidak melihat
+    apakah tesisnya benar/salah.
+
+    Catatan: ini dipakai untuk penanda "layak ditinjau ulang" di UI, jadi
+    "salah satu" memang yang diinginkan. EVALUASI outcome TIDAK boleh memakai
+    fungsi ini sebagai gerbang untuk ketiga lens sekaligus -- lihat
+    personal_evaluation.evaluate_due_entries, yang menilai per lens.
+    """
+    today = today or datetime.now().date()
+    analyzed_at = entry.get("analyzed_at")
     call_set = entry.get("personal_call_set", {})
     for module in ("multibagger", "quality_compound", "speculative"):
         call = call_set.get(module)
         if not call:
             continue
-        upper = HORIZON_UPPER_DAYS.get(call.get("horizon"))
-        if upper is not None and age_days > upper:
+        due = call_due_date(call, analyzed_at)
+        if due is not None and today > due:
             return True
     return False

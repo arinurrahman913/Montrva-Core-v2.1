@@ -359,6 +359,7 @@ def run_quality_lens(
         negative_factors=negative,
         key_metrics=metrics,
         score_breakdown={"fundamentals": (score - 50) / 50},
+        thesis_score=float(score),
         fields_accessed=["identity", "financial_health", "historical_trend", "valuation", "governance"],
     )
 
@@ -481,6 +482,7 @@ def run_speculative_lens(
         negative_factors=negative,
         key_metrics=metrics,
         score_breakdown={"momentum": (score - 50) / 50},
+        thesis_score=float(score),
         fields_accessed=["identity", "historical_trend", "ownership"],
     )
 
@@ -645,6 +647,7 @@ def run_multibagger_lens(
         negative_factors=negative,
         key_metrics=metrics,
         score_breakdown={"growth": (score - 50) / 50},
+        thesis_score=float(score),
         fields_accessed=["identity", "competitive_structure", "competitive_momentum", "historical_trend", "valuation"],
     )
 

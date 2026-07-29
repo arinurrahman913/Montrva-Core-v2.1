@@ -12,11 +12,18 @@ const LENS_TITLES = {
   speculative: 'Speculative — Masuk Spekulatif',
 }
 
+// Diranking pakai thesis_score (kekuatan argumen lens ini, 0-100 netral 50),
+// BUKAN source_confidence (itu ternyata skor KUALITAS DATA -- turunan
+// ConfidenceReport.overall.score dikurangi field yang hilang, bukan
+// kekuatan tesis -- lihat reasoning.py:_module_confidence). Audit 2026-07-27
+// menemukan 11 ticker seri persis di confidence yang sama padahal skor
+// tesisnya beda jauh (0.26-0.76), dan 3 yang tampil sebagai card dipilih
+// murni oleh urutan JS sort yang stabil, bukan argumen yang lebih kuat.
 function topPicks(callSets, module, n = 3) {
   return callSets
     .map((cs) => ({ ticker: cs.ticker, call: cs[module] }))
     .filter(({ call }) => call && call.position_status === 'no_holding' && call.action === BEST_ACTION[module])
-    .sort((a, b) => (b.call.source_confidence ?? 0) - (a.call.source_confidence ?? 0))
+    .sort((a, b) => (b.call.thesis_score ?? 50) - (a.call.thesis_score ?? 50))
     .slice(0, n)
 }
 
@@ -89,8 +96,33 @@ function useTickerMeta(ticker) {
   return meta
 }
 
+// Badge risiko -- lapisan pribadi sebelumnya tidak pernah membaca Risk sama
+// sekali, cuma menitipkan pesan generik "cek Risk Flags sendiri" di teks.
+// Sekarang ringkasannya (dihitung sekali di personal_reasoning.py, TIDAK
+// menilai ulang) tampil langsung di kartu -- red kalau ada flag high-severity,
+// amber kalau cuma medium, gak ada badge kalau bersih.
+function RiskBadge({ call }) {
+  const high = call.risk_flags_high || 0
+  const medium = call.risk_flags_medium || 0
+  if (high === 0 && medium === 0) return null
+  const tone = high > 0 ? 'var(--bad)' : 'var(--warn)'
+  const bg = high > 0 ? 'rgba(251,113,133,.12)' : 'rgba(251,191,122,.12)'
+  const label = high > 0 ? `${high} risk flag tinggi` : `${medium} risk flag sedang`
+  const types = (call.risk_flag_types || []).slice(0, 3).join(', ')
+  return (
+    <div
+      title={call.risk_flag_types?.join(', ')}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tone, background: bg, padding: '2px 7px', borderRadius: 5, marginBottom: 6 }}
+    >
+      ⚠ {label}{types && <span style={{ fontWeight: 400, opacity: .85 }}> — {types}</span>}
+    </div>
+  )
+}
+
 function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
   const meta = useTickerMeta(ticker)
+  const thesisScore = call.thesis_score ?? 50
+  const scoreColor = thesisScore >= 65 ? 'var(--good)' : thesisScore >= 50 ? 'var(--gold)' : 'var(--faint)'
   return (
     <div
       onClick={() => onSelectTicker(ticker)}
@@ -108,11 +140,17 @@ function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
             {meta?.price != null ? `$${meta.price.toFixed(2)}` : '—'}
           </span>
         </span>
-        <span style={{ fontSize: 10.5, color: 'var(--good)' }}>conf {call.source_confidence?.toFixed(0) ?? '—'}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: scoreColor }} title="Skor kekuatan tesis lensa ini (0-100, netral 50) — dasar ranking top pick">
+          skor {thesisScore.toFixed(0)}
+        </span>
+      </div>
+      <div style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 4 }} title="Kelengkapan & kesegaran data — BUKAN kekuatan tesis">
+        data {call.source_confidence?.toFixed(0) ?? '—'}%
       </div>
       {meta?.sector && (
         <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 4 }}>{meta.sector}</div>
       )}
+      <RiskBadge call={call} />
       <div style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 4 }}>
         {horizonLabel(call.action)}: <span style={{ color: 'var(--dim)' }}>{prettyHorizon(call.horizon)}</span>
       </div>
@@ -124,9 +162,53 @@ function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
   )
 }
 
+// Audit 2026-07-27: 8 dari 11 kandidat teratas hari itu ternyata Technology
+// (hari lain semuanya Utilities) -- ranking yang mengikuti kelengkapan/skor
+// data cenderung mengelompok ke sektor yang pelaporannya seragam, dan
+// sebelumnya tidak ada peringatan sama sekali. Fetch TERPISAH dari PickCard
+// (yang fokus ke harga+sektor SATU ticker) -- ini menghitung sektor across
+// SEMUA ticker yang tampil sebagai top pick hari ini, sekali per render.
+function useSectorConcentration(tickers) {
+  const [bySector, setBySector] = useState(null)
+  const key = tickers.join(',')
+  useEffect(() => {
+    let cancelled = false
+    if (tickers.length === 0) { setBySector({}); return }
+    Promise.all(tickers.map((t) => api.ticker(t).catch(() => null)))
+      .then((results) => {
+        if (cancelled) return
+        const counts = {}
+        results.forEach((r, i) => {
+          const sector = r?.evidence?.fundamental?.sector
+          if (!sector) return
+          if (!counts[sector]) counts[sector] = []
+          counts[sector].push(tickers[i])
+        })
+        setBySector(counts)
+      })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return bySector
+}
+
+function SectorConcentrationNote({ tickers }) {
+  const bySector = useSectorConcentration(tickers)
+  if (!bySector) return null
+  const concentrated = Object.entries(bySector).filter(([, ts]) => ts.length >= 2)
+  if (concentrated.length === 0) return null
+  return (
+    <div style={{ fontSize: 11, color: 'var(--warn)', background: 'rgba(251,191,122,.1)', padding: '7px 10px', borderRadius: 7, marginBottom: 12 }}>
+      ⚠ Konsentrasi sektor: {concentrated.map(([sector, ts]) => `${sector} (${ts.join(', ')})`).join(' · ')} — top pick hari ini
+      tidak terdiversifikasi, semua taruhannya bergerak bareng kalau sektor itu goyang.
+    </div>
+  )
+}
+
 function TopPicksSection({ callSets, onSelectTicker }) {
   const picksByLens = LENSES.map((m) => ({ module: m, picks: topPicks(callSets, m) }))
   if (picksByLens.every((p) => p.picks.length === 0)) return null
+  const allTickers = [...new Set(picksByLens.flatMap((p) => p.picks.map((x) => x.ticker)))]
 
   return (
     <div style={{ marginBottom: 22 }}>
@@ -134,9 +216,12 @@ function TopPicksSection({ callSets, onSelectTicker }) {
         Top Pick Pribadi — Action Terkuat per Lensa
       </div>
       <p style={{ fontSize: 11, color: 'var(--faint)', margin: '2px 0 14px', lineHeight: 1.5 }}>
-        Filter dari <code>action</code> + confidence yang sudah dihitung tiap lensa, cuma yang belum dipegang — bukan
-        ranking gabungan (D-04 tetap berlaku di lapisan pribadi). Tetap cek Risk Flags &amp; horizon_basis sebelum bertindak.
+        Filter dari <code>action</code> yang sudah dihitung tiap lensa (cuma yang belum dipegang), diranking pakai{' '}
+        <code>skor</code> (kekuatan tesis lensa ini) — bukan ranking gabungan lintas lensa (D-04 tetap berlaku).{' '}
+        <code>data%</code> di kartu itu kelengkapan data, bukan kekuatan tesis — dua ukuran yang beda. Risk flag
+        (kalau ada) sudah tampil di kartu, tapi tetap baca <code>horizon_basis</code> sebelum bertindak.
       </p>
+      <SectorConcentrationNote tickers={allTickers} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
         {picksByLens.map(({ module, picks }) => (
           <div key={module}>

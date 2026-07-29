@@ -100,6 +100,29 @@ class PersonalCall:
     source_stance: str = ""  # ModuleOutput.stance — jejak audit balik ke Reasoning Umum
     source_confidence: float = 0.0  # ModuleOutput.confidence.score saat itu
 
+    # KEKUATAN TESIS (ModuleOutput.thesis_score, 0-100 netral di 50) — BEDA dari
+    # source_confidence di atas, yang sebetulnya turunan kualitas DATA
+    # (reasoning.py:_module_confidence memulai dari ConfidenceReport.overall.score
+    # lalu cuma dikurangi per field yang hilang). Dua-duanya disimpan karena
+    # menjawab pertanyaan berbeda: "seberapa kuat tesisnya" vs "seberapa lengkap
+    # datanya". Peringkat top pick memakai yang PERTAMA.
+    thesis_score: float = 50.0
+
+    # Harga saat call ini dibuat — disimpan supaya evaluasi outcome nanti tidak
+    # perlu merekonstruksi harga entry dari price_history (yang cuma menyimpan 1
+    # tahun; call ber-horizon lima_tahun akan salah baseline tanpa field ini).
+    # benchmark_at_call = harga S&P 500 pada saat yang sama, supaya hasilnya bisa
+    # dibandingkan dengan "kalau uangnya ditaruh di indeks saja".
+    price_at_call: float | None = None
+    benchmark_at_call: float | None = None
+
+    # Ringkasan risiko SAAT call dibuat (dari RiskAssessment) — lapisan pribadi
+    # sebelumnya tidak pernah membaca Risk sama sekali dan hanya menitipkan
+    # pesan "cek Risk Flags sendiri" di UI.
+    risk_flags_high: int = 0
+    risk_flags_medium: int = 0
+    risk_flag_types: list[str] = field(default_factory=list)
+
     position_status: PositionStatus = "no_holding"
     holding_since: str | None = None
     unrealized_return_pct: float | None = None

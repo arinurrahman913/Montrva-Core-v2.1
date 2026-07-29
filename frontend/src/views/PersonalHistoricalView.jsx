@@ -46,6 +46,19 @@ function ExpandedTimeline({ ticker, entry }) {
                       {moduleOutcome.return_pct >= 0 ? '+' : ''}{moduleOutcome.return_pct}%
                     </span>
                   )}
+                  {moduleOutcome.excess_return_pct != null && (
+                    <div
+                      style={{ marginTop: 4, fontSize: 10, color: moduleOutcome.excess_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}
+                      title="Return dikurangi return S&P 500 pada jendela waktu yang sama -- naik 3% saat indeks naik 8% itu tertinggal, bukan berhasil"
+                    >
+                      {moduleOutcome.excess_return_pct >= 0 ? '+' : ''}{moduleOutcome.excess_return_pct}% vs S&amp;P 500
+                    </div>
+                  )}
+                  {moduleOutcome.baseline === 'price_history' && (
+                    <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="price_at_call tidak tersimpan untuk entry ini (dibuat sebelum field ini ada) -- direkonstruksi dari price_history, yang cuma menyimpan ~1 tahun">
+                      ⓘ harga entry direkonstruksi (bukan harga asli saat call)
+                    </div>
+                  )}
                 </div>
               ) : (
                 <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} />
@@ -74,17 +87,20 @@ function outcomeSummary(entry) {
 }
 
 // Top pick "beneran" = TEPAT sama dengan yang dihitung PersonalAggregatorView
-// (topPicks(): urutan confidence, top 3 per lensa) -- BUKAN sekadar "action-nya
-// cocok kategori" (itu terlalu longgar, bisa puluhan ticker per lensa lolos
-// kategori tapi cuma 3 yang beneran tampil sebagai card). Karena
-// personal_history.json disimpan PER TICKER (bukan per hari lintas semua
-// ticker), top-3 per hari harus dihitung ULANG di sini dengan menggabungkan
-// SEMUA timeline dulu, dikelompokkan per (tanggal, lensa) -- br baru bisa tahu
-// siapa saja yang benar-benar masuk 3 besar pada tanggal itu.
+// (topPicks(): urutan thesis_score, top 3 per lensa) -- BUKAN sekadar
+// "action-nya cocok kategori" (itu terlalu longgar, bisa puluhan ticker per
+// lensa lolos kategori tapi cuma 3 yang beneran tampil sebagai card). HARUS
+// pakai metrik ranking yang SAMA PERSIS dengan Aggregator (thesis_score, bukan
+// source_confidence -- lihat catatan panjang di topPicks() PersonalAggregator-
+// View.jsx) atau dua halaman ini akan disagree lagi seperti sebelum audit
+// 2026-07-27. Karena personal_history.json disimpan PER TICKER (bukan per
+// hari lintas semua ticker), top-3 per hari harus dihitung ULANG di sini
+// dengan menggabungkan SEMUA timeline dulu, dikelompokkan per (tanggal,
+// lensa) -- baru bisa tahu siapa saja yang benar-benar masuk 3 besar hari itu.
 const TOP_N = 3
 
 function buildTopThreeIndex(allTimelines) {
-  const byDayModule = new Map() // "YYYY-MM-DD|module" -> [{ticker, confidence}]
+  const byDayModule = new Map() // "YYYY-MM-DD|module" -> [{ticker, score}]
   for (const timeline of allTimelines) {
     for (const entry of timeline.entries || []) {
       const day = (entry.analyzed_at || '').slice(0, 10)
@@ -95,14 +111,14 @@ function buildTopThreeIndex(allTimelines) {
         if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) {
           const key = `${day}|${m}`
           if (!byDayModule.has(key)) byDayModule.set(key, [])
-          byDayModule.get(key).push({ ticker: timeline.ticker, confidence: call.source_confidence ?? 0 })
+          byDayModule.get(key).push({ ticker: timeline.ticker, score: call.thesis_score ?? 50 })
         }
       }
     }
   }
   const topSetByDayModule = new Map()
   for (const [key, list] of byDayModule) {
-    list.sort((a, b) => b.confidence - a.confidence)
+    list.sort((a, b) => b.score - a.score)
     topSetByDayModule.set(key, new Set(list.slice(0, TOP_N).map((x) => x.ticker)))
   }
   return topSetByDayModule
@@ -138,23 +154,35 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
 
   const lastEntry = (t) => (t.entries && t.entries.length ? t.entries[t.entries.length - 1] : null)
 
-  // Skor track-record keseluruhan -- dihitung dari SEMUA entry yang sudah
-  // dievaluasi (bukan cuma entry terakhir), supaya "berapa persen tesisku
-  // beneran kejadian" kelihatan lintas waktu, bukan cuma snapshot sekarang.
+  // Skor track-record -- dihitung per TESIS (thesis_key), bukan per entry
+  // harian. Backend (personal_evaluation.py) menulis outcome yang SAMA ke
+  // semua snapshot harian dalam satu streak, jadi tanpa dedupe di sini satu
+  // tesis yang bertahan 200 hari akan menghitung 200 kali dalam statistik --
+  // mendominasi track record cuma karena snapshot-nya lebih banyak, bukan
+  // karena lebih sering benar. Set `seenThesisKeys` memastikan tiap thesis_key
+  // unik cuma dihitung sekali walau muncul di puluhan entry.
+  const seenThesisKeys = new Set()
   let terbukti = 0, meleset = 0, ambigu = 0
+  let excessSum = 0, excessCount = 0
   for (const t of timelines) {
     for (const e of t.entries || []) {
       if (!e.outcome) continue
       for (const m of MODULES) {
-        const c = e.outcome[m]?.classification
-        if (c === 'terbukti') terbukti++
-        else if (c === 'meleset') meleset++
-        else if (c === 'ambigu') ambigu++
+        const o = e.outcome[m]
+        if (!o) continue
+        const key = o.thesis_key || `${t.ticker}:${m}:${e.analyzed_at}`
+        if (seenThesisKeys.has(key)) continue
+        seenThesisKeys.add(key)
+        if (o.classification === 'terbukti') terbukti++
+        else if (o.classification === 'meleset') meleset++
+        else if (o.classification === 'ambigu') ambigu++
+        if (o.excess_return_pct != null) { excessSum += o.excess_return_pct; excessCount += 1 }
       }
     }
   }
   const evaluatedTotal = terbukti + meleset + ambigu
   const accuracyPct = evaluatedTotal > 0 ? (terbukti / evaluatedTotal) * 100 : null
+  const avgExcessPct = excessCount > 0 ? excessSum / excessCount : null
 
   const stats = [
     { label: 'Pernah Jadi Top Pick', value: timelines.length },
@@ -164,6 +192,17 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
       label: 'Track Record',
       value: accuracyPct != null ? `${accuracyPct.toFixed(0)}%` : '—',
       tone: accuracyPct == null ? undefined : accuracyPct >= 50 ? 'good' : 'bad',
+    },
+    {
+      // Dihitung per TESIS (thesis_key), sama dengan Track Record di atas.
+      // Ini pembanding yang selama ini gak ada -- "Track Record 40%" tanpa
+      // konteks kelihatan buruk, padahal peluang naik >=3% dalam 28 hari
+      // TANPA skill apa pun sudah sekitar 38-40% (volatilitas tahunan saham
+      // biasa ~30%). Excess return (vs S&P 500 pada jendela yang sama) jujur
+      // menjawab "lebih baik dari sekadar nyimpen di indeks, atau enggak".
+      label: 'vs S&P 500 (rata-rata)',
+      value: avgExcessPct != null ? `${avgExcessPct >= 0 ? '+' : ''}${avgExcessPct.toFixed(1)}%` : '—',
+      tone: avgExcessPct == null ? undefined : avgExcessPct >= 0 ? 'good' : 'bad',
     },
   ]
 

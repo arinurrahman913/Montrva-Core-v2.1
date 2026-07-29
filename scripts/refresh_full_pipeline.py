@@ -188,8 +188,16 @@ def main() -> int:
         if PERSONAL_ENABLED:
             try:
                 holdings = load_holdings(DATA_DIR / "personal" / "holdings.json")
+                # Titik banding indeks: harga S&P 500 terakhir dari Layer 1
+                # (spx_history sudah dihitung di build_market_context_package
+                # jauh di atas — tidak ada fetch baru di sini). Disimpan per
+                # call supaya outcome nanti bisa dibandingkan dengan "kalau
+                # uangnya ditaruh di indeks saja" pada jendela yang sama.
+                spx_hist = getattr(layer1_pkg, "spx_history", None) or []
+                benchmark_price = spx_hist[-1].get("price") if spx_hist else None
                 personal_call_sets = build_personal_call_sets(
                     reasonings, holdings, catalyst_map, evidence_by_ticker,
+                    risk_map=risk_map, benchmark_price=benchmark_price,
                 )
                 log.info(f"Personal: {len(personal_call_sets)} call sets ({len(holdings)} holdings loaded)")
 
