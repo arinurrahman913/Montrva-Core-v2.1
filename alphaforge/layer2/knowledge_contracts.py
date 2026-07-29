@@ -169,6 +169,16 @@ class Governance:
     restatements: list[GovernanceEvent] = field(default_factory=list)
     material_litigation: list[GovernanceEvent] = field(default_factory=list)
     unusual_filings: list[GovernanceEvent] = field(default_factory=list)
+    # True kalau SEC EDGAR filing list berhasil diambil untuk ticker ini
+    # (evidence.sec_filings.metadata.status=="ok") -- SINYAL KELENGKAPAN yang
+    # dipakai Confidence buat unusual_filings (lihat confidence.py
+    # _score_governance), BUKAN len(unusual_filings)>0. Fetch yang berhasil
+    # tapi nihil amandemen (mayoritas ticker sehat) TETAP True di sini --
+    # beda dari "gagal di-fetch sama sekali", yang justru False. Audit
+    # 2026-07-29: dulu unusual_filings dinilai dari ADA-TIDAKNYA amandemen
+    # (kejadian langka), bukan dari BERHASIL-TIDAKNYA fetch, jadi ticker
+    # sehat kena skor rendah cuma karena datanya bagus (gak ada amandemen).
+    filing_data_available: bool = False
 
 
 @dataclass

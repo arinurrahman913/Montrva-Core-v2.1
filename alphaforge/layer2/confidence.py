@@ -238,14 +238,24 @@ def _score_ownership(profile: KnowledgeProfile) -> SectionScore:
 
 
 def _score_governance(profile: KnowledgeProfile) -> SectionScore:
-    """03_KNOWLEDGE.md bagian 7."""
+    """03_KNOWLEDGE.md bagian 7.
+
+    Audit 2026-07-29: 3 cek dihapus (auditor_changes/restatements/
+    material_litigation, semua len(list)>0). Ketiganya BUKAN kejadian
+    langka yang kebetulan kosong -- knowledge.py men-hardcode ketiganya []
+    SELALU (Evidence tidak pernah mengumpulkan isi filing yang dibutuhkan,
+    lihat _build_governance), jadi menghitungnya sebagai "data hilang"
+    adalah PENALTI KONSTAN ke setiap ticker tanpa kecuali, bukan sinyal
+    kualitas data yang membedakan satu ticker dari ticker lain. unusual_
+    filings juga diganti checknya dari "ada amandemen" (event langka, sama
+    masalahnya dengan 3 field di atas -- ticker sehat wajar nol amandemen)
+    ke `filing_data_available` (fetch SEC EDGAR berhasil atau tidak) --
+    inilah yang benar-benar membedakan "berhasil dicek, nihil" vs "gagal
+    dicek". Plafon section ini naik dari 40% (2/5) ke 100% (2/2 achievable)."""
     gov = profile.governance
     return _section_score([
         gov.shares_outstanding_change_12m is not None,
-        len(gov.auditor_changes or []) > 0,
-        len(gov.restatements or []) > 0,
-        len(gov.material_litigation or []) > 0,
-        len(gov.unusual_filings or []) > 0,
+        gov.filing_data_available,
     ])
 
 

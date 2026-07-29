@@ -407,6 +407,10 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
         10-Q/A, 8-K/A) dari sec_edgar.py fetch_sec_filings(). Amandemen filing
         itu sendiri adalah fakta ("filing tidak biasa"), bukan interpretasi —
         cocok dengan contoh spec ("filing tidak biasa lainnya").
+      - filing_data_available: BENAR/SALAH-nya fetch SEC EDGAR itu sendiri
+        (evidence.sec_filings.metadata.status=="ok"), dipakai Confidence
+        sebagai sinyal kelengkapan bagian ini (bukan len(unusual_filings)>0
+        — lihat docstring field-nya di knowledge_contracts.py buat alasan).
 
     shares_outstanding_change_12m sekarang derivable (2026-07-24) — dari
     SEC XBRL CommonStockSharesOutstanding (instant fact per tanggal neraca),
@@ -415,8 +419,10 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
     Masih bisa None kalau ticker tidak punya cukup snapshot historis (mis.
     baru IPO) — itu genuinely "tidak ada data", bukan bug.
 
-    TIDAK derivable dari Evidence saat ini (sengaja dibiarkan kosong/None,
-    bukan bug — butuh data yang belum dikumpulkan di Evidence stage):
+    TIDAK derivable dari Evidence saat ini (sengaja dibiarkan kosong,
+    bukan bug — butuh data yang belum dikumpulkan di Evidence stage, DAN
+    sejak audit 2026-07-29 sengaja TIDAK ikut dihitung sebagai "data hilang"
+    oleh Confidence lagi, persis karena inilah alasannya):
       - auditor_changes / restatements / material_litigation: butuh parsing isi
         filing (mis. item number 8-K 4.01 untuk auditor change, 4.02 untuk
         restatement, atau teks litigation disclosure). sec_edgar.py cuma
@@ -430,13 +436,17 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
                 date=f.filing_date,
                 description=f"{f.form_type} filed (amended filing)"
             ))
+    filing_data_available = bool(
+        evidence.sec_filings.metadata and evidence.sec_filings.metadata.status == "ok"
+    )
 
     return Governance(
         shares_outstanding_change_12m=evidence.fundamental.shares_outstanding_change_12m,
         auditor_changes=[],
         restatements=[],
         material_litigation=[],
-        unusual_filings=unusual_filings
+        unusual_filings=unusual_filings,
+        filing_data_available=filing_data_available
     )
 
 
