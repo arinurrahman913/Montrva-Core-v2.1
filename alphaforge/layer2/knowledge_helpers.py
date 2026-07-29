@@ -14,14 +14,13 @@ def calculate_returns(price_history: list[PriceBar]) -> dict[str, float | None]:
         'return_5y': % annual return (CAGR), past 5 years
     }
 
-    Catatan: return_3y/return_5y butuh >=756/>=1260 trading days histori.
-    Evidence saat ini cuma fetch `period="1y"` dari Yahoo (~252 bar) —
-    lihat sources/yahoo_evidence.py fetch_price_market_data — jadi kedua
-    field ini SELALU None untuk semua ticker sampai window fetch itu
-    diperlebar. Ini keterbatasan struktural yang disengaja didokumentasikan
-    di sini (bukan diperlebar sekarang — nambah histori 3-5x lipat per
-    ticker berdampak ke biaya bandwidth/waktu Evidence di skala full-market,
-    keputusan terpisah dari sekadar "fix bug kalkulasi").
+    Catatan: return_3y/return_5y butuh >=750/>=1250 trading days histori
+    (250/tahun, toleran ke variasi kalender bursa -- lihat komentar di bawah).
+    Evidence fetch `period="5y"` dari Yahoo sejak audit 2026-07-29 (dulu
+    "1y", ~252 bar, jadi kedua field ini SELALU None untuk semua ticker --
+    keterbatasan struktural yang sebelumnya sengaja didokumentasikan, bukan
+    lagi sekarang). Trade-off yang disetujui pengguna: evidence.json (~340MB)
+    tumbuh ~5x di price_history per ticker demi mengaktifkan dua field ini.
     """
     if not price_history or len(price_history) < 2:
         return {'return_1y': None, 'return_3y': None, 'return_5y': None}
@@ -54,19 +53,24 @@ def calculate_returns(price_history: list[PriceBar]) -> dict[str, float | None]:
         price_1y_ago = prices_by_date[sorted_dates[idx_1y_ago]]
         return_1y = ((latest_price - price_1y_ago) / price_1y_ago) * 100 if price_1y_ago > 0 else None
 
-    # 3-year CAGR (roughly 756 trading days = 3 years)
+    # 3-year CAGR (roughly 750 trading days = 3 years -- 250/tahun, bukan 252,
+    # supaya toleran ke variasi kalender bursa riil: yfinance period="5y"
+    # ternyata mengembalikan ~1253-1254 hari untuk AAPL, bukan persis 1260
+    # (252*5) -- ambang yang terlalu kaku bikin return_5y gagal padahal
+    # histori yang tersedia sudah SANGAT dekat 5 tahun kalender (audit
+    # 2026-07-29, ditemukan pas mengaktifkan field ini pertama kali).
     price_3y_ago = None
     date_3y_ago = None
-    if total_days >= 756:
-        date_3y_ago = sorted_dates[max(0, len(sorted_dates) - 756)]
+    if total_days >= 750:
+        date_3y_ago = sorted_dates[max(0, len(sorted_dates) - 750)]
         price_3y_ago = prices_by_date[date_3y_ago]
 
     return_3y = _cagr(price_3y_ago, latest_price, 3) if price_3y_ago else None
 
-    # 5-year CAGR (roughly 1260 trading days = 5 years)
+    # 5-year CAGR (roughly 1250 trading days = 5 years, lihat catatan di atas)
     price_5y_ago = None
-    if total_days >= 1260:
-        price_5y_ago = prices_by_date[sorted_dates[max(0, len(sorted_dates) - 1260)]]
+    if total_days >= 1250:
+        price_5y_ago = prices_by_date[sorted_dates[max(0, len(sorted_dates) - 1250)]]
 
     return_5y = _cagr(price_5y_ago, latest_price, 5) if price_5y_ago else None
 

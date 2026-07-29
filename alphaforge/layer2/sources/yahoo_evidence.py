@@ -186,7 +186,14 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
         def _do_fetch():
             t = yf.Ticker(ticker)
             fi = t.fast_info
-            hist = t.history(period="1y")
+            # period="5y" (bukan "1y") -- Knowledge.calculate_returns() sudah
+            # PUNYA logika CAGR return_3y/return_5y sejak lama (butuh >=756/
+            # >=1260 hari trading), tapi dorman selamanya karena price_history
+            # yang dikasih cuma 1 tahun (~251 bar), gak pernah cukup buat cari
+            # harga 3/5 tahun lalu (audit 2026-07-29). Ini bikin evidence.json
+            # (sudah 340MB) tumbuh ~5x di price_history -- trade-off yang
+            # disetujui pengguna demi mengaktifkan return_3y/return_5y.
+            hist = t.history(period="5y")
             if hist is None or hist.empty:
                 raise ValueError(f"no price data for {ticker}")
             return fi, hist
@@ -221,9 +228,14 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
         close = float(hist["Close"].iloc[-1]) if not hist.empty else None
         volume = int(hist["Volume"].iloc[-1]) if not hist.empty else None
 
-        # 52-week high/low
-        high_52w = float(hist["High"].max()) if not hist.empty else None
-        low_52w = float(hist["Low"].min()) if not hist.empty else None
+        # 52-week high/low -- HARUS diambil dari 1 tahun terakhir saja
+        # (~252 hari trading), bukan seluruh `hist` yang sekarang 5 tahun
+        # (kalau dibiarkan, "high_52w" diam-diam jadi high-5-tahun begitu
+        # period fetch berubah -- bug yang gampang lolos kalau tidak
+        # disengaja diperbaiki bareng perubahan period di atas).
+        hist_1y = hist.tail(252)
+        high_52w = float(hist_1y["High"].max()) if not hist_1y.empty else None
+        low_52w = float(hist_1y["Low"].min()) if not hist_1y.empty else None
 
         # Convert historical data ke PriceBar list
         price_history = []
