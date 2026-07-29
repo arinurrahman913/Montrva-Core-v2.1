@@ -44,10 +44,17 @@ HORIZON_UPPER_DAYS = {
 
 # --- Tabel keputusan `action` (draft §10) — lookup murni dari stance yang
 # sudah dihasilkan reasoning.py (threshold score sudah terjadi di sana) +
-# confidence.band. Baris "*_tak_terbaca" sengaja disamakan dengan
-# PASSIVE_ACTION (P3) dan tidak pernah memilih action ACTION_FULL_EXPOSURE
-# di kolom "low" (P4) -- keduanya lolos by construction, validate_personal_
-# call() cuma jaring pengaman regresi, bukan jalur utama penegakan.
+# TINGKAT (kolom high/medium/low). Kolom ini SEBELUMNYA diisi confidence.band
+# -- diganti ke _thesis_score_tier(thesis_score) per keputusan pengguna
+# 2026-07-29 karena confidence.band=='high' terbukti tidak pernah tercapai
+# di seluruh universe (lihat docstring _thesis_score_tier), yang diam-diam
+# membuat kolom "high" di sini (mulai_posisi/akumulasi/masuk_spekulatif)
+# MUSTAHIL dipilih walau stance-nya qualify. Baris "*_tak_terbaca" sengaja
+# disamakan dengan PASSIVE_ACTION (P3) dan tidak pernah memilih action
+# ACTION_FULL_EXPOSURE di kolom "low" (P4, yang TETAP memakai confidence.band
+# asli sebagai penjaga kualitas data, terpisah dari tingkat di sini) --
+# keduanya lolos by construction, validate_personal_call() cuma jaring
+# pengaman regresi, bukan jalur utama penegakan.
 ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
     "no_holding": {
         "multibagger": {
@@ -63,7 +70,18 @@ ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
             "mesin_tak_terbaca": {"high": "pantau", "medium": "pantau", "low": "pantau"},
         },
         "speculative": {
-            "asimetri_berkatalis": {"high": "masuk_spekulatif", "medium": "masuk_spekulatif", "low": "tunggu_katalis"},
+            # medium diketatkan ke "tunggu_katalis" (bukan "masuk_spekulatif")
+            # per keputusan pengguna 2026-07-29, opsi A: cuma confidence HIGH
+            # yang boleh dapat action entry penuh -- konsisten dengan
+            # multibagger/quality_compound di bawah, yang keduanya SUDAH
+            # begitu sejak awal (medium selalu dapat versi bertahap/kondisional,
+            # bukan versi penuh). Ini SATU-SATUNYA sel di seluruh ACTION_TABLE
+            # yang sebelumnya ngasih action penuh di band selain "high" --
+            # audit 2026-07-27/29 menemukan ini yang bikin 22% universe (895-
+            # 1087 ticker) lolos jadi kandidat masuk_spekulatif tiap hari,
+            # mayoritas cuma modal "earnings terjadwal" (katalis paling umum)
+            # + confidence medium, bukan keyakinan tinggi beneran.
+            "asimetri_berkatalis": {"high": "masuk_spekulatif", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
             "asimetri_tanpa_katalis": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
             "tanpa_asimetri": {"high": "lewati", "medium": "lewati", "low": "lewati"},
             "asimetri_tak_terbaca": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
@@ -266,6 +284,28 @@ def summarize_risk(risk) -> tuple[int, int, list[str]]:
     return high, medium, types
 
 
+def _thesis_score_tier(thesis_score: float) -> str:
+    """Ganti gerbang ACTION_TABLE per keputusan pengguna 2026-07-29: dulu
+    dikunci ke confidence.band, tapi audit menemukan confidence.band=='high'
+    TIDAK PERNAH tercapai di seluruh universe (skor overall confidence
+    tertinggi yang pernah tercatat: 56.9 dari 4055 ticker, semua kena
+    penalti struktural "data belum lengkap" di kategori yang sama --
+    competitive_structure/competitive_momentum/ownership/governance).
+    Efeknya diam-diam: action penuh (mulai_posisi/akumulasi) untuk
+    Multibagger & Quality/Compound SELALU mustahil (0 dari 352/445 kandidat
+    yang qualify stance-nya pernah lolos), bukan karena sahamnya kurang
+    bagus. thesis_score (kekuatan ARGUMEN, bukan kelengkapan DATA) tidak
+    kena batas struktural yang sama -- sudah terbukti tembus 88 di data
+    live. confidence.band tetap dipakai terpisah di P4 (validate_personal_
+    call) sebagai penjaga "data terlalu buruk buat dipercaya", bukan lagi
+    sebagai penentu tingkat action."""
+    if thesis_score >= 70:
+        return "high"
+    if thesis_score >= 50:
+        return "medium"
+    return "low"
+
+
 def build_personal_call(
     module_output: "ModuleOutput",
     position_status: str,
@@ -282,10 +322,11 @@ def build_personal_call(
     di ModuleOutput (stance, confidence, key_metrics)."""
     today = today or datetime.now(timezone.utc).date()
     module = module_output.module
-    band = module_output.confidence.band
+    band = module_output.confidence.band  # tetap dipakai di P4 + tampilan, BUKAN lagi buat lookup action
+    score_tier = _thesis_score_tier(module_output.thesis_score)
     is_unreadable = module_output.stance == UNREADABLE_STANCE[module]
 
-    action = ACTION_TABLE[position_status][module][module_output.stance][band]
+    action = ACTION_TABLE[position_status][module][module_output.stance][score_tier]
 
     if module == "speculative":
         horizon, horizon_basis, horizon_anchor = _speculative_horizon(catalyst, today)
@@ -305,7 +346,7 @@ def build_personal_call(
         exchange=module_output.exchange,
         method_version=METHOD_VERSION,
         action=action,
-        action_rationale=f"Stance '{module_output.stance}' (confidence {band}): {module_output.stance_rationale}",
+        action_rationale=f"Stance '{module_output.stance}' (skor tesis {module_output.thesis_score:.0f}, tingkat {score_tier}): {module_output.stance_rationale}",
         horizon=horizon,
         horizon_basis=horizon_basis,
         horizon_anchor=horizon_anchor,

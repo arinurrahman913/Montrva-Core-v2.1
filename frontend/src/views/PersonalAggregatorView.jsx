@@ -175,9 +175,36 @@ function SectorConcentrationNote({ tickers }) {
   const concentrated = Object.entries(bySector).filter(([, ts]) => ts.length >= 2)
   if (concentrated.length === 0) return null
   return (
-    <div style={{ fontSize: 11, color: 'var(--warn)', background: 'rgba(251,191,122,.1)', padding: '7px 10px', borderRadius: 7, marginBottom: 12 }}>
+    <div style={{ fontSize: 11, color: 'var(--warn)', background: 'rgba(251,191,122,.1)', padding: '7px 10px', borderRadius: 7, marginBottom: 8 }}>
       ⚠ Konsentrasi sektor: {concentrated.map(([sector, ts]) => `${sector} (${ts.join(', ')})`).join(' · ')} — top pick hari ini
       tidak terdiversifikasi, semua taruhannya bergerak bareng kalau sektor itu goyang.
+    </div>
+  )
+}
+
+// Audit 2026-07-29 poin #9: satu ticker yang jadi top pick di 2+ lensa
+// SEKALIGUS itu konsentrasi yang lebih besar lagi daripada sekadar sektor
+// sama -- bukan cuma "2 saham beda di sektor sama", tapi "1 saham yang sama
+// dapat 2 rekomendasi masuk terpisah". Murni sinkron dari picksByLens yang
+// sudah ada (bukan fetch baru) -- gak seperti sektor yang butuh Evidence.
+function crossLensConcentration(picksByLens) {
+  const lensesByTicker = {}
+  for (const { module, picks } of picksByLens) {
+    for (const { ticker } of picks) {
+      if (!lensesByTicker[ticker]) lensesByTicker[ticker] = []
+      lensesByTicker[ticker].push(module)
+    }
+  }
+  return Object.entries(lensesByTicker).filter(([, modules]) => modules.length >= 2)
+}
+
+function CrossLensConcentrationNote({ picksByLens }) {
+  const overlap = crossLensConcentration(picksByLens)
+  if (overlap.length === 0) return null
+  return (
+    <div style={{ fontSize: 11, color: 'var(--warn)', background: 'rgba(251,191,122,.1)', padding: '7px 10px', borderRadius: 7, marginBottom: 12 }}>
+      ⚠ Ticker rangkap lensa: {overlap.map(([t, modules]) => `${t} (${modules.map((m) => LENS_TITLES[m].split(' —')[0]).join(' + ')})`).join(' · ')} —
+      taruhan yang sama muncul lewat 2 lensa berbeda sekaligus, bukan 2 ide terpisah.
     </div>
   )
 }
@@ -210,6 +237,7 @@ function TopPicksSection({ callSets, historyData, onSelectTicker }) {
         (kalau ada) sudah tampil di kartu, tapi tetap baca <code>horizon_basis</code> sebelum bertindak.
       </p>
       <SectorConcentrationNote tickers={allTickers} />
+      <CrossLensConcentrationNote picksByLens={picksByLens} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
         {picksByLens.map(({ module, picks }) => (
           <div key={module}>
