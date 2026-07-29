@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 import yfinance as yf
 
 from ...cache import CACHE_DIR, get as cache_get, set as cache_set
+from ._retry import retry
 
 SECTOR_MAP_TTL_SECONDS = 90 * 24 * 3600  # 90 hari — sektor jarang berubah
 
@@ -95,7 +96,12 @@ def fetch_sector(ticker: str) -> str | None:
     ticker yang belum ada di cache manapun. Caller (build_sector_map.py)
     yang atur batching/delay-nya."""
     try:
-        info = yf.Ticker(ticker).info
+        # retry() (timeout 60s per percobaan) bukan cuma try/except polos --
+        # sama kelas bug dengan yf.download() batch di screening.py (2026-07-28):
+        # tanpa timeout, satu ticker yang nyangkut menahan seluruh proses build
+        # (resumable, tapi tetap gak ada gunanya nunggu tanpa batas waktu).
+        info = retry(lambda: yf.Ticker(ticker).info, retries=1,
+                     backoff_seconds=0, label=f"sector:{ticker}")
         return info.get("sector")
     except Exception:
         return None

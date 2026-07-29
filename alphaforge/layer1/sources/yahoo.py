@@ -18,6 +18,7 @@ import yfinance as yf
 import pandas as pd
 
 from ... import cache
+from ...layer2.sources._retry import retry
 
 HISTORY_CACHE_TTL = 6 * 3600  # 6 jam, selaras PRICE_CACHE_TTL Layer 2 Evidence
 
@@ -30,7 +31,13 @@ def history(ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFra
         df.index = pd.to_datetime(df.index)
         return df
 
-    df = yf.Ticker(ticker).history(period=period, interval=interval)
+    # retry() (timeout 60s per percobaan lewat worker thread) -- bukan cuma
+    # panggilan polos. Ditemukan live 2026-07-28: yf.download() batch tanpa
+    # timeout bisa nyangkut 20+ menit tanpa exception; Layer 1 melakukan
+    # ~40+ panggilan Yahoo tanpa cache per run (lihat docstring modul), jadi
+    # rentan kelas bug yang sama kalau satu ticker saja macet.
+    df = retry(lambda: yf.Ticker(ticker).history(period=period, interval=interval),
+               retries=1, backoff_seconds=0, label=f"layer1_history:{ticker}")
     if df is None or df.empty:
         raise ValueError(f"no data returned for {ticker}")
 

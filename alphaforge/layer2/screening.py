@@ -16,6 +16,7 @@ import yfinance as yf
 
 from ..cache import CACHE_DIR, get as cache_get, set as cache_set
 from .contracts import ScreeningCandidate, ScreeningResult
+from .sources._retry import retry
 from .sources.listing import cheap_filter, fetch_universe
 from .sources.sector_map import load_sector_map
 
@@ -87,28 +88,35 @@ def fetch_price_history_batch(tickers: list[str]) -> dict[str, pd.DataFrame]:
     for i, batch in enumerate(_chunks(to_fetch, BATCH_SIZE)):
         if i > 0:
             time.sleep(BATCH_DELAY_SECONDS)
-        data = None
-        last_exc = None
-        for attempt in range(1, BATCH_FETCH_RETRIES + 1):
-            try:
-                # period="2y" (bukan "1y") supaya `recent_ipo` bisa membedakan IPO
-                # beneran baru dari perusahaan lama — dengan cap 1y, SEMUA ticker
-                # yang punya histori >=1y ke-cap di ~252 hari yang sama persis
-                # dengan RECENT_IPO_MAX_DAYS, jadi flag itu salah nembak ke hampir
-                # semua ticker (termasuk perusahaan puluhan tahun kayak AAL).
-                data = yf.download(batch, period="2y", group_by="ticker", threads=True,
-                                    progress=False, auto_adjust=False)
-                break
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                if attempt < BATCH_FETCH_RETRIES:
-                    time.sleep(BATCH_FETCH_RETRY_BACKOFF_SECONDS)
-        if data is None:
+
+        def _do_fetch(batch=batch):
+            # period="2y" (bukan "1y") supaya `recent_ipo` bisa membedakan IPO
+            # beneran baru dari perusahaan lama — dengan cap 1y, SEMUA ticker
+            # yang punya histori >=1y ke-cap di ~252 hari yang sama persis
+            # dengan RECENT_IPO_MAX_DAYS, jadi flag itu salah nembak ke hampir
+            # semua ticker (termasuk perusahaan puluhan tahun kayak AAL).
+            return yf.download(batch, period="2y", group_by="ticker", threads=True,
+                                progress=False, auto_adjust=False)
+
+        try:
+            # Dulu retry manual TANPA timeout di sini -- ditemukan live 2026-07-28:
+            # yf.download() untuk satu batch nyangkut 20+ menit tanpa exception sama
+            # sekali (jadi loop retry di atas tidak pernah sempat jalan), macetin
+            # seluruh pipeline persis seperti bug yahoo_evidence.py yang sudah
+            # diperbaiki di _retry.py — tapi fungsi ini dulu tidak memakai helper
+            # itu (retry loop sendiri, terpisah), jadi fix sebelumnya tidak menutup
+            # celah ini. Sekarang pakai retry() yang sama (timeout 60s per percobaan
+            # via worker thread) supaya SATU batch yang macet tidak bisa menahan
+            # seluruh proses lagi.
+            data = retry(_do_fetch, retries=BATCH_FETCH_RETRIES,
+                         backoff_seconds=BATCH_FETCH_RETRY_BACKOFF_SECONDS,
+                         label=f"screening_batch_{i}")
+        except Exception as exc:  # noqa: BLE001
             # Batch ini gagal total setelah retry — dulu di-skip diam-diam
             # tanpa jejak sama sekali (sampai N=50 ticker hilang tak
             # terlacak). Sekarang minimal ke-log supaya kelihatan di
             # logs/refresh_full_pipeline.log kalau ada yang hilang & kenapa.
-            print(f"[screening] batch {i} ({len(batch)} ticker) gagal setelah {BATCH_FETCH_RETRIES}x percobaan: {last_exc} — dilewati: {batch}",
+            print(f"[screening] batch {i} ({len(batch)} ticker) gagal setelah {BATCH_FETCH_RETRIES}x percobaan: {exc} — dilewati: {batch}",
                   file=sys.stderr)
             continue
         for t in batch:
@@ -174,7 +182,13 @@ def fetch_fast_info(ticker: str) -> dict | None:
     if cached is not None:
         return cached
     try:
-        fi = yf.Ticker(ticker).fast_info
+        # Dipanggil per-ticker (bisa ribuan kali di full-market run, cache-miss
+        # cuma di hari pertama/cache expired) -- retry() (bukan try/except polos)
+        # supaya SATU ticker yang nyangkut kena timeout 60s, tidak menahan
+        # ribuan ticker lain di belakangnya (kelas bug yang sama dengan batch
+        # OHLCV di fetch_price_history_batch, lihat catatan di sana).
+        fi = retry(lambda: yf.Ticker(ticker).fast_info, retries=1,
+                   backoff_seconds=0, label=f"fast_info:{ticker}")
         data = {"market_cap": fi.get("marketCap"), "quote_type": fi.get("quoteType")}
     except Exception:
         return None
