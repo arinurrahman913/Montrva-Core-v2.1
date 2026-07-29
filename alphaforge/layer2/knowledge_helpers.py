@@ -272,6 +272,53 @@ def infer_size_category(market_cap: float | None, soft_flags: list[str]) -> str 
         return "large"
 
 
+# Pemetaan industry (Yahoo, GICS-style) -> BusinessModel (subscription/
+# hardware/marketplace/saas/other) -- CUMA industry yang KLASIFIKASINYA
+# JELAS dipetakan ke salah satu dari 4 kategori spesifik; industri tradisional
+# (Biotechnology, Bank, Asuransi, REIT, Oil & Gas, dll -- mayoritas dari 144
+# industry yang muncul di data live) SENGAJA jatuh ke fallback "other" alih-
+# alih dipaksa masuk kategori yang tidak cocok. "other" itu jawaban VALID
+# (perusahaan ini memang bukan salah satu dari 4 model itu), bukan "tidak
+# tahu" -- beda dari None (industry-nya sendiri tidak diketahui).
+# Dibangun dari daftar 144 industry unik yang nyata muncul di data live
+# (audit 2026-07-29), bukan tebakan buta -- lihat _infer_business_model.
+_INDUSTRY_BUSINESS_MODEL: dict[str, str] = {
+    # saas -- software recurring, jelas
+    "Software - Application": "saas",
+    "Software - Infrastructure": "saas",
+    # hardware -- produsen barang fisik, jelas
+    "Medical Devices": "hardware",
+    "Medical Instruments & Supplies": "hardware",
+    "Semiconductors": "hardware",
+    "Semiconductor Equipment & Materials": "hardware",
+    "Computer Hardware": "hardware",
+    "Communication Equipment": "hardware",
+    "Electronic Components": "hardware",
+    "Electronics & Computer Distribution": "hardware",
+    "Aerospace & Defense": "hardware",
+    "Auto Parts": "hardware",
+    "Specialty Industrial Machinery": "hardware",
+    "Building Products & Equipment": "hardware",
+    "Electrical Equipment & Parts": "hardware",
+    "Scientific & Technical Instruments": "hardware",
+    "Farm & Heavy Construction Machinery": "hardware",
+    "Consumer Electronics": "hardware",
+    "Tools & Accessories": "hardware",
+    # marketplace -- platform penghubung penjual/pembeli, jelas
+    "Internet Retail": "marketplace",
+    "Financial Data & Stock Exchanges": "marketplace",
+}
+
+
+def infer_business_model(industry: str | None) -> str | None:
+    """Infer BusinessModel dari industry Yahoo -- None kalau industry sendiri
+    tidak diketahui, "other" (bukan None) kalau industry diketahui tapi bukan
+    salah satu dari 4 kategori spesifik yang dipetakan di atas."""
+    if not industry:
+        return None
+    return _INDUSTRY_BUSINESS_MODEL.get(industry, "other")
+
+
 def calculate_price_target_metrics(
     current_price: float | None,
     analyst_estimates: dict | None,

@@ -198,7 +198,21 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
         last_price = fi.get("lastPrice") or (hist["Close"].iloc[-1] if not hist.empty else None)
         market_cap = fi.get("marketCap")
         shares_outstanding = fi.get("shares")
-        beta = fi.get("beta")
+        # fast_info TIDAK punya key "beta" sama sekali -- diverifikasi langsung
+        # ke yfinance (dict fast_info nyata tidak mengandung "beta" sama sekali),
+        # jadi fi.get("beta") SELALU None: 0% terisi di 4055 ticker live, ikut
+        # bikin plafon Confidence.historical_trend macet di 50% padahal
+        # harusnya bisa 66.7% (audit 2026-07-29). Nilainya ADA di `.info`
+        # (objek berbeda, dicache lewat _fetch_yahoo_info yang dipakai bareng
+        # fundamental/ownership/company_profile -- kalau fungsi lain sudah
+        # manggil duluan hari ini, ini cache hit, bukan network call baru).
+        # Try/except sendiri supaya kegagalan di sini tidak menggagalkan
+        # seluruh price_market_data yang sudah berhasil di atas.
+        try:
+            beta = _fetch_yahoo_info(ticker).get("beta")
+        except Exception as exc:
+            print(f"[yahoo_price:{ticker}] gagal ambil beta dari .info, lanjut tanpa: {exc}", file=sys.stderr)
+            beta = None
 
         # OHLCV dari bar terakhir
         open_price = float(hist["Open"].iloc[-1]) if not hist.empty else None
@@ -423,12 +437,21 @@ def fetch_institutional_ownership(ticker: str) -> InstitutionalOwnership:
                 source="yahoo_finance", fetched_at=datetime.now(timezone.utc).isoformat(), status="ok"
             ),
             percentage=cached.get("percentage"),
+            # .get() bukan langsung index -- entry cache lama (sebelum audit
+            # 2026-07-29) tidak punya key ini sama sekali, harus degradasi
+            # anggun ke None, bukan KeyError.
+            insider_percentage=cached.get("insider_percentage"),
             top_holders=[InstitutionalHolder(**h) for h in cached.get("top_holders", [])]
         )
 
     try:
         info = _fetch_yahoo_info(ticker)
         percentage = _safe_float(info.get("heldPercentInstitutions"))
+        # heldPercentInsiders ada di objek .info yang SAMA (sudah di-fetch di
+        # baris atas buat heldPercentInstitutions) -- BUKAN network call baru.
+        # Field ini sebelumnya tidak pernah diambil sama sekali (0% terisi di
+        # 4055 ticker live), bukan karena datanya gak ada.
+        insider_percentage = _safe_float(info.get("heldPercentInsiders"))
 
         try:
             holders_raw = _fetch_institutional_holders_detail(ticker)
@@ -443,11 +466,14 @@ def fetch_institutional_ownership(ticker: str) -> InstitutionalOwnership:
             status="ok" if percentage is not None else "missing"
         )
 
-        data = InstitutionalOwnership(metadata=metadata, percentage=percentage, top_holders=top_holders)
+        data = InstitutionalOwnership(
+            metadata=metadata, percentage=percentage, insider_percentage=insider_percentage, top_holders=top_holders,
+        )
 
         # Cache
         to_cache = {
             "percentage": percentage,
+            "insider_percentage": insider_percentage,
             "top_holders": holders_raw,
             "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status}
         }

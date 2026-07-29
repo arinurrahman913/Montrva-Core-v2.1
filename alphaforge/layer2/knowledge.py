@@ -22,7 +22,7 @@ from .knowledge_contracts import (
 from .knowledge_helpers import (
     calculate_returns, calculate_volatility,
     calculate_financial_metrics, infer_size_category, compute_financial_trends,
-    calculate_price_target_metrics
+    calculate_price_target_metrics, infer_business_model
 )
 
 
@@ -135,7 +135,7 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
 
     # 3a. Struktur Kompetitif
     competitive_structure = CompetitiveStructure(
-        business_model=None,  # TODO: infer dari industry
+        business_model=infer_business_model(evidence.fundamental.industry),
         total_revenue_ttm=evidence.fundamental.revenue,
         employees_count=evidence.company_profile.employees if evidence.company_profile else None
     )
@@ -171,6 +171,11 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
     # 5. Kepemilikan
     ownership = Ownership(
         institutional_pct=evidence.institutional_ownership.percentage,
+        # heldPercentInsiders sudah difetch di Evidence (yahoo_evidence.py,
+        # objek .info yang sama dengan institutional_pct) tapi sebelumnya
+        # tidak pernah dibawa ke sini -- 0% terisi di seluruh universe
+        # (audit 2026-07-29), bukan karena datanya memang jarang ada.
+        insider_pct=evidence.institutional_ownership.insider_percentage,
         insider_transactions=[],  # TODO: dari news/SEC filings
         insider_filing_activity_30d=evidence.institutional_activity.buy_count_30d  # Form 4 filings count
     )

@@ -230,7 +230,14 @@ class InstitutionalHolder:
 class InstitutionalOwnership:
     """Kepemilikan institusional."""
     metadata: SourceMetadata
-    percentage: float | None = None  # persentase agregat dari Yahoo
+    percentage: float | None = None  # persentase agregat institusi dari Yahoo
+    # Persentase kepemilikan insider (Yahoo `.info["heldPercentInsiders"]`) --
+    # field yang SAMA persis sudah dipakai buat `percentage` di atas
+    # (heldPercentInstitutions, dari objek .info yang sama), tapi versi
+    # insider-nya sebelumnya tidak pernah diambil sama sekali (audit
+    # 2026-07-29: Knowledge.ownership.insider_pct 0% terisi di 4055 ticker,
+    # bukan jarang -- field-nya cuma gak pernah dibaca).
+    insider_percentage: float | None = None
     top_holders: list[InstitutionalHolder] = field(default_factory=list)  # top ~10 institusi pemegang terbesar
 
 
