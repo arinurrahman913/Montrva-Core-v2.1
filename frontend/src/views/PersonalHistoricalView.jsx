@@ -2,7 +2,7 @@ import { api } from '../api'
 import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
-import ThesisProof from '../components/ThesisProof'
+import ThesisProof, { RiskBadge } from '../components/ThesisProof'
 import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, BEST_ACTION } from '../format'
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
@@ -38,6 +38,7 @@ function ExpandedTimeline({ ticker, entry }) {
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>
                 {MODULE_LABELS[module]} — {prettyAction(call.action)}
               </div>
+              <RiskBadge call={call} />
               {moduleOutcome ? (
                 <div>
                   <span className={`pill ${outcomeClass(moduleOutcome.classification)}`}>{prettyOutcome(moduleOutcome.classification)}</span>
@@ -61,7 +62,7 @@ function ExpandedTimeline({ ticker, entry }) {
                   )}
                 </div>
               ) : (
-                <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} />
+                <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} />
               )}
             </div>
           )

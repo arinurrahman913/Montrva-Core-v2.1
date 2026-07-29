@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import { RiskBadge } from './ThesisProof'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
@@ -882,11 +883,21 @@ function PersonalCallCard({ module, call }) {
     )
   }
   const statusInfo = horizonStatusInfo(call.horizon_status)
+  const thesisScore = call.thesis_score
+  const scoreColor = thesisScore == null ? 'var(--faint)' : thesisScore >= 65 ? 'var(--good)' : thesisScore >= 50 ? 'var(--gold)' : 'var(--faint)'
   return (
     <div className="lens-card">
-      <div className="lens-card-mod">{MODULE_LABELS[module]}</div>
+      <div className="lens-card-mod" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span>{MODULE_LABELS[module]}</span>
+        {thesisScore != null && (
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: scoreColor }} title="Skor kekuatan tesis lensa ini (0-100, netral 50) — dasar ranking top pick, beda dari confidence (kelengkapan data) di bawah">
+            skor {thesisScore.toFixed(0)}
+          </span>
+        )}
+      </div>
       <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
       {call.action_rationale && <p className="lens-card-rationale">{call.action_rationale}</p>}
+      <RiskBadge call={call} />
 
       <div style={{ marginTop: 8, fontSize: 11 }}>
         <span style={{ color: 'var(--faint)' }}>{horizonLabel(call.action)}: </span>
@@ -914,6 +925,12 @@ function PersonalCallCard({ module, call }) {
           'Belum dipegang'
         )}
       </div>
+      {call.price_at_call != null && (
+        <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }} title="Harga saat call ini dibuat, dan harga S&P 500 pada saat yang sama -- basis pembanding excess return nanti begitu dievaluasi">
+          Harga saat call: ${call.price_at_call.toFixed(2)}
+          {call.benchmark_at_call != null && ` · S&P 500: ${call.benchmark_at_call.toFixed(0)}`}
+        </div>
+      )}
       <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
         Berdasarkan stance: {call.source_stance} (confidence {call.source_confidence?.toFixed(0) ?? '—'})
       </div>

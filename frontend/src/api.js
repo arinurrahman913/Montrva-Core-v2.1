@@ -2,12 +2,31 @@
 // http://localhost:5000 (see vite.config.js); in prod, Flask serves this
 // same origin so relative paths just work.
 
+// Dedup singkat per path (5s) -- audit 2026-07-29 menemukan satu kartu top
+// pick personal bisa memanggil GET /api/ticker/<X> sampai 3x terpisah
+// (useTickerMeta, useSectorConcentration, ThesisProof masing-masing fetch
+// sendiri-sendiri) karena ketiganya mount hampir bersamaan. Cache ini di
+// level getJSON (bukan per-caller) supaya berlaku otomatis buat semua
+// endpoint, bukan cuma yang kebetulan ketahuan lewat audit ini. 5 detik
+// dipilih lebih pendek dari cache server /live (30s) supaya tidak menambah
+// staleness yang berarti, cuma menghindari duplikasi request yang mount
+// dalam tick React yang sama.
+const _CACHE_TTL_MS = 5000
+const _cache = new Map() // path -> { expires, promise }
+
 async function getJSON(path) {
-  const resp = await fetch(path)
-  if (!resp.ok) {
-    throw new Error(`${path} -> HTTP ${resp.status}`)
-  }
-  return resp.json()
+  const now = Date.now()
+  const cached = _cache.get(path)
+  if (cached && cached.expires > now) return cached.promise
+  const promise = fetch(path).then((resp) => {
+    if (!resp.ok) throw new Error(`${path} -> HTTP ${resp.status}`)
+    return resp.json()
+  })
+  _cache.set(path, { expires: now + _CACHE_TTL_MS, promise })
+  // Kalau fetch gagal, jangan biarkan entry gagal nyangkut di cache -- buang
+  // supaya percobaan berikutnya benar-benar fetch ulang, bukan re-throw promise lama.
+  promise.catch(() => _cache.delete(path))
+  return promise
 }
 
 export const api = {

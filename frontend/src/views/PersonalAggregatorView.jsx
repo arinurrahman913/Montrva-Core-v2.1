@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
-import ThesisProof from '../components/ThesisProof'
+import ThesisProof, { RiskBadge } from '../components/ThesisProof'
 import { prettyAction, horizonLabel, prettyHorizon, BEST_ACTION } from '../format'
 
 const LENSES = ['multibagger', 'quality_compound', 'speculative']
@@ -96,29 +96,6 @@ function useTickerMeta(ticker) {
   return meta
 }
 
-// Badge risiko -- lapisan pribadi sebelumnya tidak pernah membaca Risk sama
-// sekali, cuma menitipkan pesan generik "cek Risk Flags sendiri" di teks.
-// Sekarang ringkasannya (dihitung sekali di personal_reasoning.py, TIDAK
-// menilai ulang) tampil langsung di kartu -- red kalau ada flag high-severity,
-// amber kalau cuma medium, gak ada badge kalau bersih.
-function RiskBadge({ call }) {
-  const high = call.risk_flags_high || 0
-  const medium = call.risk_flags_medium || 0
-  if (high === 0 && medium === 0) return null
-  const tone = high > 0 ? 'var(--bad)' : 'var(--warn)'
-  const bg = high > 0 ? 'rgba(251,113,133,.12)' : 'rgba(251,191,122,.12)'
-  const label = high > 0 ? `${high} risk flag tinggi` : `${medium} risk flag sedang`
-  const types = (call.risk_flag_types || []).slice(0, 3).join(', ')
-  return (
-    <div
-      title={call.risk_flag_types?.join(', ')}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tone, background: bg, padding: '2px 7px', borderRadius: 5, marginBottom: 6 }}
-    >
-      ⚠ {label}{types && <span style={{ fontWeight: 400, opacity: .85 }}> — {types}</span>}
-    </div>
-  )
-}
-
 function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
   const meta = useTickerMeta(ticker)
   const thesisScore = call.thesis_score ?? 50
@@ -157,7 +134,7 @@ function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
       {call.horizon_basis && (
         <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.4 }}>{call.horizon_basis}</div>
       )}
-      <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} />
+      <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} />
     </div>
   )
 }
@@ -205,10 +182,21 @@ function SectorConcentrationNote({ tickers }) {
   )
 }
 
-function TopPicksSection({ callSets, onSelectTicker }) {
+function TopPicksSection({ callSets, historyData, onSelectTicker }) {
   const picksByLens = LENSES.map((m) => ({ module: m, picks: topPicks(callSets, m) }))
   if (picksByLens.every((p) => p.picks.length === 0)) return null
   const allTickers = [...new Set(picksByLens.flatMap((p) => p.picks.map((x) => x.ticker)))]
+  // computeTopPickDiff sebelumnya DIHITUNG tapi tidak pernah dipanggil dari
+  // sini -- badge "BARU" di bawah tidak pernah menyala di semua sesi
+  // sebelumnya walau logikanya sudah benar (audit 2026-07-29). added/removed
+  // itu terhadap SEMUA kandidat yang qualify (n=99), bukan cuma top-3 yang
+  // tampil -- makanya di-Set-kan per lens supaya lookup "apa ticker top-3 ini
+  // baru dibanding kemarin" gampang & O(1) saat render tiap card.
+  const newTickersByLens = historyData
+    ? Object.fromEntries(
+        Object.entries(computeTopPickDiff(callSets, historyData)).map(([m, d]) => [m, new Set(d.added.map((x) => x.ticker))]),
+      )
+    : {}
 
   return (
     <div style={{ marginBottom: 22 }}>
@@ -232,7 +220,10 @@ function TopPicksSection({ callSets, onSelectTicker }) {
               <div style={{ fontSize: 11, color: 'var(--faint)' }}>Tidak ada ticker dengan action ini saat ini.</div>
             ) : (
               picks.map(({ ticker, call }) => (
-                <PickCard key={ticker} ticker={ticker} module={module} call={call} onSelectTicker={onSelectTicker} />
+                <PickCard
+                  key={ticker} ticker={ticker} module={module} call={call} onSelectTicker={onSelectTicker}
+                  isNew={newTickersByLens[module]?.has(ticker) ?? false}
+                />
               ))
             )}
           </div>
@@ -249,11 +240,14 @@ function TopPicksSection({ callSets, onSelectTicker }) {
 // Pribadi, bukan dobel di sini.
 export default function PersonalAggregatorView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalCalls)
+  // historyData opsional (badge "BARU" cuma bonus) -- gagal/lum termuat TIDAK
+  // boleh memblokir render Top Pick, jadi tidak dicek error-nya di sini.
+  const { data: historyData } = useStageData(api.personalHistory)
 
   if (error) return <div className="empty">Gagal memuat data/personal/personal_calls.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
 
   const callSets = data.call_sets || []
 
-  return <TopPicksSection callSets={callSets} onSelectTicker={onSelectTicker} />
+  return <TopPicksSection callSets={callSets} historyData={historyData} onSelectTicker={onSelectTicker} />
 }

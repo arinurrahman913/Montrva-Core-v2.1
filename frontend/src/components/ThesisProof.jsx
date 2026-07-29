@@ -19,8 +19,40 @@ export function firstSeenAt(historyEntries, module, currentAction) {
   return firstMatch
 }
 
-function HorizonTrack({ since, horizon, action, startPrice }) {
-  const progress = horizonProgress(since, horizon)
+// Badge risiko -- lapisan pribadi sebelumnya tidak pernah membaca Risk sama
+// sekali, cuma menitipkan pesan generik "cek Risk Flags sendiri" di teks.
+// Ringkasannya (dihitung sekali di personal_reasoning.py, TIDAK menilai
+// ulang) tampil langsung di kartu -- merah kalau ada flag high-severity,
+// kuning kalau cuma medium. Dipakai bareng di Agregator (PickCard), Riwayat
+// (ExpandedTimeline), dan Ticker Modal (PersonalCallCard) -- SATU komponen,
+// bukan disalin 3x, supaya kalau ada satu ticker yang bawa flag tinggi DAN
+// sedang sekaligus (audit 2026-07-29: 1939 ticker begitu), keduanya tampil,
+// bukan cuma yang tinggi (versi lama diam-diam membuang count medium-nya).
+export function RiskBadge({ call }) {
+  const high = call.risk_flags_high || 0
+  const medium = call.risk_flags_medium || 0
+  if (high === 0 && medium === 0) return null
+  const tone = high > 0 ? 'var(--bad)' : 'var(--warn)'
+  const bg = high > 0 ? 'rgba(251,113,133,.12)' : 'rgba(251,191,122,.12)'
+  const parts = []
+  if (high > 0) parts.push(`${high} tinggi`)
+  if (medium > 0) parts.push(`${medium} sedang`)
+  const label = `${parts.join(' + ')} risk flag`
+  const allTypes = call.risk_flag_types || []
+  const shown = allTypes.slice(0, 3).join(', ')
+  const extra = allTypes.length > 3 ? ` +${allTypes.length - 3} lagi` : ''
+  return (
+    <div
+      title={allTypes.join(', ')}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tone, background: bg, padding: '2px 7px', borderRadius: 5, marginBottom: 6 }}
+    >
+      ⚠ {label}{shown && <span style={{ fontWeight: 400, opacity: .85 }}> — {shown}{extra}</span>}
+    </div>
+  )
+}
+
+function HorizonTrack({ since, horizon, anchor, action, startPrice }) {
+  const progress = horizonProgress(since, horizon, anchor)
   if (!progress) return null
   const { ageDays, upperDays, pct, status } = progress
   const fillClass = status === 'over' ? 'over' : status === 'near' ? 'near' : 'ok'
@@ -61,7 +93,7 @@ function HorizonTrack({ since, horizon, action, startPrice }) {
 // kali tercatat, plus quote live buat titik terakhir, plus progress bar
 // "hari ke-berapa dari horizon" -- supaya "live dari tesis muncul sampai
 // estimasi" kelihatan literal, bukan cuma klaim di teks.
-export default function ThesisProof({ ticker, module, action, horizon, historyEntries: historyEntriesProp }) {
+export default function ThesisProof({ ticker, module, action, horizon, horizonAnchor, historyEntries: historyEntriesProp }) {
   const [priceHistory, setPriceHistory] = useState(null)
   const [historyEntries, setHistoryEntries] = useState(historyEntriesProp || null)
   const [live, setLive] = useState(null)
@@ -126,7 +158,7 @@ export default function ThesisProof({ ticker, module, action, horizon, historyEn
       <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3 }}>
         Pergerakan harga, bukan validasi tesis — dibaca sendiri, bukan vonis sistem (§12).
       </div>
-      {horizon && <HorizonTrack since={since} horizon={horizon} action={action} startPrice={startClose} />}
+      {horizon && <HorizonTrack since={since} horizon={horizon} anchor={horizonAnchor} action={action} startPrice={startClose} />}
     </div>
   )
 }

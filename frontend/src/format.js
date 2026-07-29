@@ -257,13 +257,37 @@ export function horizonTargetPrice(startPrice, action, horizon) {
   return { thresholdPct, targetPrice: startPrice * (1 + thresholdPct / 100) }
 }
 
+// Sama persis dengan ANCHOR_BUFFER_DAYS + call_due_date() di alphaforge/
+// personal/personal_historical.py -- SATU-SATUNYA tempat "kapan sebuah call
+// jatuh tempo" boleh dihitung di frontend. Sebelum ini ada 2 salinan logika
+// yang beda (isEntryDueForReview + horizonProgress, dua-duanya cuma age vs
+// bucket horizon) yang mengabaikan horizon_anchor sama sekali -- audit
+// 2026-07-29 menemukan 97.7% entry Speculative (6796/6965) meleset >3 hari
+// dari tanggal jatuh tempo backend yang sebenarnya (backend mematok ke
+// tanggal katalis + buffer, bukan bucket generik 28 hari) -- progress bar
+// & badge "layak ditinjau ulang" jadi menampilkan estimasi yang salah untuk
+// hampir semua tesis Speculative, lensa yang justru sedang jadi top pick.
+const ANCHOR_BUFFER_DAYS = 5
+
+function callDueDateMs(call, analyzedAtIso) {
+  if (!call) return null
+  if (call.horizon_anchor) {
+    const anchorMs = new Date(`${call.horizon_anchor}T00:00:00Z`).getTime()
+    if (!isNaN(anchorMs)) return anchorMs + ANCHOR_BUFFER_DAYS * 86400000
+  }
+  const upperDays = HORIZON_UPPER_DAYS[call.horizon]
+  if (upperDays == null || !analyzedAtIso) return null
+  const analyzedMs = new Date(analyzedAtIso).getTime()
+  if (isNaN(analyzedMs)) return null
+  return analyzedMs + upperDays * 86400000
+}
+
 export function isEntryDueForReview(analyzedAt, callSet) {
   if (!analyzedAt || !callSet) return false
-  const ageDays = Math.floor((Date.now() - new Date(analyzedAt).getTime()) / 86400000)
+  const now = Date.now()
   return ['multibagger', 'quality_compound', 'speculative'].some((m) => {
-    const horizon = callSet[m]?.horizon
-    const upper = HORIZON_UPPER_DAYS[horizon]
-    return upper != null && ageDays > upper
+    const due = callDueDateMs(callSet[m], analyzedAt)
+    return due != null && now > due
   })
 }
 
@@ -272,14 +296,21 @@ export function isEntryDueForReview(analyzedAt, callSet) {
 // (dua tempat yang sama-sama butuh bar ini, lihat ThesisProof.jsx). `since`
 // = firstSeenAt() action ini pertama muncul, BUKAN analyzed_at entry
 // terakhir -- horizon dihitung sejak tesisnya mulai, bukan sejak snapshot
-// terbaru.
-export function horizonProgress(sinceIso, horizon) {
-  const upperDays = HORIZON_UPPER_DAYS[horizon]
-  if (!sinceIso || upperDays == null) return null
-  const ageDays = Math.floor((Date.now() - new Date(sinceIso).getTime()) / 86400000)
-  const pct = Math.min((ageDays / upperDays) * 100, 100)
-  const status = ageDays > upperDays ? 'over' : pct >= 80 ? 'near' : 'ok'
-  return { ageDays, upperDays, pct, status }
+// terbaru. `anchor` (opsional, cuma Speculative) = call.horizon_anchor --
+// kalau ada, jatuh tempo dipatok ke situ (+buffer), bukan ke bucket generik.
+export function horizonProgress(sinceIso, horizon, anchor) {
+  if (!sinceIso) return null
+  const sinceMs = new Date(sinceIso).getTime()
+  if (isNaN(sinceMs)) return null
+  const dueMs = callDueDateMs({ horizon, horizon_anchor: anchor }, sinceIso)
+  if (dueMs == null) return null
+  const now = Date.now()
+  const ageDays = Math.floor((now - sinceMs) / 86400000)
+  const totalDays = Math.round((dueMs - sinceMs) / 86400000)
+  if (totalDays <= 0) return null
+  const pct = Math.min(Math.max((ageDays / totalDays) * 100, 0), 100)
+  const status = now > dueMs ? 'over' : pct >= 80 ? 'near' : 'ok'
+  return { ageDays, upperDays: totalDays, pct, status }
 }
 
 // Label human-readable untuk key/field yang tersimpan snake_case di data.
