@@ -15,6 +15,7 @@ sekadar jeda periodik.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
 import time
@@ -59,6 +60,25 @@ _last_call_time = None
 # rate-limit tetap dihormati SECARA GLOBAL walau banyak thread motret ticker
 # yang beda-beda bersamaan.
 _lock = threading.Lock()
+
+
+def _redact(value) -> str:
+    """Buang API key dari teks apa pun sebelum dicetak/di-log.
+
+    API key Finnhub dikirim sebagai query string (`token=...`), dan
+    `requests` memformat HTTPError sebagai "401 Client Error: Unauthorized
+    for url: <URL LENGKAP>" — termasuk token-nya. Teks itu dulu dicetak apa
+    adanya ke stderr, lalu (sejak backend menyimpan stderr penuh saat gagal)
+    ikut tertulis plaintext ke logs/refresh_failure_*.log DAN bisa muncul di
+    /api/refresh/status, endpoint tanpa autentikasi pada server yang
+    mendengarkan di 0.0.0.0 — jadi kredensial hidup bisa terbaca di layar.
+    Kalau key kedaluwarsa, ini terjadi 4065 kali dalam satu run.
+    """
+    text = str(value)
+    if FINNHUB_API_KEY:
+        text = text.replace(FINNHUB_API_KEY, "***REDACTED***")
+    # Jaring pengaman kalau URL membawa token lain (mis. setelah redirect).
+    return re.sub(r"(token=)[^&\s]+", r"\1***REDACTED***", text)
 
 
 def reset_batch_tracking():
@@ -185,7 +205,7 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
         return NewsCollection(news=news_list, metadata=metadata)
 
     except requests.exceptions.RequestException as exc:
-        print(f"[finnhub:{ticker}] gagal (final): {exc}", file=sys.stderr)
+        print(f"[finnhub:{ticker}] gagal (final): {_redact(exc)}", file=sys.stderr)
         metadata = SourceMetadata(
             source="finnhub",
             fetched_at=datetime.now(timezone.utc).isoformat(),

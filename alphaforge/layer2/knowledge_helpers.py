@@ -16,6 +16,21 @@ from .contracts import PriceBar
 _ANCHOR_TOLERANCE_DAYS = 45
 
 
+def _is_finite_number(value) -> bool:
+    """True hanya untuk angka nyata. `close` bisa None (NaN yang di-null-kan
+    json_safe saat serialisasi) — dipakai di beberapa tempat, jadi satu tempat."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+def _bar_gap_days(prev_bar: PriceBar, curr_bar: PriceBar) -> int | None:
+    """Jarak kalender antar dua bar dalam hari, None kalau tanggalnya tak terbaca."""
+    try:
+        return (date.fromisoformat(curr_bar.date) - date.fromisoformat(prev_bar.date)).days
+    except (ValueError, TypeError):
+        return None
+
+
 def _find_price_on_or_before(sorted_dates: list[str], prices_by_date: dict[str, float],
                              target: date) -> float | None:
     """Harga penutupan pada bar terdekat ke `target` (arah mana pun), asalkan
@@ -126,18 +141,55 @@ def _cagr(start_price: float | None, end_price: float, years: float) -> float | 
     return (pow(end_price / start_price, 1 / years) - 1) * 100
 
 
+# Jarak maksimum antar dua bar agar selisihnya masih sah disebut "return harian".
+# 7 hari menampung akhir pekan + libur bursa panjang, tapi menolak lompatan
+# bulanan (~30 hari).
+_DAILY_GAP_MAX_DAYS = 7
+
+
 def calculate_volatility(price_history: list[PriceBar]) -> float | None:
-    """Calculate daily volatility (std dev of daily returns %)."""
+    """Volatilitas harian (std dev % return antar hari bursa berurutan).
+
+    HANYA memakai pasangan bar yang benar-benar berjarak harian. Sejak
+    `sources/yahoo_evidence._downsample_price_history`, price_history yang
+    dipersist TIDAK lagi berjarak seragam: ~48 bar BULANAN (tahun ke-2..5)
+    diikuti 252 bar harian. Versi sebelumnya menghitung selisih antar SEMUA
+    bar berurutan lalu melabelinya "harian", sehingga ~16% sampelnya adalah
+    gerakan sebulan — yang deviasinya ~sqrt(21) ≈ 4.6x lebih besar.
+
+    Dampak terukur pada 353 ticker nyata: volatilitas membengkak rata-rata
+    1.98x (maks 4.14x). Ambang `> 5.0` di risk.py melonjak dari 22% ke 59%
+    ticker (red flag `high_volatility` palsu), dan `> 4.0` di reasoning.py
+    dari 33% ke 75% ("High volatility - trading opportunity" untuk hampir
+    semua ticker, sekaligus membuat cabang `< 1.0` praktis tak terjangkau).
+
+    Menyaring berdasarkan jarak TANGGAL, bukan sekadar mengambil 252 bar
+    terakhir, supaya benar juga untuk histori harian penuh (mis. jalur CLI
+    atau kalau downsampling diubah/dimatikan) tanpa bergantung pada konstanta
+    di modul lain.
+    """
     if not price_history or len(price_history) < 2:
         return None
 
     daily_returns = []
     for i in range(1, len(price_history)):
-        prev_close = price_history[i - 1].close
-        curr_close = price_history[i].close
-        if prev_close > 0:
-            ret = ((curr_close - prev_close) / prev_close) * 100
-            daily_returns.append(ret)
+        prev_bar = price_history[i - 1]
+        curr_bar = price_history[i]
+        prev_close, curr_close = prev_bar.close, curr_bar.close
+        # `close` bisa None: NaN dari bar kosong pandas di-null-kan di batas
+        # serialisasi oleh json_safe, lalu kembali sebagai PriceBar(close=None).
+        # Tanpa penjagaan ini `prev_close > 0` melempar TypeError, ditelan
+        # except per-ticker di run_knowledge, dan ticker itu hilang dari
+        # knowledge.json tanpa jejak (sisa selisih 4065 evidence vs 4063
+        # knowledge pada run 2026-07-30).
+        if not _is_finite_number(prev_close) or not _is_finite_number(curr_close):
+            continue
+        if prev_close <= 0:
+            continue
+        gap = _bar_gap_days(prev_bar, curr_bar)
+        if gap is None or gap > _DAILY_GAP_MAX_DAYS:
+            continue
+        daily_returns.append(((curr_close - prev_close) / prev_close) * 100)
 
     if len(daily_returns) < 2:
         return None
@@ -150,14 +202,24 @@ def calculate_volatility(price_history: list[PriceBar]) -> float | None:
 
 
 def calculate_high_low_52w(price_history: list[PriceBar]) -> dict[str, float | None]:
-    """Calculate 52-week high/low dari price history."""
+    """52-week high/low dari price history.
+
+    Saat ini TIDAK dipanggil dari mana pun — knowledge.py mengambil
+    high_52w/low_52w langsung dari Evidence. Tetap dijaga terhadap
+    `close=None` (lihat catatan di calculate_volatility) supaya tidak
+    meledak kalau suatu saat dipakai lagi.
+
+    Catatan: `[-252:]` di bawah kebetulan persis memilih blok harian yang
+    dipertahankan `_downsample_price_history` (PRICE_HISTORY_DAILY_BARS=252).
+    Kalau konstanta itu berubah, potongan di sini ikut salah diam-diam.
+    """
     if not price_history:
         return {'high_52w': None, 'low_52w': None}
 
     # 52-week = roughly 252 trading days
     relevant_bars = price_history[-252:] if len(price_history) >= 252 else price_history
 
-    closes = [bar.close for bar in relevant_bars]
+    closes = [bar.close for bar in relevant_bars if _is_finite_number(bar.close)]
     if not closes:
         return {'high_52w': None, 'low_52w': None}
 

@@ -7,12 +7,25 @@ penjelasan sama sekali soal sumber mana yang gagal dan kenapa.
 """
 from __future__ import annotations
 
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
 from typing import Callable, TypeVar
 
 T = TypeVar("T")
+
+# Beberapa penyedia menaruh kredensial di query string (Finnhub: `token=`,
+# FRED: `api_key=`). `requests` menuliskan URL LENGKAP ke dalam pesan
+# HTTPError/ConnectionError, dan helper ini mencetak pesan itu ke stderr —
+# yang sejak 2026-07-30 disimpan utuh ke logs/refresh_failure_*.log dan bisa
+# ikut muncul di /api/refresh/status. Disaring di sini supaya berlaku untuk
+# SEMUA pemanggil, bukan hanya modul yang ingat menyaring sendiri.
+_CREDENTIAL_QS = re.compile(r"((?:token|api_key|apikey|key)=)[^&\s]+", re.IGNORECASE)
+
+
+def _safe(exc) -> str:
+    return _CREDENTIAL_QS.sub(r"\1***REDACTED***", str(exc))
 
 # Seen live: a yfinance call that never raised and never returned — no
 # exception for the except/retry loop below to even catch — stalled a full
@@ -46,8 +59,8 @@ def retry(fn: Callable[[], T], *, retries: int, backoff_seconds: float, label: s
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if attempt < retries:
-                print(f"[{label}] percobaan {attempt}/{retries} gagal: {exc} — retry dalam {backoff_seconds}s",
+                print(f"[{label}] percobaan {attempt}/{retries} gagal: {_safe(exc)} — retry dalam {backoff_seconds}s",
                       file=sys.stderr)
                 time.sleep(backoff_seconds)
-    print(f"[{label}] gagal total setelah {retries}x percobaan: {last_exc}", file=sys.stderr)
+    print(f"[{label}] gagal total setelah {retries}x percobaan: {_safe(last_exc)}", file=sys.stderr)
     raise last_exc

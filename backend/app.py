@@ -18,6 +18,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -259,26 +260,60 @@ _TRACEBACK_NOISE_PREFIXES = (
     "The above exception", "During handling of", "^", "~",
 )
 
-def _summarize_failure(err: str, returncode: int) -> str:
-    """Ambil baris exception yang benar-benar informatif dari stderr.
+# Baris terakhir sebuah traceback Python: "NamaError: pesan" / "MemoryError".
+# Mencarinya secara eksplisit jauh lebih andal daripada sekadar "baris terakhir
+# yang bukan noise" (lihat docstring di bawah).
+_EXCEPTION_LINE = re.compile(
+    r"^(?:[A-Za-z_][\w.]*\.)?[A-Za-z_]\w*(?:Error|Exception|Interrupt|Warning|Exit)\b")
 
-    Dicari dari BAWAH ke atas, melewati catatan PEP 678 dan rangka traceback,
-    lalu mengembalikan baris pertama yang terlihat seperti pesan exception.
-    Catatan konteks tetap disertakan sebagai ekor kalau ada, karena berguna
-    untuk tahu di titik mana kegagalannya."""
-    lines = [ln.rstrip() for ln in err.splitlines() if ln.strip()]
-    if not lines:
+# Pesan gagal diteruskan ke /api/refresh/status lalu dirender apa adanya di
+# dashboard. Exception dari pandas/numpy bisa membawa repr array raksasa —
+# tanpa batas ini, field JSON yang di-poll tiap 2.5 detik bisa jadi megabyte.
+_FAILURE_MSG_MAX_CHARS = 400
+
+
+def _summarize_failure(err: str, returncode: int, out: str = "") -> str:
+    """Ambil baris exception yang benar-benar informatif dari keluaran proses.
+
+    HARUS memeriksa stdout juga, bukan stderr saja: scripts/refresh_full_pipeline.py
+    memasang `logging.StreamHandler(sys.stdout)` dan melaporkan kegagalan lewat
+    `log.exception(...)`, jadi traceback untuk hampir semua kegagalan (Screening,
+    Evidence, Knowledge, dst) mendarat di STDOUT. Sementara stderr justru penuh
+    baris progres ("Peer 4050/4055: ZIM", "Peer Comparison complete: ...") yang
+    tidak cocok dengan pola noise mana pun — versi sebelumnya karena itu bisa
+    melaporkan baris SUKSES sebagai sebab kegagalan.
+
+    Strategi: cari baris exception sungguhan (pola `NamaError: ...`) dari bawah
+    ke atas di stderr lalu stdout; kalau tidak ada, baru jatuh ke pemindaian
+    "baris bermakna terakhir".
+    """
+    def _split(text: str) -> list[str]:
+        return [ln.rstrip() for ln in (text or "").splitlines() if ln.strip()]
+
+    def _clip(msg: str) -> str:
+        return msg if len(msg) <= _FAILURE_MSG_MAX_CHARS else msg[:_FAILURE_MSG_MAX_CHARS] + " […]"
+
+    streams = [_split(err), _split(out)]
+    if not any(streams):
         return f"exit code {returncode}"
 
-    note = None
-    for line in reversed(lines):
-        if line.startswith("when serializing "):
-            note = line
-            continue
-        if line.startswith(_TRACEBACK_NOISE_PREFIXES):
-            continue
-        return f"{line} [{note}]" if note else line
-    return lines[-1]
+    # 1) Baris exception sesungguhnya, plus catatan PEP 678 sesudahnya bila ada.
+    for lines in streams:
+        note = None
+        for line in reversed(lines):
+            if line.startswith("when serializing "):
+                note = line
+                continue
+            if _EXCEPTION_LINE.match(line):
+                return _clip(f"{line} [{note}]" if note else line)
+
+    # 2) Tidak ada pola exception — ambil baris bermakna terakhir.
+    for lines in streams:
+        for line in reversed(lines):
+            if not line.startswith(_TRACEBACK_NOISE_PREFIXES):
+                return _clip(line)
+
+    return _clip(streams[0][-1] if streams[0] else f"exit code {returncode}")
 
 
 def _dump_failure_log(mode: str, sector: str | None, returncode: int, out: str, err: str) -> None:
@@ -331,13 +366,23 @@ def _run_refresh(mode: str, sector: str | None = None) -> None:
         if ok:
             msg = out.splitlines()[-1] if out else "Selesai."
         else:
-            msg = f"Gagal: {_summarize_failure(err, proc.returncode)}"
+            msg = f"Gagal: {_summarize_failure(err, proc.returncode, out)}"
             _dump_failure_log(mode, sector, proc.returncode, out, err)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         # Pesan sebelumnya hardcode ">30 menit" walau timeout sesungguhnya
         # yang dipakai bisa 4/6 jam (mode="full") -- salah info soal berapa
         # lama proses itu benar-benar jalan sebelum dibunuh.
-        msg = f"Timeout (>{timeout // 3600} jam)."
+        # Dinyatakan dalam menit kalau di bawah sejam: `1800 // 3600` == 0,
+        # jadi run per-sektor dulu melaporkan "Timeout (>0 jam)".
+        msg = (f"Timeout (>{timeout // 3600} jam)." if timeout >= 3600
+               else f"Timeout (>{timeout // 60} menit).")
+        # Timeout adalah kegagalan TERMAHAL yang bisa terjadi (bisa 6 jam kerja
+        # hilang) dan justru satu-satunya jalur yang dulu tidak menyimpan apa
+        # pun. TimeoutExpired membawa stdout/stderr yang sudah terkumpul —
+        # dulu dibuang begitu saja.
+        t_out = (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        t_err = (exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        _dump_failure_log(mode, sector, "TIMEOUT", t_out, t_err)
     except Exception as exc:  # noqa: BLE001
         msg = f"Error: {exc}"
     finally:

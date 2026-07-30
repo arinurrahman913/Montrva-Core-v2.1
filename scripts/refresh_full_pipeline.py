@@ -90,10 +90,36 @@ log = logging.getLogger("refresh_full_pipeline")
 
 
 # Di atas ambang ini, file ditulis TANPA indent. `indent=2` membengkakkan
-# keluaran ~30-40% (satu baris + spasi per field) — pada evidence.json itu
-# ratusan MB ekstra yang tidak pernah dibaca manusia (semua konsumennya
-# JSON.parse / json.load). File kecil tetap di-indent supaya enak di-diff.
+# keluaran ~30-40% (satu baris + spasi per field) — ratusan MB ekstra yang
+# tidak pernah dibaca manusia (semua konsumennya JSON.parse / json.load).
+# File kecil tetap di-indent supaya enak di-diff.
 _COMPACT_WRITE_THRESHOLD_ITEMS = 500
+
+
+def _is_big_payload(data) -> bool:
+    """Apakah struktur ini cukup besar untuk ditulis tanpa indent.
+
+    Versi pertama hanya memindai list di level atas
+    (`any(isinstance(v, list) and len(v) > N for v in data.values())`) dan
+    MELEWATKAN justru berkas terbesar di sistem: `historical_timeline.json`
+    berbentuk `{ticker: {...}}` — ribuan nilai dict, nol list level atas —
+    sehingga 469MB ditulis ber-indent. Berkas itu bertambah ~82MB tiap run,
+    jadi dalam belasan run ia melewati 1.5GB dan MemoryError yang sama
+    (yang perbaikan ini justru dibuat untuk mencegahnya) kembali muncul,
+    hanya pindah berkas — dan tetap di tulis TERAKHIR, setelah 86 menit kerja.
+
+    Sekarang memeriksa dict maupun list, di level atas maupun satu tingkat
+    di dalamnya, jadi baik `{ticker: {...}}` maupun `{"packages": [...]}`
+    sama-sama tertangkap.
+    """
+    if isinstance(data, (list, tuple)):
+        return len(data) > _COMPACT_WRITE_THRESHOLD_ITEMS
+    if not isinstance(data, dict):
+        return False
+    if len(data) > _COMPACT_WRITE_THRESHOLD_ITEMS:
+        return True
+    return any(isinstance(v, (list, tuple, dict)) and len(v) > _COMPACT_WRITE_THRESHOLD_ITEMS
+               for v in data.values())
 
 
 def _atomic_write(path: Path, data: dict) -> None:
@@ -103,12 +129,17 @@ def _atomic_write(path: Path, data: dict) -> None:
     — lihat docstring `alphaforge.json_safe.dump_safe` untuk kenapa: run
     2026-07-30 mati MemoryError di titik tulis evidence.json.
     """
-    # Struktur berisi list panjang (packages/profiles/entries) = file besar.
-    big = any(isinstance(v, list) and len(v) > _COMPACT_WRITE_THRESHOLD_ITEMS
-              for v in data.values())
     tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        dump_safe(data, f, indent=None if big else 2, ensure_ascii=False)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            dump_safe(data, f, indent=None if _is_big_payload(data) else 2,
+                      ensure_ascii=False)
+    except BaseException:
+        # Tanpa ini, kegagalan di tengah tulis (MemoryError, disk penuh,
+        # Ctrl+C) meninggalkan .tmp ratusan MB di volume yang sama — persis
+        # ruang yang dibutuhkan percobaan berikutnya.
+        tmp.unlink(missing_ok=True)
+        raise
     os.replace(tmp, path)
 
 
