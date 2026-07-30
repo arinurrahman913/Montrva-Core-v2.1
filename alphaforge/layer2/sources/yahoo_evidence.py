@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -110,28 +111,35 @@ YF_EVIDENCE_BATCH_DELAY_SECONDS = float(os.environ.get("YF_EVIDENCE_BATCH_DELAY_
 
 _batch_counter = 0
 _batch_last_time = None
+# Sama seperti finnhub.py/sec_parser.py: Evidence sekarang fetch multi-ticker
+# concurrent (EVIDENCE_WORKERS di evidence.py) — tanpa lock, _batch_counter
+# ini sendiri jadi race condition (increment bukan atomic), dan beberapa
+# thread bisa masuk blok sleep bersamaan/berantakan hitungannya.
+_lock = threading.Lock()
 
 
 def reset_batch_tracking():
     """Reset batch counter (dipanggil di awal evidence run)."""
     global _batch_counter, _batch_last_time
-    _batch_counter = 0
-    _batch_last_time = None
+    with _lock:
+        _batch_counter = 0
+        _batch_last_time = None
 
 
 def _apply_batch_delay():
     """Jeda tiap YF_EVIDENCE_BATCH_SIZE panggilan network — hanya dipanggil
     di jalur cache-miss supaya re-run yang kena cache tetap cepat."""
     global _batch_counter, _batch_last_time
-    _batch_counter += 1
-    if _batch_counter >= YF_EVIDENCE_BATCH_SIZE:
-        if _batch_last_time is None:
+    with _lock:
+        _batch_counter += 1
+        if _batch_counter >= YF_EVIDENCE_BATCH_SIZE:
+            if _batch_last_time is None:
+                _batch_last_time = time.time()
+            elapsed = time.time() - _batch_last_time
+            if elapsed < YF_EVIDENCE_BATCH_DELAY_SECONDS:
+                time.sleep(YF_EVIDENCE_BATCH_DELAY_SECONDS - elapsed)
+            _batch_counter = 0
             _batch_last_time = time.time()
-        elapsed = time.time() - _batch_last_time
-        if elapsed < YF_EVIDENCE_BATCH_DELAY_SECONDS:
-            time.sleep(YF_EVIDENCE_BATCH_DELAY_SECONDS - elapsed)
-        _batch_counter = 0
-        _batch_last_time = time.time()
 
 
 def _fetch_yahoo_info(ticker: str) -> dict:
@@ -157,8 +165,45 @@ def _fetch_yahoo_info(ticker: str) -> dict:
     return info
 
 
+# Jumlah bar harian terakhir yang dipertahankan utuh saat dipersist (~1 tahun bursa).
+PRICE_HISTORY_DAILY_BARS = 252
+
+
+def _downsample_price_history(bars: list[PriceBar]) -> list[PriceBar]:
+    """Ringkas price_history untuk dipersist: bar harian utuh ~1 tahun terakhir,
+    sisanya (tahun ke-2 s/d ke-5) jadi 1 bar per bulan kalender.
+
+    Kenapa perlu: fetch `period="5y"` menghasilkan ~1254 bar/ticker, dan pada
+    4065 ticker itu bikin evidence.json ~1.3GB. Run 2026-07-30 mati dengan
+    MemoryError persis di titik tulis evidence.json (RAM 8GB, ~3GB bebas):
+    `_atomic_write` menumpuk salinan struktur (asdict -> _sanitize -> string
+    json -> bytes UTF-8) sekaligus. Backend juga tidak sanggup, karena
+    `backend/app.py::_get_stage` men-json.load SELURUH file lalu menahannya
+    permanen di `_stage_cache` (sudah ~2GB RAM di era evidence.json 340MB).
+
+    Bar harian yang lama tidak dipakai siapa pun: Knowledge hanya butuh harga
+    acuan ~1/3/5 tahun lalu (`knowledge_helpers.calculate_returns`, kini
+    berbasis TANGGAL, bukan jumlah bar) dan chart jangka panjang cukup dengan
+    resolusi bulanan. Cache per-ticker tetap menyimpan 5 tahun harian penuh —
+    ini murni memangkas apa yang ikut dipersist ke evidence.json.
+    """
+    if len(bars) <= PRICE_HISTORY_DAILY_BARS:
+        return bars
+    recent = bars[-PRICE_HISTORY_DAILY_BARS:]
+    older = bars[:-PRICE_HISTORY_DAILY_BARS]
+    # `older` kronologis, jadi penulisan terakhir per kunci "YYYY-MM" otomatis
+    # menyisakan bar hari bursa TERAKHIR di bulan itu.
+    monthly: dict[str, PriceBar] = {}
+    for bar in older:
+        monthly[bar.date[:7]] = bar
+    return [monthly[key] for key in sorted(monthly)] + recent
+
+
 def fetch_price_market_data(ticker: str) -> PriceMarketData:
-    """Ambil harga & 1-year historical OHLCV dari Yahoo Finance (cached 6h)."""
+    """Ambil harga & 5-year historical OHLCV dari Yahoo Finance (cached 6h).
+
+    Yang di-cache: 5 tahun bar harian penuh. Yang DIKEMBALIKAN (dan ikut ke
+    evidence.json): versi ringkas — lihat `_downsample_price_history`."""
     cached = cache_get("price_market_data", ticker, PRICE_CACHE_TTL)
     if cached is not None:
         meta = cached.get("_metadata", {})
@@ -177,7 +222,9 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
             beta=cached.get("beta"),
             high_52w=cached.get("high_52w"),
             low_52w=cached.get("low_52w"),
-            price_history=[PriceBar(**b) for b in cached.get("price_history", [])]
+            price_history=_downsample_price_history(
+                [PriceBar(**b) for b in cached.get("price_history", [])]
+            ),
         )
 
     try:
@@ -272,11 +319,15 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
             price_history=price_history
         )
 
+        # Cache menyimpan 5 tahun harian PENUH (masih berguna kalau suatu saat
+        # butuh detail harian lama tanpa fetch ulang)...
         to_cache = asdict(result)
         to_cache["_metadata"] = {"source": metadata.source, "fetched_at": metadata.fetched_at, "status": metadata.status}
         del to_cache["metadata"]
         cache_set("price_market_data", ticker, to_cache)
 
+        # ...tapi yang mengalir ke evidence.json diringkas dulu.
+        result.price_history = _downsample_price_history(price_history)
         return result
     except Exception as e:
         print(f"[yahoo_price:{ticker}] gagal (post-processing/final): {e}", file=sys.stderr)
@@ -434,6 +485,14 @@ def _fetch_institutional_holders_detail(ticker: str) -> list[dict]:
             })
         return holders
 
+    # Ikut throttle yang sama dengan endpoint Yahoo lain. Sebelumnya fungsi ini
+    # (dan _fetch_earnings_history/_fetch_revenue_estimate) melewati
+    # _apply_batch_delay sama sekali — tidak terlalu terasa saat Evidence masih
+    # serial, tapi sejak jalan 5 thread paralel (EVIDENCE_WORKERS) justru cuma
+    # ketiga endpoint INI yang dihantam tanpa jeda, sementara sisanya diatur.
+    # Akibatnya field-fieldnya kelihatan "tidak tersedia" padahal sebenarnya
+    # kena throttle Yahoo.
+    _apply_batch_delay()
     return retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
                  backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
                  label=f"yahoo_holders:{ticker}")
@@ -582,6 +641,7 @@ def _fetch_earnings_history(ticker: str) -> list[dict]:
             })
         return out
 
+    _apply_batch_delay()  # lihat catatan di _fetch_institutional_holders_detail
     return retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
                  backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
                  label=f"yahoo_earnings_history:{ticker}")
@@ -610,6 +670,7 @@ def _fetch_revenue_estimate(ticker: str) -> list[dict]:
             })
         return out
 
+    _apply_batch_delay()  # lihat catatan di _fetch_institutional_holders_detail
     return retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
                  backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
                  label=f"yahoo_revenue_estimate:{ticker}")

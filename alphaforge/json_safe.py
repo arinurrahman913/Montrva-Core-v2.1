@@ -33,3 +33,16 @@ def _sanitize(obj):
 def dumps_safe(obj, **kwargs) -> str:
     """`json.dumps`, but NaN/inf/-inf are replaced with `null` first."""
     return json.dumps(_sanitize(obj), **kwargs)
+
+
+def dump_safe(obj, fp, **kwargs) -> None:
+    """`json.dump` (menulis LANGSUNG ke file), NaN/inf/-inf jadi `null`.
+
+    Dipakai untuk file besar. `dumps_safe` merakit seluruh keluaran sebagai satu
+    string di memori, lalu `Path.write_text` meng-encode-nya ke UTF-8 = satu
+    salinan bytes lagi. Pada evidence.json (~1GB) dua salinan raksasa itu saja
+    sudah cukup memicu MemoryError di mesin 8GB — persis yang membunuh run
+    2026-07-30 tepat di titik tulis, setelah 2 jam kerja. `json.dump` menulis
+    bertahap ke file handle, jadi tidak ada string/bytes raksasa yang ditahan.
+    """
+    json.dump(_sanitize(obj), fp, **kwargs)

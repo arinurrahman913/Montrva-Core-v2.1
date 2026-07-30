@@ -41,7 +41,11 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
     # Screening — kepemilikan institusional cuma ada setelah Evidence fetch
     # Yahoo .info, panggilan yang sengaja tidak dilakukan di Screening biar
     # tetap murah di skala full-market (lihat sources/yahoo_evidence.py).
-    if not evidence.institutional_ownership.percentage:
+    # `is None`, BUKAN falsy-check: 0.0 adalah jawaban VALID (banyak micro-cap
+    # memang nol kepemilikan institusional) dan fetch-nya sukses. Falsy-check
+    # menandai ticker itu "no_institutional_data" seolah datanya gagal diambil,
+    # lalu ikut memotong skor Confidence lewat SCREENING_FLAG_SECTION_PENALTY.
+    if evidence.institutional_ownership.percentage is None:
         screening_flags.append("no_institutional_data")
     size_category = infer_size_category(evidence.price_market.market_cap, screening_flags)
     sector = evidence.fundamental.sector
@@ -340,16 +344,18 @@ def _generate_quality_notes(evidence: EvidencePackage, returns: dict, volatility
     if price_hist_count < 100:
         notes.append(f"Limited price history ({price_hist_count} bars)")
 
-    # Fundamental gaps
-    if not evidence.fundamental.revenue:
+    # Fundamental gaps — semua pakai `is None`, bukan falsy-check: 0.0 adalah
+    # nilai yang sah (revenue nol untuk pra-pendapatan, FCF nol untuk breakeven)
+    # dan menandainya "missing" itu salah. net_income sudah benar sejak awal.
+    if evidence.fundamental.revenue is None:
         notes.append("Revenue missing")
     if evidence.fundamental.net_income is None:
         notes.append("Net income missing")
-    if not evidence.fundamental.free_cash_flow:
+    if evidence.fundamental.free_cash_flow is None:
         notes.append("FCF missing")
 
     # Ownership gaps
-    if not evidence.institutional_ownership.percentage:
+    if evidence.institutional_ownership.percentage is None:
         notes.append("Institutional ownership missing")
 
     # News gap

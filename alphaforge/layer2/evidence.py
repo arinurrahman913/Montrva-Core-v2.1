@@ -10,7 +10,9 @@ Lihat 03_LAYER2_SPECS/02_EVIDENCE.md.
 """
 from __future__ import annotations
 
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from .contracts import (
     ScreeningCandidate, ScreeningResult, EvidencePackage,
@@ -30,6 +32,15 @@ from .sources.sec_form4 import fetch_institutional_activity
 
 
 CROSS_REFERENCE_REVENUE_THRESHOLD_PCT = 15.0
+
+# Evidence dulu serial murni (satu ticker penuh sebelum lanjut ke ticker
+# berikutnya) — pada full-market run (~4000 ticker x 7 sumber network per
+# ticker) ini didominasi latency network yang menumpuk, bukan compute; rate
+# limiter tiap provider (Finnhub/SEC/Yahoo, lihat sources/*.py) sudah jadi
+# thread-safe (lock) khusus supaya loop ini bisa dijalankan concurrent tanpa
+# nembus limit resmi masing-masing provider. 5 dipilih moderat: cukup buat
+# overlap I/O-wait tanpa kelihatan seperti burst/spam ke provider gratis ini.
+EVIDENCE_WORKERS = int(os.environ.get("EVIDENCE_WORKERS", "5"))
 
 
 def _fmt_money(v: float) -> str:
@@ -124,23 +135,38 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
 
 
 def run_evidence(screening_result: ScreeningResult) -> list[EvidencePackage]:
-    """Jalankan Evidence collection untuk semua kandidat dari Screening."""
-    packages = []
+    """Jalankan Evidence collection untuk semua kandidat dari Screening.
+
+    Dijalankan concurrent (EVIDENCE_WORKERS thread) — tiap ticker tetap
+    independen (fetch_* per ticker tidak saling bergantung), rate limiter
+    tiap sumber sudah thread-safe. Urutan hasil di `packages` tetap mengikuti
+    urutan `screening_result.passed` asli (bukan urutan selesai), supaya
+    output run concurrent identik dengan run serial lama — cuma lebih cepat."""
     reset_finnhub_batch_tracking()  # Reset Finnhub rate limit tracking
     reset_yahoo_batch_tracking()  # Reset Yahoo Finance rate limit tracking
     reset_sec_rate_limit()  # Reset SEC EDGAR/XBRL rate limit tracking
 
-    passed_count = len(screening_result.passed)
-    for i, candidate in enumerate(screening_result.passed, 1):
-        if i % 10 == 0 or i == 1:
-            print(f"Evidence {i}/{passed_count}: {candidate.ticker}", file=sys.stderr)
+    candidates = screening_result.passed
+    total = len(candidates)
+    results: list[EvidencePackage | None] = [None] * total
+    done = 0
 
-        try:
-            pkg = build_evidence_for_ticker(candidate)
-            if pkg:
-                packages.append(pkg)
-        except Exception as e:
-            print(f"Error building evidence for {candidate.ticker}: {e}", file=sys.stderr)
+    with ThreadPoolExecutor(max_workers=EVIDENCE_WORKERS, thread_name_prefix="evidence-fetch") as executor:
+        future_to_index = {
+            executor.submit(build_evidence_for_ticker, candidate): idx
+            for idx, candidate in enumerate(candidates)
+        }
+        for future in as_completed(future_to_index):
+            idx = future_to_index[future]
+            candidate = candidates[idx]
+            done += 1
+            if done % 10 == 0 or done == 1:
+                print(f"Evidence {done}/{total}: {candidate.ticker}", file=sys.stderr)
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                print(f"Error building evidence for {candidate.ticker}: {e}", file=sys.stderr)
 
+    packages = [pkg for pkg in results if pkg]
     print(f"Evidence complete: {len(packages)} packages", file=sys.stderr)
     return packages

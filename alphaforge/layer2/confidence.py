@@ -179,13 +179,18 @@ def _score_valuation(profile: KnowledgeProfile) -> SectionScore:
     """03_KNOWLEDGE.md bagian 6. Rasio yang null karena secara matematis
     tidak bermakna (mis. P/E rugi) tetap dihitung sebagai "missing" di sini
     — Confidence tidak tahu bedanya dari sini, itu keputusan modul reasoning
-    yang membacanya (lihat catatan spec bagian 6)."""
+    yang membacanya (lihat catatan spec bagian 6).
+
+    Audit 2026-07-30: `pe_ratio_forward` & `ev_ebitda` dihapus dari daftar cek,
+    pola yang sama dengan _score_governance. Keduanya TIDAK PERNAH diisi
+    knowledge.py (`ev_ebitda=None  # TODO`, dan forward-PE tidak ada sama sekali
+    di FundamentalData), jadi menghitungnya sebagai "data hilang" adalah penalti
+    konstan ke SEMUA ticker — plafon section ini macet 5/7 (71%) walau data
+    ticker sempurna. Sekarang 5/5 achievable."""
     val = profile.valuation
     return _section_score([
         val.pe_ratio_trailing is not None,
-        val.pe_ratio_forward is not None,
         val.ps_ratio is not None,
-        val.ev_ebitda is not None,
         val.pb_ratio is not None,
         val.fcf_yield is not None,
         val.price_target is not None and val.price_target.upside_pct is not None,
@@ -206,34 +211,45 @@ def _score_historical_trend(profile: KnowledgeProfile) -> SectionScore:
 
 
 def _score_competitive_structure(profile: KnowledgeProfile) -> SectionScore:
-    """03_KNOWLEDGE.md bagian 3a."""
+    """03_KNOWLEDGE.md bagian 3a.
+
+    Audit 2026-07-30: `revenue_by_segment` & `tam_estimate` dihapus dari cek —
+    tidak pernah di-set knowledge.py (CompetitiveStructure dibangun hanya dengan
+    business_model/total_revenue_ttm/employees_count), jadi plafon macet 3/5
+    (60%) untuk semua ticker. Sekarang 3/3 achievable."""
     cs = profile.competitive_structure
     return _section_score([
         cs.business_model is not None,
-        bool(cs.revenue_by_segment),
         cs.total_revenue_ttm is not None,
         cs.employees_count is not None,
-        cs.tam_estimate is not None,
     ])
 
 
 def _score_competitive_momentum(profile: KnowledgeProfile) -> SectionScore:
-    """03_KNOWLEDGE.md bagian 3b."""
+    """03_KNOWLEDGE.md bagian 3b.
+
+    Audit 2026-07-30: `segment_growth` & `guidance_trend` dihapus dari cek —
+    knowledge.py men-set keduanya `None` secara eksplisit dan permanen (Evidence
+    tidak mengumpulkan datanya; gap yang sudah didokumentasikan di sana), jadi
+    plafon macet 1/3 (33%) untuk semua ticker. Tersisa satu cek yang benar-benar
+    bervariasi antar ticker (acceleration_signal butuh revenue YoY q3+q4)."""
     cm = profile.competitive_momentum
     return _section_score([
-        bool(cm.segment_growth),
-        cm.guidance_trend is not None,
         cm.acceleration_signal is not None,
     ])
 
 
 def _score_ownership(profile: KnowledgeProfile) -> SectionScore:
-    """03_KNOWLEDGE.md bagian 5."""
+    """03_KNOWLEDGE.md bagian 5.
+
+    Audit 2026-07-30: cek `insider_transactions` dihapus — knowledge.py
+    men-hardcode `[]` (TODO yang secara struktural tak terjangkau: fetcher SEC
+    EDGAR menyaring keluar Form 3/4/144), jadi plafon macet 2/3 (67%) untuk
+    semua ticker. Sekarang 2/2 achievable."""
     own = profile.ownership
     return _section_score([
         own.institutional_pct is not None,
         own.insider_pct is not None,
-        len(own.insider_transactions or []) > 0,
     ])
 
 

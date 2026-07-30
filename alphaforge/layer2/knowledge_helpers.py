@@ -2,76 +2,114 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left
+from datetime import date, timedelta
+
 from .contracts import PriceBar
+
+
+# Toleransi pencarian harga acuan: bar terdekat ke target tanggal masih dipakai
+# kalau selisihnya <= ini. 45 hari cukup longgar untuk bar bulanan (jarak antar
+# bar <=31 hari) sekaligus cukup ketat untuk menolak histori yang benar-benar
+# tidak mencapai window yang diminta (mis. ticker IPO 2 tahun lalu tidak boleh
+# dapat return_5y dari bar tertuanya).
+_ANCHOR_TOLERANCE_DAYS = 45
+
+
+def _find_price_on_or_before(sorted_dates: list[str], prices_by_date: dict[str, float],
+                             target: date) -> float | None:
+    """Harga penutupan pada bar terdekat ke `target` (arah mana pun), asalkan
+    selisihnya <= _ANCHOR_TOLERANCE_DAYS. None kalau histori tidak menjangkau."""
+    target_str = target.isoformat()
+    # sorted_dates terurut ISO (YYYY-MM-DD) = terurut kronologis, jadi bisa bisect.
+    idx = bisect_left(sorted_dates, target_str)
+    best: tuple[int, str] | None = None
+    for cand_idx in (idx - 1, idx):
+        if 0 <= cand_idx < len(sorted_dates):
+            cand = sorted_dates[cand_idx]
+            gap = abs((date.fromisoformat(cand) - target).days)
+            if best is None or gap < best[0]:
+                best = (gap, cand)
+    if best is None or best[0] > _ANCHOR_TOLERANCE_DAYS:
+        return None
+    return prices_by_date[best[1]]
 
 
 def calculate_returns(price_history: list[PriceBar]) -> dict[str, float | None]:
     """Calculate returns dari price history.
 
     Returns: {
-        'return_1y': % annual return, past 1 year (atau max available),
-        'return_3y': % annual return (CAGR), past 3 years,
-        'return_5y': % annual return (CAGR), past 5 years
+        'return_1y': % return, 1 tahun terakhir (atau seluruh histori kalau lebih pendek),
+        'return_3y': % annual return (CAGR), 3 tahun terakhir,
+        'return_5y': % annual return (CAGR), 5 tahun terakhir
     }
 
-    Catatan: return_3y/return_5y butuh >=750/>=1250 trading days histori
-    (250/tahun, toleran ke variasi kalender bursa -- lihat komentar di bawah).
-    Evidence fetch `period="5y"` dari Yahoo sejak audit 2026-07-29 (dulu
-    "1y", ~252 bar, jadi kedua field ini SELALU None untuk semua ticker --
-    keterbatasan struktural yang sebelumnya sengaja didokumentasikan, bukan
-    lagi sekarang). Trade-off yang disetujui pengguna: evidence.json (~340MB)
-    tumbuh ~5x di price_history per ticker demi mengaktifkan dua field ini.
+    Berbasis TANGGAL, bukan jumlah bar. Versi lama memakai `len(bars)` sebagai
+    proksi waktu (`>= 750` bar untuk 3 tahun, `len - 366` untuk 1 tahun) — dua
+    masalah nyata:
+
+    1. `len - 366` mundur 366 *hari bursa* (~1.45 tahun kalender, karena
+       setahun hanya ~252 hari bursa), jadi "return_1y" sebenarnya mengukur
+       ~17 bulan. Sekarang dihitung dari tanggal sebenarnya.
+    2. Proksi itu rapuh terhadap kerapatan bar. price_history yang dipersist
+       kini diringkas (harian 1 tahun terakhir + bulanan tahun ke-2..5, lihat
+       `sources/yahoo_evidence._downsample_price_history`), jadi ~300 bar
+       mewakili 5 tahun — ambang berbasis hitungan bar akan salah menyimpulkan
+       "histori kurang dari 3 tahun" dan mematikan return_3y/return_5y.
     """
     if not price_history or len(price_history) < 2:
         return {'return_1y': None, 'return_3y': None, 'return_5y': None}
 
-    # Bars sudah sorted chronologically, last = most recent
-    prices_by_date = {bar.date: bar.close for bar in price_history}
+    # Bars sudah sorted chronologically, last = most recent.
+    # `close` WAJIB divalidasi, bukan dipakai langsung: bar dengan harga NaN
+    # (baris kosong dari pandas) di-null-kan di batas serialisasi oleh
+    # json_safe.dumps_safe, jadi cache bisa berisi `close: null` yang kembali
+    # sebagai PriceBar(close=None). Versi sebelumnya langsung membandingkan
+    # `first_price <= 0` dan meledak `TypeError: '<=' not supported between
+    # NoneType and int`; karena run_knowledge menangkap exception per-ticker,
+    # ticker itu hilang dari knowledge.json tanpa jejak sama sekali — persis
+    # selisih 4065 evidence vs 4030 knowledge di run 2026-07-30.
+    prices_by_date = {
+        bar.date: float(bar.close)
+        for bar in price_history
+        if bar.date and isinstance(bar.close, (int, float)) and not isinstance(bar.close, bool)
+        and math.isfinite(bar.close)
+    }
+    if len(prices_by_date) < 2:
+        return {'return_1y': None, 'return_3y': None, 'return_5y': None}
     sorted_dates = sorted(prices_by_date.keys())
 
-    latest_price = prices_by_date[sorted_dates[-1]]
+    latest_date_str = sorted_dates[-1]
+    latest_price = prices_by_date[latest_date_str]
     first_price = prices_by_date[sorted_dates[0]]
 
     if first_price <= 0:
         return {'return_1y': None, 'return_3y': None, 'return_5y': None}
 
-    # Calculate based on available history
-    total_days = len(sorted_dates) - 1
-    total_return_pct = ((latest_price - first_price) / first_price) * 100
+    try:
+        latest_date = date.fromisoformat(latest_date_str)
+    except ValueError:
+        # Format tanggal tak terduga — jangan mengarang angka, laporkan kosong.
+        return {'return_1y': None, 'return_3y': None, 'return_5y': None}
 
-    # 1-year return. Kalau histori total <=365 hari, ya itu returnnya
-    # (semua histori yang ada = window "1 tahun"). Kalau histori lebih
-    # panjang, HARUS ambil harga dari ~365 hari lalu (bukan first_price,
-    # yang bisa jadi dari bertahun-tahun lalu) — bug sebelumnya dulu pakai
-    # first_price + _cagr(...,1) seolah-olah first_price itu persis 1 tahun
-    # lalu, padahal bisa jauh lebih lama, menghasilkan angka annualized
-    # yang salah total.
-    if total_days <= 365:
-        return_1y = total_return_pct
+    span_days = (latest_date - date.fromisoformat(sorted_dates[0])).days
+
+    # 1-year return. Kalau seluruh histori <1 tahun, seluruh histori ITU
+    # window-nya (bukan diannualisasi — melebih-lebihkan return ticker baru).
+    if span_days <= 365:
+        return_1y = ((latest_price - first_price) / first_price) * 100
     else:
-        idx_1y_ago = max(0, len(sorted_dates) - 366)
-        price_1y_ago = prices_by_date[sorted_dates[idx_1y_ago]]
-        return_1y = ((latest_price - price_1y_ago) / price_1y_ago) * 100 if price_1y_ago > 0 else None
+        price_1y_ago = _find_price_on_or_before(
+            sorted_dates, prices_by_date, latest_date - timedelta(days=365))
+        return_1y = (((latest_price - price_1y_ago) / price_1y_ago) * 100
+                     if price_1y_ago and price_1y_ago > 0 else None)
 
-    # 3-year CAGR (roughly 750 trading days = 3 years -- 250/tahun, bukan 252,
-    # supaya toleran ke variasi kalender bursa riil: yfinance period="5y"
-    # ternyata mengembalikan ~1253-1254 hari untuk AAPL, bukan persis 1260
-    # (252*5) -- ambang yang terlalu kaku bikin return_5y gagal padahal
-    # histori yang tersedia sudah SANGAT dekat 5 tahun kalender (audit
-    # 2026-07-29, ditemukan pas mengaktifkan field ini pertama kali).
-    price_3y_ago = None
-    date_3y_ago = None
-    if total_days >= 750:
-        date_3y_ago = sorted_dates[max(0, len(sorted_dates) - 750)]
-        price_3y_ago = prices_by_date[date_3y_ago]
-
+    price_3y_ago = _find_price_on_or_before(
+        sorted_dates, prices_by_date, latest_date - timedelta(days=365 * 3))
     return_3y = _cagr(price_3y_ago, latest_price, 3) if price_3y_ago else None
 
-    # 5-year CAGR (roughly 1250 trading days = 5 years, lihat catatan di atas)
-    price_5y_ago = None
-    if total_days >= 1250:
-        price_5y_ago = prices_by_date[sorted_dates[max(0, len(sorted_dates) - 1250)]]
-
+    price_5y_ago = _find_price_on_or_before(
+        sorted_dates, prices_by_date, latest_date - timedelta(days=365 * 5))
     return_5y = _cagr(price_5y_ago, latest_price, 5) if price_5y_ago else None
 
     return {
@@ -323,6 +361,20 @@ def infer_business_model(industry: str | None) -> str | None:
     return _INDUSTRY_BUSINESS_MODEL.get(industry, "other")
 
 
+def _snapshot_date(snapshot) -> date | None:
+    """Tanggal PriceTargetSnapshot sebagai objek `date`, None kalau tak terbaca.
+
+    Akses atribut (bukan dict) — konsisten dengan pemakaian `.target_mean` di
+    calculate_price_target_metrics; pemanggilnya selalu mengirim dataclass."""
+    raw = getattr(snapshot, "date", None)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except ValueError:
+        return None
+
+
 def calculate_price_target_metrics(
     current_price: float | None,
     analyst_estimates: dict | None,
@@ -367,12 +419,36 @@ def calculate_price_target_metrics(
     if metrics['target_mean'] and metrics['target_mean'] > 0:
         metrics['upside_pct'] = ((metrics['target_mean'] - current_price) / current_price) * 100
 
+    # Tren 3 BULAN, dibatasi berdasarkan TANGGAL. Versi sebelumnya memakai
+    # price_target_history[0] (entri tertua yang ada) sebagai pembanding tanpa
+    # filter tanggal apa pun — karena price_target.sync_price_target_history()
+    # menambah satu snapshot per hari sampai MAX_SNAPSHOTS_PER_TICKER (400,
+    # ~13 bulan), window-nya membesar terus setiap hari pipeline jalan. Setelah
+    # 9 bulan berjalan, angka yang dilabeli "3M" sebenarnya perubahan 9 bulan,
+    # sementara reasoning.py tetap mencetaknya sebagai "over 3M".
     if price_target_history and len(price_target_history) >= 2:
-        oldest = price_target_history[0]
         latest = price_target_history[-1]
-        if oldest.target_mean and latest.target_mean and oldest.target_mean > 0:
-            metrics['price_target_trend_3m'] = (
-                (latest.target_mean - oldest.target_mean) / oldest.target_mean
-            ) * 100
+        cutoff = _snapshot_date(latest)
+        baseline = None
+        if cutoff is not None:
+            target_date = cutoff - timedelta(days=90)
+            # Snapshot terlama yang MASIH di dalam/dekat window 3 bulan:
+            # ambil yang paling tua namun >= target_date; kalau tidak ada yang
+            # memenuhi (histori masih pendek), pakai yang tertua yang ada asalkan
+            # tidak lebih lama dari toleransi, supaya tidak diam-diam melebar.
+            in_window = [s for s in price_target_history[:-1]
+                         if (d := _snapshot_date(s)) is not None and d >= target_date]
+            if in_window:
+                baseline = in_window[0]
+            else:
+                oldest = price_target_history[0]
+                d = _snapshot_date(oldest)
+                if d is not None and (cutoff - d).days <= 90 + _ANCHOR_TOLERANCE_DAYS:
+                    baseline = oldest
+        if baseline is not None and baseline is not latest:
+            if baseline.target_mean and latest.target_mean and baseline.target_mean > 0:
+                metrics['price_target_trend_3m'] = (
+                    (latest.target_mean - baseline.target_mean) / baseline.target_mean
+                ) * 100
 
     return metrics

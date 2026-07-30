@@ -176,6 +176,15 @@ def build_peer_comparison(
     nm_values = [p.financial_health.net_margin_trend.q4 for p in peers
                   if p.financial_health.net_margin_trend.q4 is not None]
 
+    # revenue_growth: pakai YoY kuartal terakhir (revenue_trend.yoy_q4) sebagai
+    # proksi pertumbuhan. Field `revenue_growth_comparison` sudah lama ada di
+    # PeerComparisonResult dan METRIC_DIRECTION, dan reasoning.py Multibagger
+    # sudah membacanya untuk bonus +6 "tumbuh lebih cepat dari peer" — tapi
+    # TIDAK ADA yang pernah mengisinya, jadi bonus itu tidak pernah menyala
+    # untuk ticker mana pun sejak fitur itu dibuat.
+    rg_values = [p.financial_health.revenue_trend.yoy_q4 for p in peers
+                 if p.financial_health.revenue_trend.yoy_q4 is not None]
+
     roe_values = [p.financial_health.roe for p in peers if p.financial_health.roe is not None]
     roa_values = [p.financial_health.roa for p in peers if p.financial_health.roa is not None]
     dte_values = [p.financial_health.balance_sheet.debt_to_equity for p in peers
@@ -190,6 +199,8 @@ def build_peer_comparison(
     gm_comp = calculate_metric_comparison("gross_margin", target_profile.financial_health.gross_margin_trend.q4, gm_values, peer_tickers, peer_failures)
     om_comp = calculate_metric_comparison("operating_margin", target_profile.financial_health.operating_margin_trend.q4, om_values, peer_tickers, peer_failures)
     nm_comp = calculate_metric_comparison("net_margin", target_profile.financial_health.net_margin_trend.q4, nm_values, peer_tickers, peer_failures)
+
+    rg_comp = calculate_metric_comparison("revenue_growth", target_profile.financial_health.revenue_trend.yoy_q4, rg_values, peer_tickers, peer_failures)
 
     roe_comp = calculate_metric_comparison("roe", target_profile.financial_health.roe, roe_values, peer_tickers, peer_failures)
     roa_comp = calculate_metric_comparison("roa", target_profile.financial_health.roa, roa_values, peer_tickers, peer_failures)
@@ -206,6 +217,7 @@ def build_peer_comparison(
         gross_margin_comparison=gm_comp,
         operating_margin_comparison=om_comp,
         net_margin_comparison=nm_comp,
+        revenue_growth_comparison=rg_comp,
         roe_comparison=roe_comp,
         roa_comparison=roa_comp,
         debt_to_equity_comparison=dte_comp,

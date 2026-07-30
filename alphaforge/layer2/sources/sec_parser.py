@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -40,12 +41,18 @@ SEC_RETRIES = 2
 SEC_RETRY_BACKOFF_SECONDS = 3.0
 
 _last_call_time = None
+# Sama seperti finnhub.py: Evidence sekarang fetch multi-ticker concurrent
+# (EVIDENCE_WORKERS di evidence.py), jadi check-then-sleep di bawah butuh
+# lock supaya atomic — tanpa ini, beberapa thread bisa lolos cek bersamaan
+# dan nembus limit 10 req/detik SEC.gov secara gabungan.
+_lock = threading.Lock()
 
 
 def reset_sec_rate_limit():
     """Reset rate-limit tracking (dipanggil di awal evidence run)."""
     global _last_call_time
-    _last_call_time = None
+    with _lock:
+        _last_call_time = None
 
 
 def apply_sec_rate_limit():
@@ -55,12 +62,13 @@ def apply_sec_rate_limit():
     timer sendiri (kalau tidak, throughput gabungan bisa 2x lipat dari yang
     dikira)."""
     global _last_call_time
-    now = time.time()
-    if _last_call_time is not None:
-        elapsed = now - _last_call_time
-        if elapsed < SEC_MIN_INTERVAL_SECONDS:
-            time.sleep(SEC_MIN_INTERVAL_SECONDS - elapsed)
-    _last_call_time = time.time()
+    with _lock:
+        now = time.time()
+        if _last_call_time is not None:
+            elapsed = now - _last_call_time
+            if elapsed < SEC_MIN_INTERVAL_SECONDS:
+                time.sleep(SEC_MIN_INTERVAL_SECONDS - elapsed)
+        _last_call_time = time.time()
 
 # us-gaap tags, urutan = prioritas fallback (perusahaan beda-beda pakai tag berbeda).
 REVENUE_TAGS = [
@@ -81,10 +89,25 @@ SHARES_OUTSTANDING_TAGS = ["CommonStockSharesOutstanding", "CommonStockSharesIss
 _HEADERS = {"User-Agent": SEC_USER_AGENT}
 
 
+# Memo in-process untuk peta ticker->CIK. Tanpa ini, tiap panggilan membaca +
+# meng-parse ulang file cache berisi ribuan entri dari disk; get_cik_from_ticker
+# dipanggil 4x per ticker (sec_filings, form4, quarterly, shares_outstanding),
+# jadi ~16.000 kali per run full-market. json.loads menahan GIL, sehingga di
+# mode 5-thread ini ikut menyerialkan kerja CPU antar thread.
+_cik_map_memo: dict[str, str] | None = None
+_cik_map_lock = threading.Lock()
+
+
 def _get_ticker_cik_map() -> dict[str, str]:
-    """Fetch (atau baca dari cache) mapping TICKER -> CIK 10-digit zero-padded."""
+    """Fetch (atau baca dari cache/memo) mapping TICKER -> CIK 10-digit zero-padded."""
+    global _cik_map_memo
+    if _cik_map_memo is not None:
+        return _cik_map_memo
+
     cached = cache.get("sec_edgar", "ticker_cik_map", _TICKER_MAP_TTL)
     if cached is not None:
+        with _cik_map_lock:
+            _cik_map_memo = cached
         return cached
 
     try:
@@ -107,6 +130,8 @@ def _get_ticker_cik_map() -> dict[str, str]:
         if entry.get("ticker")
     }
     cache.set("sec_edgar", "ticker_cik_map", mapping)
+    with _cik_map_lock:
+        _cik_map_memo = mapping
     return mapping
 
 

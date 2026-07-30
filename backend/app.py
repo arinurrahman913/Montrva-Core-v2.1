@@ -36,6 +36,9 @@ from alphaforge.layer2.sources.sector_map import (  # noqa: E402
 from alphaforge.layer2.ai_narrative import get_or_generate_narrative  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
+# Sama dengan LOG_DIR di scripts/refresh_full_pipeline.py — log kegagalan
+# refresh ditulis ke sini (lihat _dump_failure_log).
+LOG_DIR = ROOT / "logs"
 
 # Lapisan pribadi -- OPSIONAL. Kalau alphaforge/personal/ atau
 # backend/personal_routes.py dihapus (rilis publik), import ini gagal dan
@@ -245,6 +248,57 @@ _refresh_state: dict = {
 }
 
 
+# Baris-baris yang BUKAN pesan exception sesungguhnya: catatan konteks PEP 678
+# (Python 3.11+) yang dicetak SETELAH baris exception, plus rangka traceback.
+# Dulu kode ini cuma menyimpan `err.splitlines()[-1]`, yang untuk error json
+# justru mengambil catatannya ("when serializing dict item 'packages'") dan
+# MEMBUANG penyebab aslinya (run 2026-07-30: MemoryError) — 2 jam kerja hilang
+# tanpa satu pun petunjuk yang bisa dipakai.
+_TRACEBACK_NOISE_PREFIXES = (
+    "when serializing ", "Traceback (most recent call last)", "  File \"", "    ",
+    "The above exception", "During handling of", "^", "~",
+)
+
+def _summarize_failure(err: str, returncode: int) -> str:
+    """Ambil baris exception yang benar-benar informatif dari stderr.
+
+    Dicari dari BAWAH ke atas, melewati catatan PEP 678 dan rangka traceback,
+    lalu mengembalikan baris pertama yang terlihat seperti pesan exception.
+    Catatan konteks tetap disertakan sebagai ekor kalau ada, karena berguna
+    untuk tahu di titik mana kegagalannya."""
+    lines = [ln.rstrip() for ln in err.splitlines() if ln.strip()]
+    if not lines:
+        return f"exit code {returncode}"
+
+    note = None
+    for line in reversed(lines):
+        if line.startswith("when serializing "):
+            note = line
+            continue
+        if line.startswith(_TRACEBACK_NOISE_PREFIXES):
+            continue
+        return f"{line} [{note}]" if note else line
+    return lines[-1]
+
+
+def _dump_failure_log(mode: str, sector: str | None, returncode: int, out: str, err: str) -> None:
+    """Simpan stdout+stderr LENGKAP ke file supaya kegagalan bisa didiagnosis.
+
+    `subprocess.run(capture_output=True)` menahan seluruh keluaran di memori,
+    dan sebelumnya semuanya dibuang kecuali satu baris. Sekarang utuh di disk."""
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%S")
+        path = LOG_DIR / f"refresh_failure_{mode}_{stamp}.log"
+        with open(path, "w", encoding="utf-8", errors="replace") as f:
+            f.write(f"mode={mode} sector={sector} returncode={returncode}\n")
+            f.write(f"=== STDERR ({len(err)} chars) ===\n{err}\n")
+            f.write(f"=== STDOUT ({len(out)} chars) ===\n{out}\n")
+        print(f"[refresh] kegagalan lengkap ditulis ke {path}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[refresh] gagal menulis log kegagalan: {exc}", file=sys.stderr)
+
+
 def _run_refresh(mode: str, sector: str | None = None) -> None:
     script = REFRESH_SCRIPTS[mode]
     ok = False
@@ -277,8 +331,8 @@ def _run_refresh(mode: str, sector: str | None = None) -> None:
         if ok:
             msg = out.splitlines()[-1] if out else "Selesai."
         else:
-            tail = err.splitlines()[-1] if err else f"exit code {proc.returncode}"
-            msg = f"Gagal: {tail}"
+            msg = f"Gagal: {_summarize_failure(err, proc.returncode)}"
+            _dump_failure_log(mode, sector, proc.returncode, out, err)
     except subprocess.TimeoutExpired:
         # Pesan sebelumnya hardcode ">30 menit" walau timeout sesungguhnya
         # yang dipakai bisa 4/6 jam (mode="full") -- salah info soal berapa

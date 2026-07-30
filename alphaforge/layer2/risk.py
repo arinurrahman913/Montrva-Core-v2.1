@@ -195,12 +195,18 @@ def _detect_financial_extremes(profile: KnowledgeProfile, existing_flags: list[R
         ))
         risk_score += 20
 
-    # Declining margins
-    if fh.net_margin_trend.q4 is not None and fh.net_margin_trend.q4 < -0.05:
+    # Declining margins.
+    # net_margin_trend.q4 berskala PERSEN-POIN (-12.3 berarti -12.3%), lihat
+    # knowledge_helpers.compute_financial_trends yang menghitung (ni/rev)*100 —
+    # konvensi yang sama dipakai reasoning.py (ambang `> 5` / `< 0`).
+    # Dulu di sini ambangnya `-0.05` (efektif "margin negatif apa pun") dan
+    # formatnya `:.2%` yang MENGALIKAN 100 sekali lagi, jadi margin riil -12.3%
+    # tercetak sebagai "-1230.00%" di deskripsi red flag.
+    if fh.net_margin_trend.q4 is not None and fh.net_margin_trend.q4 < 0:
         flags.append(RedFlag(
             flag_type="declining_margin",
             severity="medium",
-            description=f"Negative net margin Q4 ({fh.net_margin_trend.q4:.2%})",
+            description=f"Negative net margin Q4 ({fh.net_margin_trend.q4:.2f}%)",
             affected_metrics=["profitability", "operational_efficiency"]
         ))
         risk_score += 15

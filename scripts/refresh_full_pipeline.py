@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe  # noqa: E402
+from alphaforge.json_safe import dump_safe  # noqa: E402
 from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
 from alphaforge.layer2.screening import run_screening  # noqa: E402
@@ -89,9 +89,26 @@ logging.basicConfig(
 log = logging.getLogger("refresh_full_pipeline")
 
 
+# Di atas ambang ini, file ditulis TANPA indent. `indent=2` membengkakkan
+# keluaran ~30-40% (satu baris + spasi per field) — pada evidence.json itu
+# ratusan MB ekstra yang tidak pernah dibaca manusia (semua konsumennya
+# JSON.parse / json.load). File kecil tetap di-indent supaya enak di-diff.
+_COMPACT_WRITE_THRESHOLD_ITEMS = 500
+
+
 def _atomic_write(path: Path, data: dict) -> None:
+    """Tulis JSON secara atomik (tmp + os.replace) dan hemat memori.
+
+    Streaming lewat `dump_safe` (bukan merakit string raksasa lalu write_text)
+    — lihat docstring `alphaforge.json_safe.dump_safe` untuk kenapa: run
+    2026-07-30 mati MemoryError di titik tulis evidence.json.
+    """
+    # Struktur berisi list panjang (packages/profiles/entries) = file besar.
+    big = any(isinstance(v, list) and len(v) > _COMPACT_WRITE_THRESHOLD_ITEMS
+              for v in data.values())
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(dumps_safe(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8") as f:
+        dump_safe(data, f, indent=None if big else 2, ensure_ascii=False)
     os.replace(tmp, path)
 
 

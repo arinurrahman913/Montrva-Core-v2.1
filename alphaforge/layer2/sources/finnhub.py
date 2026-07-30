@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
 import requests
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from ...cache import get as cache_get, set as cache_set
 from ..contracts import SourceMetadata, CompanyNews, NewsCollection
 from ._retry import retry
 
@@ -44,14 +47,25 @@ FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 FINNHUB_MIN_INTERVAL_SECONDS = float(os.environ.get("FINNHUB_MIN_INTERVAL_SECONDS", "1.05"))
 FINNHUB_RETRIES = 2
 FINNHUB_RETRY_BACKOFF_SECONDS = 3.0
+# Lihat docstring fetch_company_news untuk kenapa 12 jam.
+FINNHUB_NEWS_CACHE_TTL = float(os.environ.get("FINNHUB_NEWS_CACHE_TTL", 12 * 3600))
 
 _last_call_time = None
+# Evidence sekarang fetch multi-ticker concurrent (lihat evidence.py
+# EVIDENCE_WORKERS) — tanpa lock ini, check-then-sleep di bawah adalah race
+# condition klasik: 2+ thread bisa baca _last_call_time yang sama, sama-sama
+# lolos cek "elapsed >= MIN_INTERVAL", lalu request beneran nembus limit
+# 60/menit Finnhub. Lock bikin seluruh check+sleep+update atomic, jadi
+# rate-limit tetap dihormati SECARA GLOBAL walau banyak thread motret ticker
+# yang beda-beda bersamaan.
+_lock = threading.Lock()
 
 
 def reset_batch_tracking():
     """Reset rate-limit tracking (dipanggil di awal evidence run)."""
     global _last_call_time
-    _last_call_time = None
+    with _lock:
+        _last_call_time = None
 
 
 def _apply_rate_limit():
@@ -59,16 +73,43 @@ def _apply_rate_limit():
     membatasi throughput di bawah 60 req/menit, bukan cuma jeda periodik
     yang bisa kelewat."""
     global _last_call_time
-    now = time.time()
-    if _last_call_time is not None:
-        elapsed = now - _last_call_time
-        if elapsed < FINNHUB_MIN_INTERVAL_SECONDS:
-            time.sleep(FINNHUB_MIN_INTERVAL_SECONDS - elapsed)
-    _last_call_time = time.time()
+    with _lock:
+        now = time.time()
+        if _last_call_time is not None:
+            elapsed = now - _last_call_time
+            if elapsed < FINNHUB_MIN_INTERVAL_SECONDS:
+                time.sleep(FINNHUB_MIN_INTERVAL_SECONDS - elapsed)
+        _last_call_time = time.time()
 
 
 def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
-    """Ambil berita terkini dari Finnhub — dengan rate limit handling."""
+    """Ambil berita terkini dari Finnhub — dengan cache + rate limit handling.
+
+    CACHE (baru 2026-07-30) adalah pengubah durasi terbesar di seluruh pipeline.
+    Sebelumnya ini SATU-SATUNYA sumber tanpa cache sama sekali: setiap run
+    full-market menembak 4062 permintaan, dan karena free tier Finnhub dibatasi
+    60 req/menit, rate limiter global (`_apply_rate_limit`, 1.05s per panggilan)
+    memaksa tahap Evidence memakan ~71 menit — lantai keras yang TIDAK bisa
+    ditembus paralelisasi, karena batasnya per-provider, bukan per-thread.
+    Terukur: Evidence 74 menit pada run 2026-07-30, hanya 3 menit di atas lantai
+    itu — artinya concurrency 5-thread sudah nyaris sempurna dan sisa waktunya
+    murni menunggu Finnhub.
+
+    TTL 12 jam aman secara makna: jendela berita yang diminta 30 hari ke belakang
+    dan pipeline dijalankan harian, jadi isinya praktis tidak berubah dalam
+    setengah hari. Ini membuat run ulang dalam 12 jam melewati ~71 menit itu
+    sepenuhnya.
+    """
+    cached = cache_get("finnhub_news", ticker, FINNHUB_NEWS_CACHE_TTL)
+    if cached is not None:
+        meta = cached.get("_metadata", {})
+        return NewsCollection(
+            news=[CompanyNews(**n) for n in cached.get("news", [])],
+            metadata=SourceMetadata(**meta) if meta else SourceMetadata(
+                source="finnhub", fetched_at=datetime.now(timezone.utc).isoformat(), status="ok"
+            ),
+        )
+
     if not FINNHUB_API_KEY:
         metadata = SourceMetadata(
             source="finnhub",
@@ -131,6 +172,15 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
             fetched_at=datetime.now(timezone.utc).isoformat(),
             status="ok" if news_list else "degraded"
         )
+
+        # Hasil "degraded" (nihil berita) ikut di-cache: itu jawaban yang sah dan
+        # justru kasus paling sering pada ticker kecil — tanpa ini, ticker-ticker
+        # itulah yang terus-terusan menghabiskan kuota rate limit setiap run.
+        cache_set("finnhub_news", ticker, {
+            "news": [asdict(n) for n in news_list],
+            "_metadata": {"source": metadata.source, "fetched_at": metadata.fetched_at,
+                          "status": metadata.status},
+        })
 
         return NewsCollection(news=news_list, metadata=metadata)
 
