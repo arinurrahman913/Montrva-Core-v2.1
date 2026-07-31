@@ -53,12 +53,28 @@ export default function App() {
   const [activeView, setActiveView] = useState('layer1')
   const [modalTicker, setModalTicker] = useState(null)
   const [personalEnabled, setPersonalEnabled] = useState(false)
+  const [inconsistent, setInconsistent] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     api.capabilities()
       .then((d) => { if (!cancelled) setPersonalEnabled(!!d.personal_enabled) })
       .catch(() => { if (!cancelled) setPersonalEnabled(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    // Audit item C2/C9: 10 file stage ditulis atomik satu-satu di akhir
+    // pipeline, bukan satu transaksi -- kill eksternal di tengah blok itu
+    // bisa menyisakan campuran dua run berbeda. /api/consistency membaca
+    // marker session_id yang sekarang ditulis seragam di semua file itu;
+    // kalau tidak seragam, tampilkan peringatan di sini -- daripada diam-diam
+    // menyajikan data campuran tanpa satu pun yang memeriksanya (temuan
+    // audit: info-nya sudah ada sejak lama, cuma tidak ada konsumennya).
+    let cancelled = false
+    api.consistency()
+      .then((d) => { if (!cancelled) setInconsistent(!d.consistent) })
+      .catch(() => { if (!cancelled) setInconsistent(false) })
     return () => { cancelled = true }
   }, [])
 
@@ -77,6 +93,19 @@ export default function App() {
           </div>
           <GenerateButton />
         </div>
+
+        {inconsistent && (
+          <div
+            style={{
+              padding: '8px 26px', fontSize: 12.5, fontFamily: 'var(--sans)',
+              color: 'var(--bad)', background: 'rgba(251,113,133,.08)',
+              borderBottom: '1px solid rgba(251,113,133,.28)',
+            }}
+            title="File di dashboard/data/ punya session_id yang tidak seragam -- kemungkinan run pipeline terhenti di tengah blok tulis. Lihat /api/consistency untuk detail."
+          >
+            ⚠ Data tidak konsisten: sebagian file berasal dari run pipeline yang berbeda (kemungkinan run sebelumnya terhenti di tengah jalan).
+          </div>
+        )}
 
         <div className="content">
           <ActiveView onSelectTicker={setModalTicker} />

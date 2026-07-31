@@ -625,6 +625,49 @@ def get_historical_summary():
     return jsonify({"tickers": rows, "total": len(rows)})
 
 
+# 9 dari 10 stage file yang dijaga gerbang all-or-nothing punya wrapper
+# level-atas tempat "session_id" bisa disisipkan tanpa mencemari struktur
+# datanya (audit item C2/C9) -- historical_timeline.json sengaja dikecualikan
+# (bentuknya {ticker: {...}} tanpa wrapper).
+CONSISTENCY_CHECKED_STAGES = [
+    "screening", "evidence", "knowledge", "catalyst", "peer",
+    "confidence", "risk", "reasoning", "aggregator",
+]
+
+
+@app.get("/api/consistency")
+def get_consistency():
+    """Deteksi (BUKAN cegah -- lihat audit item C2/C9) dashboard/data/ yang
+    mencampur dua run pipeline berbeda. refresh_full_pipeline.py menulis 10+
+    file stage atomik SATU-SATU di gerbang "every stage succeeded", bukan
+    sebagai satu transaksi lintas file -- kill eksternal DI TENGAH blok tulis
+    itu (proses dibunuh paksa, disk penuh, dst) bisa menyisakan sebagian file
+    dari run baru (session_id baru) berdampingan dengan sebagian file yang
+    belum sempat ditimpa (session_id run sebelumnya).
+
+    Setiap file di CONSISTENCY_CHECKED_STAGES menerima "session_id" yang
+    SAMA PERSIS dari satu variabel kanonik saat run itu berhasil sampai ke
+    gerbang tulis -- jadi kalau session_id-nya tidak seragam di semua file,
+    itu berarti gerbang terakhir yang benar-benar tuntas TIDAK mencakup
+    semuanya. File lama (ditulis sebelum perbaikan ini, tidak punya
+    "session_id" sama sekali) dilaporkan sebagai None, bukan dianggap error --
+    supaya endpoint ini tidak langsung berteriak "tidak konsisten" cuma
+    karena belum semua file pernah ditulis ulang sejak perbaikan ini
+    di-deploy."""
+    session_ids: dict[str, str | None] = {}
+    for name in CONSISTENCY_CHECKED_STAGES:
+        session_ids[name] = _get_stage(name).get("session_id")
+
+    seen = {sid for sid in session_ids.values() if sid is not None}
+    consistent = len(seen) <= 1
+
+    return jsonify({
+        "consistent": consistent,
+        "session_ids": session_ids,
+        "distinct_session_ids": sorted(seen),
+    })
+
+
 @app.get("/api/capabilities")
 def get_capabilities():
     """Dibaca frontend sekali di startup untuk tahu apakah grup nav

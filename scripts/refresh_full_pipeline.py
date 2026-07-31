@@ -284,48 +284,67 @@ def main() -> int:
     # Every stage succeeded — build the JSON payloads (same shape cli.py's
     # per-stage commands already produce, so the dashboard doesn't need to
     # know or care whether a file came from the CLI or this orchestrator).
+    # `session_id` (satu variabel kanonik, dihitung sekali di awal main())
+    # ditulis ke SETIAP file stage di bawah -- audit item C2/C9: 10 file ini
+    # ditulis atomik satu-satu, bukan satu transaksi, jadi kill eksternal di
+    # TENGAH blok tulis di bawah bisa menyisakan sebagian file dari run ini
+    # (session_id baru) dan sebagian dari run kemarin (session_id lama) yang
+    # belum sempat tertimpa. Marker seragam ini tidak MENCEGAH itu (perbaikan
+    # penuh butuh staging+swap transaksional, di luar cakupan yang dipilih),
+    # tapi membuatnya BISA DIDETEKSI -- lihat backend/app.py::get_consistency.
+    # historical_timeline.json sengaja TIDAK ikut (bentuknya {ticker: {...}}
+    # tanpa wrapper level-atas; menambah key "session_id" di situ akan
+    # mencemari namespace ticker).
     screening_data = screening_result.to_dict()
+    screening_data["session_id"] = session_id
     evidence_data = {
         "screening_universe": screening_result.universe_raw,
         "screening_passed": len(screening_result.passed),
         "evidence_generated": len(evidence_packages),
         "generated_at": evidence_packages[0].generated_at if evidence_packages else None,
+        "session_id": session_id,
         "packages": [p.to_dict() for p in evidence_packages],
     }
     knowledge_data = {
         "evidence_count": len(evidence_packages),
         "knowledge_generated": len(profiles),
         "generated_at": profiles[0].metadata.evidence_date if profiles else None,
+        "session_id": session_id,
         "profiles": [p.to_dict() for p in profiles],
     }
     catalyst_data = {
         "knowledge_count": len(profiles),
         "catalyst_sets_generated": len(catalysts),
         "with_upcoming": sum(1 for c in catalysts if c.has_upcoming),
+        "session_id": session_id,
         "catalyst_sets": [c.to_dict() for c in catalysts],
     }
     peer_data = {
         "knowledge_count": len(profiles),
         "peer_comparisons_generated": len(comparisons),
         "generated_at": comparisons[0].generated_at if comparisons else None,
+        "session_id": session_id,
         "comparisons": [c.to_dict() for c in comparisons],
     }
     confidence_data = {
         "knowledge_count": len(profiles),
         "confidence_scores_generated": len(confidences),
         "generated_at": confidences[0].assessed_at if confidences else None,
+        "session_id": session_id,
         "scores": [s.to_dict() for s in confidences],
     }
     risk_data = {
         "knowledge_count": len(profiles),
         "risk_assessments_generated": len(risks),
         "generated_at": risks[0].assessed_at if risks else None,
+        "session_id": session_id,
         "assessments": [a.to_dict() for a in risks],
     }
     reasoning_data = {
         "knowledge_count": len(profiles),
         "reasoning_outputs_generated": len(reasonings),
         "generated_at": reasonings[0].generated_at if reasonings else None,
+        "session_id": session_id,
         "reasoning_outputs": [r.to_dict() for r in reasonings],
     }
     aggregator_data = {
