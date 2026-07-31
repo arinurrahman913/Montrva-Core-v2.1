@@ -113,6 +113,14 @@ ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
 # "fundamental" -> horizon lebih panjang, "momentum"/"valuation" -> lebih
 # pendek. Key-key ini persis yang sudah ditulis reasoning.py ke key_metrics,
 # BUKAN nama baru -- itulah yang bikin horizon_basis otomatis lolos P2.
+# Dari 3 key struktural ini, hanya `acceleration_signal` yang benar-benar bisa
+# terisi hari ini -- tam_estimate & segment_growth belum punya sumber data sama
+# sekali (None di 4056/4056, lihat catatan di reasoning.py:_multibagger_lens).
+# Sampai 2026-07-31 ketiganya tidak pernah muncul karena reasoning.py mencari
+# kata "positive" sementara Knowledge menulis "accelerating" -- membuat horizon
+# "lima_tahun" mustahil tercapai (0 dari 4056 call). Sesudah kata kuncinya
+# diperbaiki: 1297 ticker punya key struktural, 45 di antaranya struktural SAJA
+# (tanpa key momentum) sehingga benar-benar dapat "lima_tahun".
 _MULTIBAGGER_STRUCTURAL_KEYS = ("tam_estimate", "segment_growth", "acceleration_signal")
 _MULTIBAGGER_MOMENTUM_KEYS = ("return_1y", "analyst_upside_pct", "analyst_recommendation", "price_target_trend_3m", "eps_beat_streak")
 _QUALITY_FUNDAMENTAL_KEYS = ("net_margin_q4", "current_ratio", "debt_to_equity")
@@ -202,6 +210,15 @@ def _speculative_horizon(
         elif days <= 180:
             horizon = "bulanan"
         else:
+            # PLAFON DATA, bukan bug: catalyst.py cuma bisa menurunkan 2 jenis
+            # katalis dari Yahoo `.info` -- earnings (3128) & dividen (656),
+            # dua-duanya kuartalan. Jarak terjauh yang pernah muncul di 4056
+            # ticker cuma 90 hari (audit 2026-07-31), jadi cabang >180 hari ini
+            # tidak pernah dieksekusi: 0 call ber-horizon "enam_bulan".
+            # SENGAJA TIDAK dihapus (dan "enam_bulan" tetap di HORIZON_ALLOWED):
+            # jenis katalis berjangka panjang (FDA/regulatory/investor day)
+            # sudah tercatat sebagai fitur yang ditunda di catalyst.py -- begitu
+            # itu masuk, bucket ini hidup sendiri tanpa perubahan di sini.
             horizon = "enam_bulan"
         basis = (
             f"Katalis {nearest.kind} diperkirakan {nearest.expected_at} ({nearest.certainty}) "
@@ -241,7 +258,14 @@ def _multibagger_horizon(key_metrics: dict) -> tuple[str, str]:
     return _structural_vs_momentum_horizon(
         key_metrics, _MULTIBAGGER_STRUCTURAL_KEYS, _MULTIBAGGER_MOMENTUM_KEYS,
         structural_horizon="lima_tahun", momentum_horizon="enam_bulan", default_horizon="satu_dua_tahun",
-        structural_note="faktor struktural (TAM/segment growth) — ruang tumbuh butuh waktu tercermin penuh di harga",
+        # Dulu berbunyi "(TAM/segment growth)" -- menyesatkan sejak cabang ini
+        # benar-benar hidup (2026-07-31): dua field itu justru satu-satunya yang
+        # TIDAK pernah terisi, jadi 45 call yang dapat "lima_tahun" semuanya
+        # dipicu acceleration_signal, bukan TAM. Nama field yang sesungguhnya
+        # sudah otomatis ditempel di belakang kalimat ini oleh
+        # _structural_vs_momentum_horizon, jadi prosanya cukup menyebut
+        # KATEGORI-nya -- tetap benar jika TAM/segment_growth suatu saat terisi.
+        structural_note="faktor struktural (bukan momentum harga) — ruang tumbuh butuh waktu tercermin penuh di harga",
         momentum_note="momentum terukur — tesis sudah mulai kelihatan, tinggal dikonfirmasi kuartal berikutnya",
         default_note="Horizon default jangka menengah karena tidak ada faktor dominan jelas.",
     )

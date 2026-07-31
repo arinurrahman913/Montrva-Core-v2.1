@@ -506,6 +506,11 @@ def run_multibagger_lens(
     metrics = {}
 
     cs = profile.competitive_structure
+    # INERT: tam_estimate belum punya sumber data sama sekali -- None di
+    # 4056/4056 ticker (audit 2026-07-31). Cabang ini sengaja DIPERTAHANKAN
+    # (bukan dihapus) karena kriterianya sendiri sah menurut
+    # 07_MODULE_MULTIBAGGER.md; begitu ada sumber TAM, ia langsung hidup.
+    # Jangan salah baca skor Multibagger seolah-olah TAM ikut dinilai hari ini.
     if cs.total_revenue_ttm is not None and cs.total_revenue_ttm > 100e6:
         if cs.tam_estimate and "large" in str(cs.tam_estimate).lower():
             score += 12
@@ -513,13 +518,28 @@ def run_multibagger_lens(
             metrics["tam_estimate"] = cs.tam_estimate
 
     cm = profile.competitive_momentum
+    # INERT juga: segment_growth None di 4056/4056 (alasan sama dengan
+    # tam_estimate di atas). Praktisnya cabang `elif` di bawah yang selalu
+    # dievaluasi.
     if cm.segment_growth and "high" in str(cm.segment_growth).lower():
         score += 15
         positive.append("High segment growth")
         metrics["segment_growth"] = cm.segment_growth
-    elif cm.acceleration_signal and "positive" in str(cm.acceleration_signal).lower():
+    # Dulu mencari kata "positive", yang TIDAK PERNAH ditulis oleh siapa pun:
+    # follow-up Knowledge 2026-07-22 mengisi acceleration_signal lewat
+    # knowledge.py:_compute_acceleration_signal dengan kosakata
+    # "accelerating"/"decelerating"/"flat", dan pengecekan di sini tidak ikut
+    # diperbarui. Akibatnya 0 dari 2549 ticker yang PUNYA data ini pernah
+    # lolos, dan karena ini satu-satunya key struktural yang bisa terisi,
+    # horizon "lima_tahun" jadi mustahil tercapai di personal_reasoning.py
+    # (_MULTIBAGGER_STRUCTURAL_KEYS) -- 0 dari 4056 call, lensa yang seharusnya
+    # soal ruang tumbuh jangka panjang praktis selalu dinilai sebagai tesis
+    # momentum 6 bulan. Ditemukan audit 2026-07-31, kelas bug yang sama dengan
+    # gerbang confidence.band=='high' yang tidak pernah tercapai (2026-07-29).
+    # Aman dari false positive: "decelerating" tidak mengandung "accelerating".
+    elif cm.acceleration_signal and "accelerating" in str(cm.acceleration_signal).lower():
         score += 10
-        positive.append("Positive acceleration signal")
+        positive.append("Revenue growth accelerating")
         metrics["acceleration_signal"] = cm.acceleration_signal
 
     ht = profile.historical_trend
