@@ -441,7 +441,7 @@ dingin masih bisa melewati batas atas 2 jam.
 
 ### Temuan tambahan dari Audit #2 (di luar `ca6bf5b`)
 
-#### C6. `/api/historical` mengirim 469 MB dalam satu respons — TERBUKA
+#### C6. `/api/historical` mengirim 469 MB dalam satu respons — SELESAI (sebagian)
 `HistoricalView.jsx` memanggil `api.historical()` -> `GET /api/historical` ->
 `jsonify(_get_stage("historical"))`, lalu `_compress_response` menjalankan
 `gzip.compress(response.get_data())` — seluruh body dimaterialisasi sebagai
@@ -453,6 +453,21 @@ Padahal view itu hanya memakai lima skalar per ticker (`ticker`,
 membuat Flask (sudah ~2 GB RSS) langsung MemoryError atau macet bermenit-menit,
 selama itu semua request lain — termasuk `/api/refresh/status` yang di-poll
 tiap 2,5 detik — ikut menggantung.
+
+**Perbaikan**: `/api/historical/summary` baru (pola sama seperti
+`/api/evidence/summary`) — backend menghitung `last_halted`/`has_outcome` dari
+`entries` sekali, kirim 5 skalar per ticker saja. `HistoricalView.jsx` pindah
+ke endpoint ini. Menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang
+merupakan risiko paling akut (satu klik nav menggantungkan request lain).
+
+**Belum diselesaikan** (sebagian, karena ini yang butuh keputusan produk):
+endpoint baru masih memanggil `_get_stage("historical")`, jadi backend tetap
+mem-parse dan menahan seluruh 469MB di `_stage_cache` — cuma respons ke
+browser yang mengecil, bukan RSS Flask. Itu bagian C3 di bawah, plus akar
+soalnya: pertumbuhan `historical_timeline.json` sendiri tidak dibatasi
+by design (v2.0 menyimpan snapshot penuh sejak hari pertama, untuk evaluasi
+v2.1 yang bentuknya belum diputuskan) — retention/pruning policy perlu
+dibahas dulu, bukan sekadar perbaikan teknis.
 
 Terkait C3: total 13 berkas stage kini ~866 MB di disk, dan `_warm_cache`
 sengaja memuat **semuanya** saat startup. Dalam ~2 minggu run harian,
@@ -508,8 +523,11 @@ sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
 Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A13 sudah
-SELESAI — lihat di atas):
-1. **C6 + C3** — satu klik nav dari OOM, dan makin dekat tiap run
+SELESAI, C6 SELESAI sebagian — lihat di atas):
+1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
+   (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
+   selamanya di memori; butuh keputusan retention/pruning, bukan sekadar
+   perbaikan serving seperti C6
 2. **C1/C10** — kegagalan run merusak data yang sudah benar, tanpa jejak
 3. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
 4. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
