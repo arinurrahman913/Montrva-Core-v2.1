@@ -610,12 +610,28 @@ memori, dan `_warm_cache` masih memuat semua 13 stage file penuh saat
 startup. Tidak ada lazy-loading/eviction — ini bagian arsitektural yang
 belum disentuh, di luar cakupan "batasi pertumbuhan" yang diputuskan.
 
-#### C4. `_retry.py` bisa kehabisan thread — TERBUKA
+#### C4. `_retry.py` bisa kehabisan thread — SELESAI
 Satu pool global 32 worker dipakai semua modul. Panggilan yfinance yang
 menggantung (pernah terjadi: 40+ menit tanpa exception) membuat thread-nya
 hilang permanen karena Python tidak bisa membunuh thread. Kerugian menumpuk
 sepanjang run panjang, dan `atexit` join bisa membuat proses tidak pernah
 keluar.
+
+**Perbaikan**: (1) `_retry.py` — pool recycling: lacak submission yang
+ditinggalkan (timeout, bukan exception biasa), begitu >= 8 tercapai pool
+lama diganti pool baru (bukan `shutdown(wait=True)` yang akan menunggu
+worker yang tidak akan pernah selesai) — memulihkan kapasitas. (2)
+`refresh_full_pipeline.py` — `os._exit()` alih-alih `sys.exit()` di titik
+masuk produksi (tidak ada API publik untuk membuat worker
+`ThreadPoolExecutor` jadi daemon thread), mem-bypass `atexit` join yang bisa
+menggantung selamanya; aman karena semua tulis file yang berarti sudah
+selesai lewat `os.replace()` durable di titik itu.
+
+Diverifikasi: (1) simulasi 3 panggilan "macet" memicu pool recycling tepat
+di ambang, panggilan cepat sesudahnya tetap instan (kapasitas pulih). (2)
+Skrip standalone yang mereplikasi pola executor+timeout+exit: `sys.exit()`
+macet penuh sampai timeout paksa 5 detik; `os._exit()` keluar bersih dalam
+0.13 detik.
 
 #### C5. ETA di tombol Generate — GUGUR
 `GenerateButton.jsx` menulis "~1.5-2 jam"; run terverifikasi memakan **86 menit
@@ -660,17 +676,34 @@ diproyeksikan gagal dalam ~2 minggu run harian — dengan retensi terbatas,
 terbatas, tapi 12 file stage lain (termasuk evidence.json) tetap tumbuh
 mengikuti ukuran universe, bukan waktu.
 
-#### C7. `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0` — TERBUKA
+#### C7. `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0` — SELESAI
 Siapa pun di jaringan yang sama bisa memulai pipeline 6 jam, atau membaca
 `/api/refresh/status`. `personal_routes.py` menyatakan asumsi "hanya lokal",
 tapi `app.run(host="0.0.0.0")` bertentangan dengan itu.
 
-#### C8. `save_personal_history` menulis non-atomik — TERBUKA
+**Konteks penting**: `render.yaml` mengonfigurasi deploy ke Render.com sebagai
+web service publik (WAJIB bind `0.0.0.0` untuk bisa diakses sama sekali) —
+dikonfirmasi ke pengguna dulu sebelum mengubah apa pun, supaya tidak
+mematikan deployment nyata kalau memang ada. **Dikonfirmasi**: `render.yaml`
+sudah tidak dipakai, dashboard cuma jalan lokal.
+
+**Perbaikan**: `host="127.0.0.1"` — merealisasikan asumsi "local-only" yang
+sudah dinyatakan di tempat lain, bukan keputusan keamanan baru. Diverifikasi
+lewat inspeksi `/proc/net/tcp` pada server sungguhan: kode lama menampilkan
+"Running on all addresses (0.0.0.0)" + alamat non-loopback; kode baru hanya
+listening di 127.0.0.1.
+
+#### C8. `save_personal_history` menulis non-atomik — SELESAI
 `personal/personal_historical.py` memakai `open(..., "w")` biasa — satu-satunya
 penulis di basis kode yang tidak memakai tmp+replace. Kill saat menulis
 meninggalkan JSON terpotong, dan karena berkas itu tidak ikut `_warm_cache`,
 kegagalannya baru muncul sebagai HTTP 500 di `/api/personal/*` dan tidak pulih
 sendiri.
+
+**Perbaikan**: pola tmp+`os.replace()` yang sama seperti tempat lain di
+codebase. Diverifikasi: simulasi kegagalan saat menulis ulang file yang
+sudah berisi data valid — kode lama meninggalkan file KOSONG TOTAL (`open`
+truncate segera saat dibuka); kode baru mempertahankan isi lama persis.
 
 #### C9. `18` tulis berurutan, bukan 10 — SELESAI (sebagian, memperjelas C2)
 Rentang penulisan terukur 86 detik pada run 2026-07-30 (06:55:12 -> 06:56:38):
@@ -744,18 +777,19 @@ ordinal).
 
 SELESAI (penuh atau sebagian sesuai keputusan pengguna): A3, A4, A5, A7, A8
 (sebagian), A13, B1, B2, B3, B4, B5, B6, B7 (sebagian), B8, B9, B10, B11, C1,
-C2, C3, C6, C9, C10. Sisa TERBUKA:
+C2, C3 (pertumbuhan dibatasi), C4, C6, C7, C8, C9, C10.
+
+Semua temuan Audit #1/#2 sudah ditindaklanjuti kecuali yang secara eksplisit
+BUTUH KEPUTUSAN PRODUK lebih lanjut (bukan bug yang bisa diperbaiki sepihak)
+atau PENAMBAHAN FITUR (bukan perbaikan cacat):
 
 - **A8 (sisa)** — apakah section 1-cek biner pantas mengayunkan skor 5 poin
-  penuh; butuh keputusan kalibrasi seperti A7, bukan bug murni
+  penuh; butuh keputusan kalibrasi seperti A7
 - **B7 (sisa)** — CLI `reasoning` tidak menerima argumen peer/catalyst/layer1;
-  penambahan fitur, bukan bug (keterbatasan scope tool debug per-stage yang
-  sudah didokumentasikan)
+  keterbatasan scope tool debug per-stage yang sudah didokumentasikan,
+  memperluasnya adalah fitur baru
 - **C3 (sisa arsitektural)** — `_stage_cache` masih menahan SEMUA stage file
   permanen di memori tanpa lazy-loading/eviction; retensi cuma membatasi
   PERTUMBUHAN `historical_timeline.json`, bukan cara backend menahannya
-- **C2/C9 (peningkatan)** — kalau suatu saat mau transaksi penuh
-  (staging+swap), bukan cuma deteksi
-- **C4** — `_retry.py` bisa kehabisan thread (pool global 32 worker)
-- **C7** — `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0`
-- **C8** — `save_personal_history` menulis non-atomik
+- **C2/C9 (peningkatan opsional)** — kalau suatu saat mau transaksi penuh
+  (staging+swap) alih-alih marker+deteksi
