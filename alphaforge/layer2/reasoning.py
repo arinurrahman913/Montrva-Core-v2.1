@@ -20,6 +20,7 @@ from .reasoning_contracts import (
     MULTIBAGGER_STANCES, QUALITY_STANCES, SPECULATIVE_STANCES,
     validate_module_output,
 )
+from .confidence import BAND_HIGH_THRESHOLD, BAND_MEDIUM_THRESHOLD
 
 if TYPE_CHECKING:
     from .catalyst_contracts import CatalystSet
@@ -118,9 +119,9 @@ def _module_confidence(
     if knowledge_gaps:
         limiters.append(f"{len(knowledge_gaps)} field missing dalam scope modul ini")
 
-    if score >= 70:
+    if score >= BAND_HIGH_THRESHOLD:
         band = "high"
-    elif score >= 40:
+    elif score >= BAND_MEDIUM_THRESHOLD:
         band = "medium"
     else:
         band = "low"
@@ -312,7 +313,7 @@ def run_quality_lens(
         score -= 8
         negative.append(f"Auditor changes ({len(gov.auditor_changes)})")
 
-    if confidence and confidence.overall.score < 40:
+    if confidence and confidence.overall.score < BAND_MEDIUM_THRESHOLD:
         score -= 10
         negative.append("Low data confidence")
 
@@ -607,7 +608,7 @@ def run_multibagger_lens(
         except (ValueError, IndexError):
             pass
 
-    if confidence and confidence.overall.score < 40:
+    if confidence and confidence.overall.score < BAND_MEDIUM_THRESHOLD:
         score -= 12
         negative.append("Insufficient data for growth thesis")
 
