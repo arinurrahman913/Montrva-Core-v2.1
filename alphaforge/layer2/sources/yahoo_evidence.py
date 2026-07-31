@@ -398,10 +398,19 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
     try:
         info = _fetch_yahoo_info(ticker)
 
+        # Audit item B9: dulu status="ok" tanpa syarat. Ticker delisted
+        # membuat yfinance mengembalikan `.info` KOSONG ({}) -- di-cache 24
+        # jam oleh _fetch_yahoo_info (perilaku itu sendiri wajar, sama
+        # seperti cache "degraded" nihil hasil di finnhub.py), tapi
+        # metadata di sini tetap mengklaim fetch berhasil sementara SEMUA
+        # field jadi None lewat _safe_float(info.get(...)). Fungsi
+        # fetch_institutional_ownership/fetch_company_profile/
+        # fetch_analyst_estimates di modul ini sudah benar mengondisikan
+        # status pada ada-tidaknya data -- ini menyamakan pola yang sama.
         metadata = SourceMetadata(
             source="yahoo_finance",
             fetched_at=datetime.now(timezone.utc).isoformat(),
-            status="ok"
+            status="ok" if info else "missing"
         )
 
         data = FundamentalData(
