@@ -401,7 +401,7 @@ masuk ke `ca6bf5b`; selebihnya berlanjut ke daftar TERBUKA di Audit #2.
 
 ### Temuan struktural yang masih TERBUKA
 
-#### C1. `/api/ticker/<t>` bisa mencampur data dari dua run berbeda — TERBUKA
+#### C1. `/api/ticker/<t>` bisa mencampur data dari dua run berbeda — SELESAI
 `price_target.py::sync_price_target_history` dan
 `catalyst_history.py::sync_catalyst_history` menulis ke disk **di tengah run**,
 sebelum gerbang all-or-nothing, sementara 10 file lain menunggu gerbang itu.
@@ -414,6 +414,25 @@ Ini terbukti aktif saat audit #1: `price_target_history.json` punya snapshot
 
 Tidak aktif selama data konsisten satu run, tapi muncul lagi setiap kali ada
 run yang gagal di tengah.
+
+**Perbaikan**: `sync_price_target_history`/`sync_catalyst_history` sekarang
+HANYA menghitung store terupdate secara in-memory (tetap melekatkan
+accumulated series ke evidence_packages/catalyst_sets seperti biasa, dibutuhkan
+Knowledge/reasoning di run yang sama) — pemanggilan `save_price_target_store`/
+`save_catalyst_history_store` yang sesungguhnya menulis ke disk dipindah ke
+blok "every stage succeeded" di `refresh_full_pipeline.py`, sejajar dengan 10
+`_atomic_write` lain. Gagal di tahap manapun sebelum itu kini benar-benar
+tidak menyentuh disk untuk kedua file ini. Satu-satunya pemanggil masing-
+masing fungsi (diverifikasi via grep) adalah `refresh_full_pipeline.py`.
+
+Diverifikasi: unit test langsung kedua fungsi (file TIDAK ada di disk setelah
+`sync_*`, ADA setelah `save_*_store` dipanggil eksplisit, isi round-trip
+benar), `py_compile` + `ruff` bersih.
+
+Catatan: ini TIDAK menyelesaikan C2/C9 (blok tulis gerbang itu sendiri tetap
+10+ tulis file terpisah, bukan satu transaksi) — itu risiko yang berbeda
+(kill eksternal di TENGAH gerbang sukses), bukan yang C1 tangani (dua file
+maju duluan SEBELUM gerbang, lalu gerbang gagal total).
 
 #### C2. Blok tulis "gerbang" tetap 10 tulis file terpisah — TERBUKA
 Masing-masing atomik sendiri (tmp + `os.replace`), tapi tanpa transaksi lintas
@@ -490,7 +509,7 @@ Rentang penulisan terukur 86 detik pada run 2026-07-30 (06:55:12 -> 06:56:38):
 10 berkas stage + 2 personal + 3 layer1/source-health + 4 snapshot root.
 Masing-masing atomik sendiri; tidak ada yang membuat himpunannya atomik.
 
-#### C10. `catalyst_history.json` merusak diri sendiri saat run gagal — TERBUKA
+#### C10. `catalyst_history.json` merusak diri sendiri saat run gagal — SELESAI
 Koreksi atas C1: berkas ini **tidak** disajikan backend sama sekali (tidak ada
 di `STAGE_FILES`), jadi tidak bisa mencemari respons API. Kerusakannya justru
 internal dan lebih halus: `sync_catalyst_history` membandingkan katalis hari ini
@@ -500,11 +519,17 @@ sepadan — sehingga run sukses berikutnya membandingkan dengan state yang sudah
 "terpakai", dan transisi katalis satu hari **hilang tanpa bisa dideteksi dari
 luar**.
 
-Catatan lain atas C1: `session_id` sebenarnya **sudah** ada di setiap elemen
-`recommendations` dan ikut dikembalikan `/api/ticker/<t>`, dan setiap snapshot
-price-target punya `date` sendiri. Jadi API secara teknis sudah memancarkan
-cukup informasi untuk mendeteksi percampuran — **tidak ada satu konsumen pun
-yang memeriksanya**.
+**Perbaikan**: sama seperti C1 — `save_catalyst_history_store` dipindah ke
+gerbang all-or-nothing, jadi run yang gagal sebelum gerbang tidak lagi
+memajukan state "active"/"resolved" internal sama sekali. Lihat detail
+perbaikan dan verifikasi di C1 di atas (satu commit, satu fix untuk keduanya).
+
+Catatan lama (sebelum perbaikan) atas C1: `session_id` sebenarnya **sudah** ada
+di setiap elemen `recommendations` dan ikut dikembalikan `/api/ticker/<t>`, dan
+setiap snapshot price-target punya `date` sendiri — jadi API secara teknis
+sudah memancarkan cukup informasi untuk mendeteksi percampuran seandainya ada
+konsumen yang memeriksanya. Sekarang sudah tidak relevan lagi karena akar
+masalahnya (dua file maju duluan) sudah dihilangkan, bukan cuma dideteksi.
 
 ---
 
@@ -522,13 +547,15 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A13 sudah
-SELESAI, C6 SELESAI sebagian — lihat di atas):
+Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A13, C1,
+C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
 1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
    (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
    selamanya di memori; butuh keputusan retention/pruning, bukan sekadar
    perbaikan serving seperti C6
-2. **C1/C10** — kegagalan run merusak data yang sudah benar, tanpa jejak
-3. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
-4. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
-5. **A3** — Ctrl+C harus benar-benar berhenti
+2. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
+3. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
+4. **A3** — Ctrl+C harus benar-benar berhenti
+5. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
+   satu transaksi (kill eksternal di TENGAH gerbang sukses masih bisa
+   mencampur hari, beda dari mekanisme C1 yang sudah diperbaiki)
