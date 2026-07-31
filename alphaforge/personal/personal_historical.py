@@ -16,6 +16,7 @@ itu yang justru sengaja ditunda (sama alasan dengan outcome=None di atas).
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
@@ -91,8 +92,22 @@ def update_personal_timeline(
 
 
 def save_personal_history(timelines: dict[str, dict], output_file: str | Path) -> None:
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(dumps_safe(timelines, indent=2, ensure_ascii=False))
+    """Tulis atomik (tmp + os.replace) — audit item C8: sebelumnya
+    `open(..., "w")` biasa, satu-satunya penulis di codebase yang tidak
+    memakai pola ini. Kill di tengah tulis meninggalkan JSON terpotong; dan
+    karena berkas ini tidak ikut `backend/app.py::_warm_cache`, kegagalan
+    baca-nya baru muncul sebagai HTTP 500 di `/api/personal/*` saat pertama
+    kali diminta, tanpa pulih sendiri (tidak seperti stage file lain yang
+    kegagalan cache-nya biasanya cuma memicu refetch)."""
+    p = Path(output_file)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    try:
+        tmp.write_text(dumps_safe(timelines, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, p)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 # Berapa lama setelah tanggal katalis sebuah tesis Speculative dinilai.

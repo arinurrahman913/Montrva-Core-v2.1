@@ -44,12 +44,14 @@ export const api = {
   reasoning: () => getJSON('/api/reasoning'),
   aggregator: () => getJSON('/api/aggregator'),
   historical: () => getJSON('/api/historical'),
+  historicalSummary: () => getJSON('/api/historical/summary'),
   sourceHealth: () => getJSON('/api/source_health'),
   ticker: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}`),
   liveQuote: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/live`),
   aiNarrative: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/ai-narrative`),
   sectors: () => getJSON('/api/sectors'),
   capabilities: () => getJSON('/api/capabilities'),
+  consistency: () => getJSON('/api/consistency'),
   // Lapisan pribadi -- cuma ada kalau backend PERSONAL_ENABLED (lihat
   // capabilities di atas). Frontend menyembunyikan nav-nya kalau false,
   // tapi fungsi ini tetap aman dipanggil (404 di-throw seperti biasa).

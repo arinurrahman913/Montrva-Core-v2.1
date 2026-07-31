@@ -145,9 +145,32 @@ mengganti satu angka salah dengan angka salah lain.
 **Perbaikan**: log lengkap ikut disimpan pada timeout, dan durasi dinyatakan
 dalam menit bila di bawah sejam.
 
+#### A13. Chart `price_history` diplot per-indeks, dan dilabeli "Tren 1 Tahun" — SELESAI
+`frontend/src/format.js` (`sparklinePoints`), `TickerModal.jsx`, `ThesisProof.jsx`
+
+Sumbu X murni ordinal (`x = (i / (sample.length - 1)) * width`); tidak ada
+plotting berbasis tanggal di mana pun di frontend. Dengan 301 bar (indeks 0-48
+= 4 tahun bulanan, indeks 49-300 = 1 tahun harian), 4 tahun pertama menempati
+~16% lebar chart sementara satu tahun terakhir menempati 84% — dan judulnya
+masih "Tren 1 Tahun", dengan normalisasi lo/hi melintasi 5 tahun penuh.
+
+**Perbaikan**: `sparklinePoints` kini memposisikan X berdasarkan `bar.date`
+(proporsional terhadap rentang waktu), dengan fallback ke index-based kalau
+ada bar tanpa tanggal valid (mis. titik quote live yang disuntik terpisah).
+`TickerModal.jsx` memakai `trendSpanLabel()` baru yang menghitung label dari
+rentang tanggal sebenarnya, bukan string statis. `ThesisProof.jsx`: titik
+quote live kini dikasih tanggal hari ini supaya ikut positioning date-based;
+sekalian diperbaiki `b.date >= since` yang membandingkan `"YYYY-MM-DD"`
+dengan timestamp ISO penuh dan leksikografis menjatuhkan bar hari anchor itu
+sendiri. `contracts.py` diperbarui dari komentar "1-year daily OHLCV" yang
+sudah tidak akurat.
+
+Diverifikasi: `vite build` sukses, `oxlint` tidak menambah temuan baru pada
+file yang diubah (dibandingkan sebelum perubahan).
+
 ### Regresi dari `ca6bf5b` — TERBUKA
 
-#### A3. `Ctrl+C` saat Evidence menggantung sampai run selesai (~70 menit) — TERBUKA
+#### A3. `Ctrl+C` saat Evidence menggantung sampai run selesai (~70 menit) — SELESAI
 `evidence.py::run_evidence`
 
 Seluruh ~4065 task disubmit di muka, dan `with ThreadPoolExecutor(...)` saat
@@ -155,10 +178,18 @@ keluar memanggil `shutdown(wait=True)` tanpa `cancel_futures=True`. Menekan
 Ctrl+C di ticker ke-200 tetap menguras 3865 task sisanya sebelum interupsi
 sempat merambat. Versi serial yang digantikan berhenti seketika.
 
-Perbaikan yang disarankan: `executor.shutdown(cancel_futures=True)` di
-`finally`, atau submit bertahap.
+**Perbaikan**: ganti `with ThreadPoolExecutor(...) as executor:` (tidak ada
+cara mengoper `cancel_futures` lewat protokol with-statement) ke try/finally
+manual, panggil `executor.shutdown(cancel_futures=True)` di `finally` — task
+yang belum mulai (mayoritas) langsung dibatalkan, cuma menunggu
+<=`EVIDENCE_WORKERS` task yang sudah mid-flight.
 
-#### A4. Throttle untuk 3 endpoint Yahoo ternyata placebo — TERBUKA
+Diverifikasi kontras langsung kode lama vs baru dengan KeyboardInterrupt
+disimulasikan setelah task ke-2 selesai (200 fake candidate, tiap task tidur
+0.3s): kode lama 12.03s dengan 200/200 task tetap jalan semua; kode baru
+0.60s dengan cuma 7/200 task yang sempat jalan.
+
+#### A4. Throttle untuk 3 endpoint Yahoo ternyata placebo — SELESAI
 `yahoo_evidence.py::_apply_batch_delay`
 
 `ca6bf5b` menambahkan `_apply_batch_delay()` ke `_fetch_institutional_holders_detail`,
@@ -179,30 +210,17 @@ melepas lock sebelum tidur akan membuat 5 thread menghitung target yang sama
 lalu menyerbu bersamaan. Tidak ada reentrancy dan tidak ada lock yang ditahan
 melintasi panggilan `retry()`.
 
-#### A13. Chart `price_history` diplot per-indeks, dan dilabeli "Tren 1 Tahun" — TERBUKA
-`frontend/src/format.js` (`sparklinePoints`), `TickerModal.jsx`, `ThesisProof.jsx`
+**Perbaikan**: checkpoint-per-batch diganti min-interval PER PANGGILAN (pola
+sama seperti `finnhub.py::_apply_rate_limit`) — `YF_EVIDENCE_MIN_INTERVAL_SECONDS
+= YF_EVIDENCE_BATCH_DELAY_SECONDS / YF_EVIDENCE_BATCH_SIZE` (0.1 detik).
+Diverifikasi kontras: kode lama pada 60 panggilan berjarak realistis (~0.21s)
+cuma sleep SEKALI (checkpoint pertama, bug bootstrap terpisah), nol sleep di
+checkpoint berikutnya — placebo total di steady state, persis diagnosis
+audit. Kode baru menahan 20 panggilan rapid-fire ~1.9 detik (throttle aktif),
+tidak menambah jeda untuk panggilan yang sudah lebih lambat dari interval
+minimal (tidak over-throttle).
 
-Sumbu X murni ordinal (`x = (i / (sample.length - 1)) * width`); tidak ada
-plotting berbasis tanggal di mana pun di frontend. Dengan 301 bar (indeks 0-48
-= **4 tahun** bulanan, indeks 49-300 = **1 tahun** harian), 4 tahun pertama
-menempati ~16% lebar chart sementara satu tahun terakhir menempati 84% —
-dan judulnya masih **"Tren 1 Tahun"**, dengan normalisasi lo/hi melintasi
-5 tahun penuh.
-
-Contoh dampak: saham yang naik $2 -> $200 dalam lima tahun lalu datar di ~$195
-sepanjang tahun ini akan menampilkan lonjakan hampir vertikal di 16% kiri
-(kejadian empat tahun lalu) di bawah judul "Tren 1 Tahun".
-
-`ThesisProof.jsx` aman untuk saat ini karena menyaring `b.date >= since` dan
-belum ada tesis yang lebih tua dari setahun — akan terdistorsi begitu ada.
-(Laten di baris yang sama: `since` berupa timestamp ISO penuh sementara
-`b.date` hanya `YYYY-MM-DD`, jadi perbandingan string menjatuhkan bar hari
-anchor itu sendiri.)
-
-Terkait: `contracts.py` masih mendokumentasikan `price_history` sebagai
-"1-year daily OHLCV" — asumsi yang sama yang tertanam di UI.
-
-#### A5. `dump_safe` hanya menghapus separuh lonjakan memori — TERBUKA
+#### A5. `dump_safe` hanya menghapus separuh lonjakan memori — SELESAI
 `json_safe.py::dump_safe`
 
 Docstring mengklaim tidak ada struktur raksasa yang ditahan, tapi
@@ -210,6 +228,16 @@ Docstring mengklaim tidak ada struktur raksasa yang ditahan, tapi
 lebih dulu** — satu salinan penuh struktur — sebelum satu byte pun ditulis.
 Jadi 2 dari 4 salinan hilang, bukan 3. Kalau universe tumbuh atau downsampling
 dimatikan, `MemoryError` yang sama kembali di baris yang sama.
+
+**Perbaikan**: `_dump_streaming` baru merekursi turun ke container
+(dict/list) menulis delimiter langsung ke file handle, sanitasi NaN/inf
+PER-LEAF saat emisi — tidak ada titik yang menahan salinan penuh/sebagian
+besar struktur. Dipakai `dump_safe` hanya saat `indent is None` (satu-
+satunya pemanggil produksi memakainya justru untuk payload besar); payload
+ber-indent (selalu kecil by construction) tetap lewat jalur lama. Diverifikasi
+12 kasus uji korektnes (termasuk key non-string, NaN/Infinity, unicode) —
+semua cocok dengan baseline lama — plus `tracemalloc` pada struktur ~5000
+item bergaya evidence.json: peak memory turun dari 35.33MB ke 0.33MB (99.1%).
 
 Perbaikan sebenarnya: subclass `json.JSONEncoder` supaya sanitasi terjadi
 per-nilai saat emisi.
@@ -234,7 +262,7 @@ memperkecil `return_5y` sekitar 1-2% relatif.
 
 ### Regresi dari `ca6bf5b` — perlu keputusan
 
-#### A7. Ambang band Confidence tidak dikalibrasi ulang setelah cek dihapus — TERBUKA
+#### A7. Ambang band Confidence tidak dikalibrasi ulang setelah cek dihapus — SELESAI
 `confidence.py` (penghapusan cek) vs ambang `>= 70 high` / `>= 40 medium`
 
 Menghapus cek untuk field yang tidak pernah terisi menaikkan *denominator*
@@ -253,11 +281,31 @@ Konsekuensi yang perlu dipertimbangkan:
   memblokir aksi eksposur penuh) berhenti memicu untuk ticker yang terdorong
   dari 35 ke 50.
 
-Ini keputusan kalibrasi, bukan bug yang jelas — perlu dibahas: apakah ambang
-70/40 dinaikkan agar makna "high/medium/low" tetap sama seperti dulu, atau
-memang diterima bahwa sekarang lebih banyak ticker layak "high".
+**Keputusan pengguna**: naikkan ambang secara proporsional supaya makna
+"high/medium/low" tetap mirip seperti sebelum penghapusan cek.
 
-#### A8. `_score_competitive_momentum` jadi degenerate (0% atau 100%) — TERBUKA
+**Perbaikan**: `BAND_HIGH_THRESHOLD = 86.0`, `BAND_MEDIUM_THRESHOLD = 49.0`
+(dari rasio 100/81.381 = 1.2288 dikali 70/40) jadi konstanta modul di
+`confidence.py`, menggantikan literal `70`/`40` di `assess_confidence` DAN 3
+tempat lain di `reasoning.py` yang punya band-logic duplikat atau
+membandingkan `confidence.overall.score` mentah terhadap ambang lama
+(`_module_confidence`, `run_quality_lens`, `run_multibagger_lens`).
+`personal_contracts.py` tidak perlu diubah — gatenya membaca `.band`
+kategorikal, otomatis ikut threshold baru.
+
+Diverifikasi: simulasi `KnowledgeProfile` terisi penuh (semua field non-dead
+terisi) menghasilkan `base_score` persis 100.0, mengonfirmasi derivasi rasio
+lewat kode sungguhan, bukan cuma aljabar di atas kertas.
+
+**Catatan ketepatan** (dicatat juga di kode): rescale linear ini eksak untuk
+ticker dengan kelengkapan data proporsional sama di semua section, tapi
+TIDAK bijektif murni dari skor gabungan untuk ticker dengan pola kelengkapan
+timpang antar section — tidak ada snapshot `knowledge.json` produksi di
+lingkungan pengembangan untuk validasi percentile-exact. Ambang ini tetap
+"kalibrasi awal" (sama seperti bobot/ambang lain di modul) — validasi ulang
+terhadap distribusi skor produksi nyata begitu tersedia.
+
+#### A8. `_score_competitive_momentum` jadi degenerate (0% atau 100%) — SELESAI (sebagian)
 `confidence.py::_score_competitive_momentum`
 
 Tersisa satu cek, jadi skornya biner dan mengayunkan `overall.score` sebesar
@@ -267,9 +315,18 @@ bukan kualitas data momentum. Saat 0, limiter "competitive_momentum data
 incomplete (0/1)" terbit untuk setiap ticker non-high, terbaca seperti data
 hilang padahal artinya "perusahaan ini punya kurang dari 5 kuartal laporan".
 
+**Perbaikan (scope terbatas, ketepatan pesan saja)**: limiter untuk
+competitive_momentum sekarang menjelaskan penyebab sebenarnya ("revenue YoY
+quarter-over-quarter tidak tersedia, perlu histori SEC EDGAR untuk 2 kuartal
+berurutan"), bukan template generik "data incomplete (N/M)".
+
+**Belum disentuh** (butuh keputusan kalibrasi seperti A7, bukan bug murni):
+apakah section 1-cek biner pantas tetap mengayunkan `overall.score` 5 poin
+penuh, atau perlu direweight/checknya diganti.
+
 ### Temuan lama yang belum dikerjakan (dikonfirmasi masih ada)
 
-#### B1. Peta CIK gagal sekali -> ~16.000 percobaan jaringan — TERBUKA
+#### B1. Peta CIK gagal sekali -> ~16.000 percobaan jaringan — SELESAI
 `sec_parser.py::_get_ticker_cik_map`
 
 Memo yang ditambahkan `ca6bf5b` hanya menutup jalur sukses; blok `except`
@@ -279,7 +336,15 @@ ticker x 4065 ticker = ~16.260 panggilan — masuk jalur jaringan lagi, masing-
 masing membayar rate limit + 2 percobaan + backoff 3 detik. Minimal ~13,5 jam
 tambahan; run tampak menggantung, bukan gagal.
 
-#### B2. Error non-RequestException di parsing news membuang seluruh paket ticker — TERBUKA
+**Perbaikan**: negative-cache dengan cooldown 60 detik — gagal sekali,
+jangan coba lagi sampai cooldown lewat (bukan permanent-negative-cache, yang
+akan membuat SELURUH run kehilangan data CIK kalau kegagalan pertama cuma
+gangguan sesaat). Diverifikasi: 500 panggilan rapid-fire dengan fetch yang
+selalu gagal menghasilkan cuma 2 percobaan jaringan (bukan 500), lalu
+retry beneran terjadi lagi setelah cooldown lewat; 5 thread x 50 panggilan
+konkuren menghasilkan cuma 10 percobaan total.
+
+#### B2. Error non-RequestException di parsing news membuang seluruh paket ticker — SELESAI
 `finnhub.py::fetch_company_news`
 
 Blok parsing hanya dijaga `except requests.exceptions.RequestException`.
@@ -288,13 +353,30 @@ dengan `"datetime": null`, yang terlempar `AttributeError`/`TypeError` —
 lolos sampai `evidence.py`, dan `price_market`, `fundamental`, filing SEC yang
 sudah berhasil diambil **ikut dibuang** gara-gara berita.
 
-#### B3. Tidak ada circuit breaker saat Finnhub 403 — TERBUKA
+**Perbaikan**: validasi `data` adalah list sebelum diiterasi (kalau bukan,
+diperlakukan sebagai fetch gagal — `status="missing"`). Per-item: skip item
+dengan `datetime` None/0/absen atau timestamp yang tidak bisa diparse, alih-
+alih membiarkan `datetime.fromtimestamp(None, ...)` melempar `TypeError` yang
+membawa turun item-item lain yang valid.
+
+Diverifikasi 3 skenario (respons non-list, item `datetime:null` di tengah
+item valid, happy path) — semua menghasilkan status/news_count yang benar,
+item cacat di-skip tanpa membuang item valid lainnya.
+
+#### B3. Tidak ada circuit breaker saat Finnhub 403 — SELESAI
 Kalau paket Finnhub diturunkan sehingga `company-news` jadi premium, setiap
 ticker tetap membayar 1.05 detik rate limit SEBELUM tahu kena 403, dan jalur
 403 (benar) tidak menyimpan cache — jadi ~71 menit terbakar tiap run tanpa
 menghasilkan apa pun, berulang selamanya.
 
-#### B4. Cache per-CIK jadi tulis-bersamaan untuk ticker dwi-kelas — TERBUKA
+**Perbaikan**: flag `_403_confirmed` di-set begitu satu respons 403
+diterima; panggilan berikutnya short-circuit SEBELUM `_apply_rate_limit()`
+— tanpa network call maupun jeda rate limit. Direset tiap run baru (lewat
+`reset_batch_tracking()`) supaya upgrade plan di tengah hari terdeteksi
+lagi besok. Diverifikasi: call pertama yang 403 + 20 call berikutnya untuk
+ticker berbeda menghasilkan total cuma 1 network call, elapsed <1 detik.
+
+#### B4. Cache per-CIK jadi tulis-bersamaan untuk ticker dwi-kelas — SELESAI
 Tiga namespace cache (`facts_{cik}`, `submissions_{cik}`, `form4_activity_{cik}`)
 dikunci pada CIK, bukan ticker. `screening_result.passed` urut abjad, jadi
 GOOG/GOOGL, FOX/FOXA, HEI/HEI-A berdekatan dan hampir pasti berada dalam
@@ -302,7 +384,15 @@ jendela 5 worker yang sama -> dua `write_text` bersamaan ke file yang sama.
 Self-healing (pembaca dapat parse error -> dianggap cache miss), tapi boros.
 Tidak ada saat Evidence masih serial.
 
-#### B5. Falsy-check lain yang 0.0-nya sah — TERBUKA
+**Perbaikan**: `cache.py::set()` sekarang atomik (tmp unik-per-penulis via
+`tempfile.mkstemp` + `os.replace`), mengikuti pola yang sudah dipakai
+konsisten di tempat lain di codebase — `cache.py` adalah satu-satunya
+penulis file yang sebelumnya tidak memakainya. Diverifikasi: stress test 6
+writer + 6 reader konkuren ke SATU cache key selama 500 iterasi baca — kode
+lama 1864/3000 (62%) pembacaan gagal parse (torn write terkonfirmasi
+nyata); kode baru 0 pembacaan korup.
+
+#### B5. Falsy-check lain yang 0.0-nya sah — SELESAI
 `ca6bf5b` memperbaiki 3 tempat di `knowledge.py`. Yang tersisa:
 - `knowledge.py::_fcf_margin_pct` — FCF tepat 0.0 (breakeven) -> `None`
 - `knowledge_helpers.py` `fcf_yield` — sama; ini merambat: dihitung hilang oleh
@@ -314,7 +404,13 @@ Tidak ada saat Evidence masih serial.
 - `capital_expenditures == 0` normal untuk perusahaan software asset-light,
   tapi `capex_pct_revenue_q4` jadi hilang untuk justru kelompok itu
 
-#### B6. Kegagalan Yahoo sesaat memalsukan katalis "cancelled" — TERBUKA
+**Perbaikan**: keempat tempat diganti `is None`/`is not None` untuk NUMERATOR.
+Pembagi (revenue, market_cap, prior_rev) sengaja tidak diubah — pembagi
+0/negatif tetap harus diblokir. Diverifikasi 4 skenario nilai 0.0 legitimate
+menghasilkan angka benar (0.0/-100.0), dikonfirmasi kontras via `git stash`
+bahwa keempatnya `None` di kode lama.
+
+#### B6. Kegagalan Yahoo sesaat memalsukan katalis "cancelled" — SELESAI
 `catalyst_history.py`
 
 Loop yang meresolusi katalis yang hilang tidak menjaga `cs.status == "missing"`.
@@ -323,7 +419,18 @@ yang masih di masa depan ditulis sebagai `lifecycle_status="cancelled"`.
 Pembatalan palsu itu permanen dan tampil di UI; katalis aslinya muncul lagi
 esok hari sebagai entri "scheduled" baru tanpa kesinambungan.
 
-#### B7. CLI `knowledge` mati total — TERBUKA
+**Perbaikan**: guard `if cs.status == "missing": continue` di awal iterasi
+per-ticker di `sync_catalyst_history` — kegagalan fetch sekarang membiarkan
+state tersimpan (`active`/`resolved`) apa adanya, dicoba lagi run berikutnya,
+alih-alih menyimpulkan katalisnya sungguh hilang.
+
+Diverifikasi kontras kode lama vs baru lewat simulasi 3 hari (aktif -> Yahoo
+gagal sesaat -> Yahoo pulih): kode lama membuat `active={}` dan `resolved`
+mencatat "cancelled" untuk katalis 20 hari ke depan di hari gagal; kode baru
+`active`/`resolved` tidak berubah di hari gagal, katalis tetap `scheduled`
+begitu fetch pulih.
+
+#### B7. CLI `knowledge` mati total — SELESAI (sebagian)
 `cli.py` — `EvidencePackage(...)` dibangun tanpa `institutional_activity`, yang
 wajib dan tanpa default -> `TypeError` di paket pertama. Jalur produksi
 (`scripts/refresh_full_pipeline.py`) memanggil `run_knowledge` langsung, jadi
@@ -332,7 +439,19 @@ ini tidak pernah ketahuan. CLI juga menjatuhkan `company_profile`,
 memanggil reasoning tanpa peer/catalyst/Layer 1 — sehingga skor dari CLI tidak
 sebanding dengan skor produksi.
 
-#### B8. Dua nilai `fast_info` lolos koersi tipe — TERBUKA
+**Perbaikan**: `institutional_activity` direkonstruksi penuh (menutup crash),
+`institutional_ownership` sekarang bawa `insider_percentage`/`top_holders`,
+`company_profile`/`analyst_estimates` direkonstruksi kalau ada. `roe`/`roa`
+ternyata sudah dibawa otomatis lewat spread `**fund_dict` yang ada sebelumnya
+(tidak perlu perbaikan terpisah). Diverifikasi lewat subprocess CLI
+sungguhan: kode lama crash `TypeError` persis seperti temuan audit, kode baru
+selesai dan `insider_percentage` mengalir sampai ke output.
+
+**Belum disentuh** (penambahan fitur, bukan bug): CLI `reasoning` tidak
+menerima argumen peer/catalyst/layer1 sama sekali — keterbatasan scope tool
+debug per-stage yang didokumentasikan di help text-nya sendiri.
+
+#### B8. Dua nilai `fast_info` lolos koersi tipe — SELESAI
 `yahoo_evidence.py` — `market_cap` dan `shares_outstanding` disimpan mentah,
 tidak seperti field OHLCV di bawahnya yang di-cast eksplisit. `json_safe`
 hanya mengenali subclass `float`, jadi `numpy.int64` dari `fast_info` akan
@@ -341,23 +460,44 @@ membuang fetch harga yang **sebenarnya sukses** sebagai `status="missing"`.
 Belum terjadi (yfinance mengembalikan skalar Python di sini), tapi hanya
 berjarak satu kenaikan versi dependensi.
 
-#### B9. `.info` kosong di-cache dan dilaporkan `status="ok"` — TERBUKA
+**Perbaikan**: cast eksplisit `float()`/`int()` di titik penyimpanan.
+Diverifikasi: `numpy.int64` dikonfirmasi BUKAN subclass Python `int`, dan
+`json.dumps(numpy.int64(...))` benar-benar `TypeError` persis prediksi audit.
+
+#### B9. `.info` kosong di-cache dan dilaporkan `status="ok"` — SELESAI
 Ticker delisted yang membuat yfinance mengembalikan `{}` menuliskan `{}` itu
 ke cache `yahoo_info` dan disajikan 24 jam; `fetch_fundamental_data`
 menetapkan `status="ok"` tanpa syarat, jadi semua field `None` sementara
 metadata mengklaim fetch berhasil.
 
-#### B10. Komentar kontrak bertentangan dengan skala sebenarnya — TERBUKA
+**Perbaikan**: `status="ok" if info else "missing"` — menyamakan pola yang
+sudah benar di 3 fungsi sejenis (`fetch_institutional_ownership`,
+`fetch_company_profile`, `fetch_analyst_estimates`), yang ternyata SUDAH
+mengondisikan status dengan benar (bukan bug berulang).
+
+#### B10. Komentar kontrak bertentangan dengan skala sebenarnya — SELESAI
 `knowledge_contracts.py` mendokumentasikan `institutional_pct`/`insider_pct`
 sebagai "(0-100)", padahal nilainya pecahan 0-1 dari Yahoo. Konsumen saat ini
 (`reasoning.py`) memperlakukannya sebagai pecahan sehingga perilakunya benar,
 tapi konsumen berikutnya yang percaya docstring akan meleset 100x.
 
-#### B11. `personal_evaluation.py` ikut terdampak downsampling — TERBUKA
+**Perbaikan**: komentar diperbaiki ke "PECAHAN 0-1 (0.75 = 75%)". Diverifikasi
+konsisten dengan semua pemakaian nyata (`reasoning.py`, `TickerModal.jsx`,
+`KnowledgeView.jsx`).
+
+#### B11. `personal_evaluation.py` ikut terdampak downsampling — SELESAI
 `_reconstruct_start_price` mengambil `bars[0]` dari semua bar sejak
 `since_date`. Untuk call berumur 18 bulan, sekarang mengembalikan harga akhir
 bulan yang meleset sampai 30 hari dari tanggal call sebenarnya, dan hasilnya
 memberi makan klasifikasi `terbukti`/`meleset`.
+
+**Perbaikan**: sekarang mencari bar TERDEKAT ke `since_date` (arah mana pun),
+toleransi 45 hari (`_RECONSTRUCT_TOLERANCE_DAYS`, sama seperti
+`_ANCHOR_TOLERANCE_DAYS` di `knowledge_helpers.py`). Di luar toleransi ->
+`None`, sudah ditangani pemanggil (entry dibiarkan pending). Diverifikasi:
+`since_date` sehari setelah akhir bulan — kode lama memilih bar 30 hari
+kemudian (25% lebih tinggi dari harga sebenarnya), kode baru benar memilih
+bar sehari sebelumnya.
 
 ### Diperiksa dan bersih
 
@@ -401,7 +541,7 @@ masuk ke `ca6bf5b`; selebihnya berlanjut ke daftar TERBUKA di Audit #2.
 
 ### Temuan struktural yang masih TERBUKA
 
-#### C1. `/api/ticker/<t>` bisa mencampur data dari dua run berbeda — TERBUKA
+#### C1. `/api/ticker/<t>` bisa mencampur data dari dua run berbeda — SELESAI
 `price_target.py::sync_price_target_history` dan
 `catalyst_history.py::sync_catalyst_history` menulis ke disk **di tengah run**,
 sebelum gerbang all-or-nothing, sementara 10 file lain menunggu gerbang itu.
@@ -415,23 +555,83 @@ Ini terbukti aktif saat audit #1: `price_target_history.json` punya snapshot
 Tidak aktif selama data konsisten satu run, tapi muncul lagi setiap kali ada
 run yang gagal di tengah.
 
-#### C2. Blok tulis "gerbang" tetap 10 tulis file terpisah — TERBUKA
+**Perbaikan**: `sync_price_target_history`/`sync_catalyst_history` sekarang
+HANYA menghitung store terupdate secara in-memory (tetap melekatkan
+accumulated series ke evidence_packages/catalyst_sets seperti biasa, dibutuhkan
+Knowledge/reasoning di run yang sama) — pemanggilan `save_price_target_store`/
+`save_catalyst_history_store` yang sesungguhnya menulis ke disk dipindah ke
+blok "every stage succeeded" di `refresh_full_pipeline.py`, sejajar dengan 10
+`_atomic_write` lain. Gagal di tahap manapun sebelum itu kini benar-benar
+tidak menyentuh disk untuk kedua file ini. Satu-satunya pemanggil masing-
+masing fungsi (diverifikasi via grep) adalah `refresh_full_pipeline.py`.
+
+Diverifikasi: unit test langsung kedua fungsi (file TIDAK ada di disk setelah
+`sync_*`, ADA setelah `save_*_store` dipanggil eksplisit, isi round-trip
+benar), `py_compile` + `ruff` bersih.
+
+Catatan: ini TIDAK menyelesaikan C2/C9 (blok tulis gerbang itu sendiri tetap
+10+ tulis file terpisah, bukan satu transaksi) — itu risiko yang berbeda
+(kill eksternal di TENGAH gerbang sukses), bukan yang C1 tangani (dua file
+maju duluan SEBELUM gerbang, lalu gerbang gagal total).
+
+#### C2. Blok tulis "gerbang" tetap 10 tulis file terpisah — SELESAI (sebagian)
 Masing-masing atomik sendiri (tmp + `os.replace`), tapi tanpa transaksi lintas
 file. Kill eksternal di antara dua tulis menghasilkan mis. rekomendasi
 Aggregator yang merujuk penilaian Risk dari hari berbeda.
 
-#### C3. `_get_stage` menahan seluruh file JSON di memori selamanya — TERBUKA
+**Keputusan pengguna**: perbaikan ringan (marker + deteksi), bukan transaksi
+penuh (staging+swap) yang menyentuh tiap writer dan risikonya lebih besar.
+Lihat detail perbaikan dan verifikasi di C9 di bawah (satu commit, satu fix
+untuk keduanya). **Ini mendeteksi ketidaksesuaian, tidak mencegahnya** — kill
+eksternal di tengah gerbang tetap bisa menghasilkan file campuran, sekarang
+cuma jadi TERLIHAT (banner di dashboard + `/api/consistency`) alih-alih diam.
+
+#### C3. `_get_stage` menahan seluruh file JSON di memori selamanya — SELESAI (sebagian)
 `backend/app.py` — `json.load` seluruh berkas lalu disimpan permanen di
 `_stage_cache`. Flask teramati ~2GB RSS di era evidence.json 340MB.
 `historical_timeline.json` kini 469MB dan bertambah tiap run, dan tidak ada
 endpoint ringan `/api/historical/summary` (padahal `/api/evidence/summary` ada).
 
-#### C4. `_retry.py` bisa kehabisan thread — TERBUKA
+**Update**: endpoint ringan sudah ada (lihat C6 di atas). **Keputusan
+pengguna**: batasi pertumbuhan `historical_timeline.json` ke retensi 2 tahun
+per ticker, bukan tunda sampai bentuk evaluasi v2.1 diputuskan.
+
+**Yang SELESAI**: pertumbuhan file kini dibatasi (730 hari/ticker, lihat
+`historical.py::update_timeline`/`RETENTION_DAYS`) — tidak lagi tumbuh tanpa
+batas selamanya. `total_entries`/`first_entry_date` sengaja tetap sebagai
+penghitung/tanggal seumur hidup ticker itu dilacak (dipakai StatCards di
+dashboard), tidak ikut terpangkas — cuma buffer `entries` (snapshot penuh)
+yang dibatasi.
+
+**Yang MASIH TERBUKA**: `_stage_cache` tetap menahan SELURUH file (termasuk
+469MB `historical_timeline.json` yang sekarang dibatasi tapi belum otomatis
+menyusut sampai retensi baru "menyusul" lewat run-run berikutnya) permanen di
+memori, dan `_warm_cache` masih memuat semua 13 stage file penuh saat
+startup. Tidak ada lazy-loading/eviction — ini bagian arsitektural yang
+belum disentuh, di luar cakupan "batasi pertumbuhan" yang diputuskan.
+
+#### C4. `_retry.py` bisa kehabisan thread — SELESAI
 Satu pool global 32 worker dipakai semua modul. Panggilan yfinance yang
 menggantung (pernah terjadi: 40+ menit tanpa exception) membuat thread-nya
 hilang permanen karena Python tidak bisa membunuh thread. Kerugian menumpuk
 sepanjang run panjang, dan `atexit` join bisa membuat proses tidak pernah
 keluar.
+
+**Perbaikan**: (1) `_retry.py` — pool recycling: lacak submission yang
+ditinggalkan (timeout, bukan exception biasa), begitu >= 8 tercapai pool
+lama diganti pool baru (bukan `shutdown(wait=True)` yang akan menunggu
+worker yang tidak akan pernah selesai) — memulihkan kapasitas. (2)
+`refresh_full_pipeline.py` — `os._exit()` alih-alih `sys.exit()` di titik
+masuk produksi (tidak ada API publik untuk membuat worker
+`ThreadPoolExecutor` jadi daemon thread), mem-bypass `atexit` join yang bisa
+menggantung selamanya; aman karena semua tulis file yang berarti sudah
+selesai lewat `os.replace()` durable di titik itu.
+
+Diverifikasi: (1) simulasi 3 panggilan "macet" memicu pool recycling tepat
+di ambang, panggilan cepat sesudahnya tetap instan (kapasitas pulih). (2)
+Skrip standalone yang mereplikasi pola executor+timeout+exit: `sys.exit()`
+macet penuh sampai timeout paksa 5 detik; `os._exit()` keluar bersih dalam
+0.13 detik.
 
 #### C5. ETA di tombol Generate — GUGUR
 `GenerateButton.jsx` menulis "~1.5-2 jam"; run terverifikasi memakan **86 menit
@@ -441,7 +641,7 @@ dingin masih bisa melewati batas atas 2 jam.
 
 ### Temuan tambahan dari Audit #2 (di luar `ca6bf5b`)
 
-#### C6. `/api/historical` mengirim 469 MB dalam satu respons — TERBUKA
+#### C6. `/api/historical` mengirim 469 MB dalam satu respons — SELESAI (sebagian)
 `HistoricalView.jsx` memanggil `api.historical()` -> `GET /api/historical` ->
 `jsonify(_get_stage("historical"))`, lalu `_compress_response` menjalankan
 `gzip.compress(response.get_data())` — seluruh body dimaterialisasi sebagai
@@ -454,28 +654,90 @@ membuat Flask (sudah ~2 GB RSS) langsung MemoryError atau macet bermenit-menit,
 selama itu semua request lain — termasuk `/api/refresh/status` yang di-poll
 tiap 2,5 detik — ikut menggantung.
 
-Terkait C3: total 13 berkas stage kini ~866 MB di disk, dan `_warm_cache`
-sengaja memuat **semuanya** saat startup. Dalam ~2 minggu run harian,
-`_warm_cache` sendiri akan gagal.
+**Perbaikan**: `/api/historical/summary` baru (pola sama seperti
+`/api/evidence/summary`) — backend menghitung `last_halted`/`has_outcome` dari
+`entries` sekali, kirim 5 skalar per ticker saja. `HistoricalView.jsx` pindah
+ke endpoint ini. Menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang
+merupakan risiko paling akut (satu klik nav menggantungkan request lain).
 
-#### C7. `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0` — TERBUKA
+**Belum diselesaikan sepenuhnya**: endpoint baru masih memanggil
+`_get_stage("historical")`, jadi backend tetap mem-parse dan menahan seluruh
+file di `_stage_cache` — cuma respons ke browser yang mengecil, bukan RSS
+Flask. Update: pertumbuhan filenya sendiri sekarang SUDAH dibatasi (retensi
+2 tahun/ticker, lihat C3 di bawah) — jadi ukurannya tidak lagi tak terbatas,
+tapi `_stage_cache` tetap menahan APAPUN ukurannya (yang sekarang sudah
+dibatasi, tapi masih besar) permanen di memori tanpa lazy-loading/eviction.
+Itu bagian arsitektural C3 yang belum disentuh.
+
+Terkait C3: total 13 berkas stage kini ~866 MB di disk, dan `_warm_cache`
+sengaja memuat **semuanya** saat startup. Sebelum retensi C3 diperbaiki, ini
+diproyeksikan gagal dalam ~2 minggu run harian — dengan retensi terbatas,
+`historical_timeline.json` tidak lagi jadi kontributor pertumbuhan tak
+terbatas, tapi 12 file stage lain (termasuk evidence.json) tetap tumbuh
+mengikuti ukuran universe, bukan waktu.
+
+#### C7. `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0` — SELESAI
 Siapa pun di jaringan yang sama bisa memulai pipeline 6 jam, atau membaca
 `/api/refresh/status`. `personal_routes.py` menyatakan asumsi "hanya lokal",
 tapi `app.run(host="0.0.0.0")` bertentangan dengan itu.
 
-#### C8. `save_personal_history` menulis non-atomik — TERBUKA
+**Konteks penting**: `render.yaml` mengonfigurasi deploy ke Render.com sebagai
+web service publik (WAJIB bind `0.0.0.0` untuk bisa diakses sama sekali) —
+dikonfirmasi ke pengguna dulu sebelum mengubah apa pun, supaya tidak
+mematikan deployment nyata kalau memang ada. **Dikonfirmasi**: `render.yaml`
+sudah tidak dipakai, dashboard cuma jalan lokal.
+
+**Perbaikan**: `host="127.0.0.1"` — merealisasikan asumsi "local-only" yang
+sudah dinyatakan di tempat lain, bukan keputusan keamanan baru. Diverifikasi
+lewat inspeksi `/proc/net/tcp` pada server sungguhan: kode lama menampilkan
+"Running on all addresses (0.0.0.0)" + alamat non-loopback; kode baru hanya
+listening di 127.0.0.1.
+
+#### C8. `save_personal_history` menulis non-atomik — SELESAI
 `personal/personal_historical.py` memakai `open(..., "w")` biasa — satu-satunya
 penulis di basis kode yang tidak memakai tmp+replace. Kill saat menulis
 meninggalkan JSON terpotong, dan karena berkas itu tidak ikut `_warm_cache`,
 kegagalannya baru muncul sebagai HTTP 500 di `/api/personal/*` dan tidak pulih
 sendiri.
 
-#### C9. `18` tulis berurutan, bukan 10 — TERBUKA (memperjelas C2)
+**Perbaikan**: pola tmp+`os.replace()` yang sama seperti tempat lain di
+codebase. Diverifikasi: simulasi kegagalan saat menulis ulang file yang
+sudah berisi data valid — kode lama meninggalkan file KOSONG TOTAL (`open`
+truncate segera saat dibuka); kode baru mempertahankan isi lama persis.
+
+#### C9. `18` tulis berurutan, bukan 10 — SELESAI (sebagian, memperjelas C2)
 Rentang penulisan terukur 86 detik pada run 2026-07-30 (06:55:12 -> 06:56:38):
 10 berkas stage + 2 personal + 3 layer1/source-health + 4 snapshot root.
 Masing-masing atomik sendiri; tidak ada yang membuat himpunannya atomik.
 
-#### C10. `catalyst_history.json` merusak diri sendiri saat run gagal — TERBUKA
+**Keputusan pengguna**: perbaikan ringan (marker + deteksi), bukan transaksi
+penuh.
+
+**Perbaikan**: `session_id` (satu variabel kanonik yang sudah ada untuk
+`aggregator_data`) sekarang ditulis ke SEMUA 9 file stage berwrapper
+(screening/evidence/knowledge/catalyst/peer/confidence/risk/reasoning,
+aggregator sudah punya) di `refresh_full_pipeline.py`. `historical_timeline.json`
+sengaja dikecualikan — bentuknya `{ticker: {...}}` tanpa wrapper level-atas.
+Endpoint baru `backend/app.py::GET /api/consistency` membaca `session_id` dari
+kesembilan file itu dan melaporkan `consistent` (semua sama) + rincian
+per-file. File lama tanpa `session_id` (ditulis sebelum perbaikan ini)
+dilaporkan `None`, tidak otomatis dianggap tidak konsisten. Frontend
+(`App.jsx`) fetch endpoint ini sekali di startup dan menampilkan banner
+peringatan di topbar (lintas semua view) kalau tidak konsisten.
+
+Diverifikasi: `/api/consistency` diuji 4 skenario lewat Flask test client
+(tidak ada file, semua `session_id` seragam, disimulasikan run terhenti di
+tengah gerbang dengan 3/9 file punya `session_id` baru, dan file lama tanpa
+`session_id` sama sekali) — keempatnya benar, termasuk tidak false-positive
+untuk file lama.
+
+**Belum diselesaikan** (sesuai keputusan, bukan celah yang terlewat): ini
+MENDETEKSI ketidaksesuaian, TIDAK MENCEGAHNYA. Kill eksternal di tengah
+gerbang tetap bisa menghasilkan file campuran — sekarang jadi terlihat
+(banner + endpoint), bukan diam. Transaksi penuh (staging+swap atomik)
+tetap TERBUKA kalau suatu saat mau ditingkatkan.
+
+#### C10. `catalyst_history.json` merusak diri sendiri saat run gagal — SELESAI
 Koreksi atas C1: berkas ini **tidak** disajikan backend sama sekali (tidak ada
 di `STAGE_FILES`), jadi tidak bisa mencemari respons API. Kerusakannya justru
 internal dan lebih halus: `sync_catalyst_history` membandingkan katalis hari ini
@@ -485,11 +747,17 @@ sepadan — sehingga run sukses berikutnya membandingkan dengan state yang sudah
 "terpakai", dan transisi katalis satu hari **hilang tanpa bisa dideteksi dari
 luar**.
 
-Catatan lain atas C1: `session_id` sebenarnya **sudah** ada di setiap elemen
-`recommendations` dan ikut dikembalikan `/api/ticker/<t>`, dan setiap snapshot
-price-target punya `date` sendiri. Jadi API secara teknis sudah memancarkan
-cukup informasi untuk mendeteksi percampuran — **tidak ada satu konsumen pun
-yang memeriksanya**.
+**Perbaikan**: sama seperti C1 — `save_catalyst_history_store` dipindah ke
+gerbang all-or-nothing, jadi run yang gagal sebelum gerbang tidak lagi
+memajukan state "active"/"resolved" internal sama sekali. Lihat detail
+perbaikan dan verifikasi di C1 di atas (satu commit, satu fix untuk keduanya).
+
+Catatan lama (sebelum perbaikan) atas C1: `session_id` sebenarnya **sudah** ada
+di setiap elemen `recommendations` dan ikut dikembalikan `/api/ticker/<t>`, dan
+setiap snapshot price-target punya `date` sendiri — jadi API secara teknis
+sudah memancarkan cukup informasi untuk mendeteksi percampuran seandainya ada
+konsumen yang memeriksanya. Sekarang sudah tidak relevan lagi karena akar
+masalahnya (dua file maju duluan) sudah dihilangkan, bukan cuma dideteksi.
 
 ---
 
@@ -507,11 +775,21 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan:
-1. **A13** — chart 5 tahun dilabeli "Tren 1 Tahun"; ini yang langsung salah di
-   mata pengguna sejak sekarang
-2. **C6 + C3** — satu klik nav dari OOM, dan makin dekat tiap run
-3. **C1/C10** — kegagalan run merusak data yang sudah benar, tanpa jejak
-4. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
-5. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
-6. **A3** — Ctrl+C harus benar-benar berhenti
+SELESAI (penuh atau sebagian sesuai keputusan pengguna): A3, A4, A5, A7, A8
+(sebagian), A13, B1, B2, B3, B4, B5, B6, B7 (sebagian), B8, B9, B10, B11, C1,
+C2, C3 (pertumbuhan dibatasi), C4, C6, C7, C8, C9, C10.
+
+Semua temuan Audit #1/#2 sudah ditindaklanjuti kecuali yang secara eksplisit
+BUTUH KEPUTUSAN PRODUK lebih lanjut (bukan bug yang bisa diperbaiki sepihak)
+atau PENAMBAHAN FITUR (bukan perbaikan cacat):
+
+- **A8 (sisa)** — apakah section 1-cek biner pantas mengayunkan skor 5 poin
+  penuh; butuh keputusan kalibrasi seperti A7
+- **B7 (sisa)** — CLI `reasoning` tidak menerima argumen peer/catalyst/layer1;
+  keterbatasan scope tool debug per-stage yang sudah didokumentasikan,
+  memperluasnya adalah fitur baru
+- **C3 (sisa arsitektural)** — `_stage_cache` masih menahan SEMUA stage file
+  permanen di memori tanpa lazy-loading/eviction; retensi cuma membatasi
+  PERTUMBUHAN `historical_timeline.json`, bukan cara backend menahannya
+- **C2/C9 (peningkatan opsional)** — kalau suatu saat mau transaksi penuh
+  (staging+swap) alih-alih marker+deteksi

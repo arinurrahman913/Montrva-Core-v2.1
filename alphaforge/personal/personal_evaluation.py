@@ -79,21 +79,54 @@ def _price_return_pct(start_price: float | None, current_price: float | None) ->
     return (current_price - start_price) / start_price * 100.0
 
 
+# Sama seperti _ANCHOR_TOLERANCE_DAYS di knowledge_helpers.py (dipakai
+# _find_price_on_or_before untuk anchor return_3y/return_5y) -- disamakan
+# supaya toleransi "harga cukup dekat dengan tanggal target" konsisten di
+# seluruh codebase.
+_RECONSTRUCT_TOLERANCE_DAYS = 45
+
+
 def _reconstruct_start_price(price_history: list[dict] | None, since_date: str) -> float | None:
     """Fallback untuk entry lama yang belum menyimpan `price_at_call`.
 
-    PERINGATAN yang sengaja tidak disembunyikan: price_history cuma memuat ~1
-    tahun. Kalau `since_date` lebih tua dari itu, SEMUA bar lolos filter dan
-    bar tertua yang tersedia dipakai sebagai "harga entry" — angkanya keluar
-    tanpa error tapi bukan harga yang benar. Pemanggil menandai hasil seperti
-    ini dengan baseline="price_history" supaya bisa dibedakan saat dibaca.
+    price_history cuma memuat ~1 tahun HARIAN penuh; sisanya (tahun ke-2..5)
+    satu bar per bulan kalender (_downsample_price_history di
+    yahoo_evidence.py) -- bar TIDAK berjarak seragam.
+
+    Audit item B11: versi sebelumnya mengambil bar PERTAMA yang tanggalnya
+    >= since_date. Untuk call berumur 18 bulan (jatuh di wilayah bulanan),
+    itu bisa jadi bar AKHIR BULAN yang meleset sampai ~30 hari dari tanggal
+    call sebenarnya -- dan hasilnya langsung memberi makan klasifikasi
+    terbukti/meleset (vonis biner atas satu tesis, bukan sekadar metrik
+    pendukung seperti return_3y/5y). Sekarang mencari bar TERDEKAT ke
+    since_date (arah mana pun, bukan cuma sesudahnya), dan menyerah (None)
+    kalau bar terdekat pun masih lebih dari _RECONSTRUCT_TOLERANCE_DAYS —
+    pemanggil sudah menangani None dengan benar (classification jadi None,
+    entry dibiarkan pending untuk dicoba lagi run berikutnya), jauh lebih
+    aman daripada diam-diam memvonis pakai harga yang salah tanggal.
     """
     if not price_history:
         return None
-    bars = [b for b in price_history if b.get("date", "") >= since_date]
-    if not bars:
+    try:
+        target = date.fromisoformat(since_date)
+    except ValueError:
         return None
-    return bars[0].get("close")
+    best_gap = None
+    best_close = None
+    for b in price_history:
+        b_date = b.get("date")
+        if not b_date:
+            continue
+        try:
+            gap = abs((date.fromisoformat(b_date) - target).days)
+        except ValueError:
+            continue
+        if best_gap is None or gap < best_gap:
+            best_gap = gap
+            best_close = b.get("close")
+    if best_gap is None or best_gap > _RECONSTRUCT_TOLERANCE_DAYS:
+        return None
+    return best_close
 
 
 def _classify(action: str, horizon: str, return_pct: float | None) -> str | None:

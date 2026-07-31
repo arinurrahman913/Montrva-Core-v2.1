@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { api } from '../api'
-import { sparklinePoints, horizonProgress, horizonTargetPrice } from '../format'
+import { horizonProgress, horizonTargetPrice } from '../format'
 
 // Sejak kapan ACTION ini (bukan cuma ticker-nya) muncul: jalan MUNDUR dari
 // entry terbaru di personal_history, berhenti begitu action lensa ini beda
@@ -51,48 +51,147 @@ export function RiskBadge({ call }) {
   )
 }
 
-function HorizonTrack({ since, horizon, anchor, action, startPrice }) {
-  const progress = horizonProgress(since, horizon, anchor)
-  if (!progress) return null
-  const { ageDays, upperDays, pct, status } = progress
-  const fillClass = status === 'over' ? 'over' : status === 'near' ? 'near' : 'ok'
-  const valueColor = status === 'over' ? 'var(--bad)' : status === 'near' ? 'var(--warn)' : 'var(--gold)'
-  const target = horizonTargetPrice(startPrice, action, horizon)
+const fmtPrice = (v) => v == null ? '—' : `$${v.toFixed(2)}`
+
+// Hari kalender dari tanggal entry -- dipakai jadi koordinat-X chart (satu
+// sumbu waktu tunggal dari entry sampai deadline, bukan indeks bar).
+function _dayOffset(dateStr, entryMs) {
+  return Math.round((new Date(`${dateStr}T00:00:00Z`).getTime() - entryMs) / 86400000)
+}
+
+// Geometri + state chart "entry -> deadline" -- dipisah dari komponennya
+// biar gampang dibaca: fungsi ini murni hitung angka, komponennya cuma
+// nge-render + urus hover.
+function _buildChart(bars, liveClose, entryPrice, targetPrice, upperDays) {
+  const entryMs = new Date(`${bars[0].date}T00:00:00Z`).getTime()
+  const pathPts = bars.map((b) => [_dayOffset(b.date, entryMs), b.close])
+  const lastKnownDay = pathPts[pathPts.length - 1][0]
+  const todayDay = liveClose != null ? Math.max(lastKnownDay, Math.round((Date.now() - entryMs) / 86400000)) : lastKnownDay
+  if (liveClose != null && todayDay !== lastKnownDay) pathPts.push([todayDay, liveClose])
+
+  const currentPrice = liveClose ?? bars[bars.length - 1].close
+  const overdue = todayDay > upperDays
+  // Domain-X membentang sampai deadline ATAU sampai hari ini kalau sudah
+  // lewat deadline (belum sempat dievaluasi run berikutnya) -- supaya bar
+  // yang sungguhan ada tidak pernah terpotong di luar viewBox.
+  const domainDays = Math.max(upperDays, todayDay, 1)
+
+  const W = 300, H = 68, padT = 6, padB = 4
+  const allPrices = [...bars.map((b) => b.close), currentPrice, entryPrice, targetPrice]
+  const minP = Math.min(...allPrices) * 0.98
+  const maxP = Math.max(...allPrices) * 1.02
+  const spanP = maxP - minP || 1
+  const xFor = (day) => (day / domainDays) * W
+  const yFor = (p) => padT + (1 - (p - minP) / spanP) * (H - padT - padB)
+
+  const state = currentPrice >= targetPrice ? 'hit_target' : currentPrice >= entryPrice ? 'on_track' : 'at_risk'
+  const color = state === 'hit_target' ? 'var(--good)' : state === 'on_track' ? 'var(--gold)' : 'var(--bad)'
+  const colorHex = state === 'hit_target' ? '#4ADE80' : state === 'on_track' ? '#e8b84b' : '#FB7185'
+
+  const linePoints = pathPts.map(([d, p]) => `${xFor(d).toFixed(1)},${yFor(p).toFixed(1)}`).join(' ')
+  const areaPoints = `${xFor(pathPts[0][0]).toFixed(1)},${yFor(minP).toFixed(1)} ${linePoints} ${xFor(todayDay).toFixed(1)},${yFor(minP).toFixed(1)}`
+
+  return {
+    W, H, padT, padB, xFor, yFor, entryMs, pathPts, todayDay, domainDays, upperDays,
+    overdue, linePoints, areaPoints, color, colorHex, state,
+    entryY: yFor(entryPrice), targetY: yFor(targetPrice), todayX: xFor(todayDay),
+  }
+}
+
+function ThesisChart({ bars, liveClose, entryPrice, targetPrice, upperDays }) {
+  const [hover, setHover] = useState(null)
+  const gradId = useId()
+  const hatchId = useId()
+  if (bars.length < 1) return null
+  const c = _buildChart(bars, liveClose, entryPrice, targetPrice, upperDays)
+
+  function onMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const relX = (e.clientX - rect.left) / rect.width
+    const day = Math.round(relX * c.domainDays)
+    if (day < c.pathPts[0][0] || day > c.todayDay) { setHover(null); return }
+    let nearest = c.pathPts[0]
+    let bestDiff = Infinity
+    for (const pt of c.pathPts) {
+      const diff = Math.abs(pt[0] - day)
+      if (diff < bestDiff) { bestDiff = diff; nearest = pt }
+    }
+    setHover({ day: nearest[0], price: nearest[1], xPct: (c.xFor(nearest[0]) / c.W) * 100 })
+  }
+
   return (
-    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--rule)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-        <span style={{ fontSize: 10, color: 'var(--faint)' }}>Progres ke estimasi</span>
-        <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', fontWeight: 700, color: valueColor }}>
-          {status === 'over' ? `Lewat ${ageDays - upperDays}h dari estimasi (${upperDays}h)` : `Hari ${ageDays} / ${upperDays}`}
-        </span>
-      </div>
-      <div style={{ height: 5, borderRadius: 3, background: 'var(--panel3)', overflow: 'hidden' }}>
-        <div
-          className={`track-fill-${fillClass}`}
-          style={{
-            height: '100%',
-            borderRadius: 3,
-            width: `${pct}%`,
-            background: status === 'over' ? 'var(--bad)' : status === 'near' ? 'var(--warn)' : 'var(--gold)',
-          }}
-        />
-      </div>
-      {target && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6 }}>
-          <span style={{ fontSize: 10, color: 'var(--faint)' }}>Target buat "terbukti"</span>
-          <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--gold)' }}>
-            ${target.targetPrice.toFixed(2)} <span style={{ color: 'var(--faint)', fontWeight: 400 }}>(+{target.thresholdPct.toFixed(0)}%)</span>
-          </span>
+    <div style={{ position: 'relative', marginTop: 10 }}>
+      <svg
+        viewBox={`0 0 ${c.W} ${c.H}`} preserveAspectRatio="none" width="100%" height={c.H}
+        style={{ display: 'block', overflow: 'visible', cursor: 'crosshair' }}
+        onMouseMove={onMove} onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c.colorHex} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={c.colorHex} stopOpacity="0" />
+          </linearGradient>
+          <pattern id={hatchId} width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <rect width="6" height="6" fill="var(--panel3)" />
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--rule-strong)" strokeWidth="1.2" />
+          </pattern>
+        </defs>
+
+        {[0.5].map((f) => (
+          <line key={f} x1="0" y1={(c.padT + f * (c.H - c.padT - c.padB)).toFixed(1)} x2={c.W} y2={(c.padT + f * (c.H - c.padT - c.padB)).toFixed(1)} stroke="var(--rule)" strokeWidth="1" />
+        ))}
+
+        {!c.overdue ? (
+          <>
+            <rect x={c.todayX.toFixed(1)} y={c.padT} width={(c.W - c.todayX).toFixed(1)} height={c.H - c.padT - c.padB} fill={`url(#${hatchId})`} opacity="0.55" />
+            <line x1={c.W.toFixed(1)} y1={c.padT} x2={c.W.toFixed(1)} y2={c.H - c.padB} stroke="var(--faint)" strokeWidth="1" strokeDasharray="2,3" />
+          </>
+        ) : (
+          <>
+            <rect x={c.xFor(c.upperDays).toFixed(1)} y={c.padT} width={(c.todayX - c.xFor(c.upperDays)).toFixed(1)} height={c.H - c.padT - c.padB} fill="var(--bad)" opacity="0.07" />
+            <line x1={c.xFor(c.upperDays).toFixed(1)} y1={c.padT} x2={c.xFor(c.upperDays).toFixed(1)} y2={c.H - c.padB} stroke="var(--bad)" strokeWidth="1" strokeDasharray="2,3" opacity="0.6" />
+          </>
+        )}
+
+        <line x1="0" y1={c.entryY.toFixed(1)} x2={c.W} y2={c.entryY.toFixed(1)} stroke="var(--faint)" strokeWidth="1" strokeDasharray="3,3" />
+        <line x1="0" y1={c.targetY.toFixed(1)} x2={c.W} y2={c.targetY.toFixed(1)} stroke="var(--gold-hi)" strokeWidth="1" strokeDasharray="3,3" opacity="0.75" />
+
+        <polygon points={c.areaPoints} fill={`url(#${gradId})`} />
+        <polyline points={c.linePoints} fill="none" stroke={c.colorHex} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+        <circle cx={c.todayX.toFixed(1)} cy={c.yFor(liveClose ?? bars[bars.length - 1].close).toFixed(1)} r="7" fill={c.colorHex} opacity="0.2">
+          <animate attributeName="r" values="5;9;5" dur="2.2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.28;0.05;0.28" dur="2.2s" repeatCount="indefinite" />
+        </circle>
+        <circle cx={c.todayX.toFixed(1)} cy={c.yFor(liveClose ?? bars[bars.length - 1].close).toFixed(1)} r="3" fill={c.colorHex} stroke="var(--panel)" strokeWidth="1.3" />
+
+        {hover && (
+          <line x1={c.xFor(hover.day).toFixed(1)} y1={c.padT} x2={c.xFor(hover.day).toFixed(1)} y2={c.H - c.padB} stroke="var(--dim)" strokeWidth="1" opacity="0.5" />
+        )}
+      </svg>
+      {hover && (
+        <div style={{
+          position: 'absolute', left: `${Math.min(Math.max(hover.xPct, 12), 82)}%`, top: -6,
+          transform: 'translateX(-50%)', background: 'var(--ink)', border: '1px solid var(--rule-strong)',
+          borderRadius: 6, padding: '4px 7px', fontSize: 9.5, whiteSpace: 'nowrap', pointerEvents: 'none',
+          boxShadow: '0 8px 20px -6px rgba(0,0,0,.7)', zIndex: 2,
+        }}>
+          <div style={{ color: 'var(--faint)', fontSize: 8.5 }}>
+            {new Date(c.entryMs + hover.day * 86400000).toISOString().slice(0, 10)}
+          </div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: c.color }}>{fmtPrice(hover.price)}</div>
         </div>
       )}
     </div>
   )
 }
 
-// "Bukti" (fitur diminta user): grafik harga SEJAK tesis/action ini pertama
-// kali tercatat, plus quote live buat titik terakhir, plus progress bar
-// "hari ke-berapa dari horizon" -- supaya "live dari tesis muncul sampai
-// estimasi" kelihatan literal, bukan cuma klaim di teks.
+// "Bukti" (fitur diminta user): entry/live/target sebagai angka, grafik
+// harga entry->deadline (bukan cuma entry->hari-ini) dengan zona setelah
+// hari-ini digambar KOSONG/bertekstur -- bukan proyeksi tren -- supaya
+// "sisa waktu" kelihatan literal tanpa menyaru sebagai ramalan sistem
+// (konsisten dengan disclaimer §12 di bawah). Plus quote live buat titik
+// terakhir dan progress bar "hari ke-berapa dari horizon".
 export default function ThesisProof({ ticker, module, action, horizon, horizonAnchor, historyEntries: historyEntriesProp }) {
   const [priceHistory, setPriceHistory] = useState(null)
   const [historyEntries, setHistoryEntries] = useState(historyEntriesProp || null)
@@ -121,44 +220,85 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
   if (priceHistory === null) return <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8 }}>Memuat bukti harga…</div>
 
   const since = firstSeenAt(historyEntries, module, action)
-  let bars = since ? priceHistory.filter((b) => b.date >= since) : priceHistory.slice(-5)
+  // `since` adalah timestamp ISO penuh ("2026-07-15T10:30:00"), `b.date`
+  // cuma "YYYY-MM-DD". Bandingkan sebagai string apa adanya menjatuhkan bar
+  // hari anchor itu sendiri, karena "2026-07-15" < "2026-07-15T10:30:00"
+  // secara leksikografis (prefix pendek < string yang lebih panjang).
+  const sinceDate = since ? since.slice(0, 10) : null
+  let bars = sinceDate ? priceHistory.filter((b) => b.date >= sinceDate) : priceHistory.slice(-5)
   if (bars.length === 0) bars = priceHistory.slice(-2)
 
-  // Tambahkan quote live sebagai titik "sekarang" -- lebih segar dari
-  // last_price harian pipeline, ini yang bikin grafiknya kerasa live, bukan
-  // cuma snapshot kemarin.
   const liveClose = live && !live.stale && live.last_price != null ? live.last_price : null
-  const chartBars = liveClose != null ? [...bars, { close: liveClose }] : bars
 
-  if (chartBars.length < 2) {
+  if (bars.length + (liveClose != null ? 1 : 0) < 2) {
     return <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8 }}>Belum cukup data harga untuk grafik.</div>
   }
 
-  const startClose = bars[0].close
-  const endClose = liveClose ?? bars[bars.length - 1].close
-  const pct = startClose ? ((endClose - startClose) / startClose) * 100 : null
-  const color = pct == null ? 'var(--faint)' : pct >= 0 ? 'var(--good)' : 'var(--bad)'
-  const points = sparklinePoints(chartBars, 240, 36)
+  const entryPrice = bars[0].close
+  const currentPrice = liveClose ?? bars[bars.length - 1].close
+  const pct = entryPrice ? ((currentPrice - entryPrice) / entryPrice) * 100 : null
+  const target = horizonTargetPrice(entryPrice, action, horizon)
+  const progress = horizon ? horizonProgress(since, horizon, horizonAnchor) : null
+  const hitTarget = target != null && currentPrice >= target.targetPrice
 
   return (
     <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 9.5, color: 'var(--faint)' }}>
-          Sejak {since ? since.slice(0, 10) : 'mulai dilacak'} {liveClose != null && <span title="Quote live, bukan snapshot pipeline">· live</span>}
-        </span>
-        {pct != null && (
-          <span style={{ fontSize: 11, fontWeight: 600, color }}>{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <span style={{ fontSize: 9.5, color: 'var(--faint)' }}>Sejak {sinceDate || 'mulai dilacak'}</span>
+        {hitTarget ? (
+          <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--good)', textTransform: 'uppercase', letterSpacing: '.03em' }}>✓ Sudah capai target</span>
+        ) : liveClose != null && (
+          <span style={{ fontSize: 9.5, color: 'var(--accent)' }} title="Quote live, bukan snapshot pipeline">● live</span>
         )}
       </div>
-      {points && (
-        <svg viewBox="0 0 240 36" width="100%" height="32" preserveAspectRatio="none">
-          <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-      <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 3 }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: target ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+        <div style={{ borderLeft: '2px solid var(--rule)', paddingLeft: 8 }}>
+          <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Entry</div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700 }}>{fmtPrice(entryPrice)}</div>
+        </div>
+        <div style={{ borderLeft: `2px solid ${hitTarget ? 'var(--good)' : 'var(--gold)'}`, paddingLeft: 8 }}>
+          <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{liveClose != null ? 'Sekarang' : 'Terakhir'}</div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>{fmtPrice(currentPrice)}</div>
+          {pct != null && <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</div>}
+        </div>
+        {target && (
+          <div style={{ borderLeft: '2px solid var(--gold)', paddingLeft: 8 }}>
+            <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Target</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--gold-hi)' }}>{fmtPrice(target.targetPrice)}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--faint)' }}>+{target.thresholdPct.toFixed(0)}%</div>
+          </div>
+        )}
+      </div>
+
+      <ThesisChart
+        bars={bars} liveClose={liveClose} entryPrice={entryPrice}
+        targetPrice={target ? target.targetPrice : currentPrice}
+        upperDays={progress ? progress.upperDays : Math.max((bars.length - 1) * 2, 30)}
+      />
+
+      <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6 }}>
         Pergerakan harga, bukan validasi tesis — dibaca sendiri, bukan vonis sistem (§12).
       </div>
-      {horizon && <HorizonTrack since={since} horizon={horizon} anchor={horizonAnchor} action={action} startPrice={startClose} />}
+
+      {progress && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--rule)' }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--panel3)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 3, width: `${Math.min(progress.pct, 100)}%`,
+              background: progress.status === 'over' ? 'var(--bad)' : progress.status === 'near' ? 'var(--warn)' : 'var(--gold)',
+            }} />
+          </div>
+          <div style={{
+            fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, whiteSpace: 'nowrap',
+            color: progress.status === 'over' ? 'var(--bad)' : progress.status === 'near' ? 'var(--warn)' : 'var(--gold)',
+          }}>
+            {progress.status === 'over'
+              ? `Lewat ${progress.ageDays - progress.upperDays}h dari estimasi`
+              : `Hari ${progress.ageDays}/${progress.upperDays} · sisa ${progress.upperDays - progress.ageDays}h`}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

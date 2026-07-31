@@ -121,38 +121,44 @@ ANALYST_ESTIMATES_CACHE_TTL = 24 * 3600  # 24 jam
 
 YF_EVIDENCE_BATCH_SIZE = int(os.environ.get("YF_EVIDENCE_BATCH_SIZE", "20"))
 YF_EVIDENCE_BATCH_DELAY_SECONDS = float(os.environ.get("YF_EVIDENCE_BATCH_DELAY_SECONDS", "2.0"))
+# Audit 2026-07-30 item A4: checkpoint-per-batch (dulu di bawah) adalah
+# placebo -- `elapsed >= YF_EVIDENCE_BATCH_DELAY_SECONDS` SELALU sudah benar
+# begitu checkpoint ke-20 tercapai (throughput nyata Evidence ~1.06
+# dtk/ticker x 5 panggilan Yahoo/ticker = 20 panggilan makan ~4.2 detik, >
+# target 2.0 detik), jadi `time.sleep` praktis tidak pernah dieksekusi.
+# Ketiga endpoint (institutional_holders_detail/earnings_history/
+# revenue_estimate) tetap dihantam tanpa jeda. Persis pola "jeda periodik
+# yang keburu terlampaui" yang sudah didiagnosis & diganti min-interval di
+# finnhub.py::_apply_rate_limit. Target rate yang sama (20 panggilan / 2
+# detik) diterjemahkan ke interval minimal ANTAR PANGGILAN, yang membatasi
+# throughput beneran dan tidak bisa "kelewat" seperti checkpoint periodik.
+YF_EVIDENCE_MIN_INTERVAL_SECONDS = YF_EVIDENCE_BATCH_DELAY_SECONDS / YF_EVIDENCE_BATCH_SIZE
 
-_batch_counter = 0
-_batch_last_time = None
+_last_batch_call_time = None
 # Sama seperti finnhub.py/sec_parser.py: Evidence sekarang fetch multi-ticker
-# concurrent (EVIDENCE_WORKERS di evidence.py) — tanpa lock, _batch_counter
-# ini sendiri jadi race condition (increment bukan atomic), dan beberapa
-# thread bisa masuk blok sleep bersamaan/berantakan hitungannya.
+# concurrent (EVIDENCE_WORKERS di evidence.py) — lock memastikan cek+update
+# _last_batch_call_time atomik antar thread.
 _lock = threading.Lock()
 
 
 def reset_batch_tracking():
-    """Reset batch counter (dipanggil di awal evidence run)."""
-    global _batch_counter, _batch_last_time
+    """Reset state throttle (dipanggil di awal evidence run)."""
+    global _last_batch_call_time
     with _lock:
-        _batch_counter = 0
-        _batch_last_time = None
+        _last_batch_call_time = None
 
 
 def _apply_batch_delay():
-    """Jeda tiap YF_EVIDENCE_BATCH_SIZE panggilan network — hanya dipanggil
-    di jalur cache-miss supaya re-run yang kena cache tetap cepat."""
-    global _batch_counter, _batch_last_time
+    """Jeda minimal antar SETIAP panggilan (bukan per-batch) — hanya
+    dipanggil di jalur cache-miss supaya re-run yang kena cache tetap cepat."""
+    global _last_batch_call_time
     with _lock:
-        _batch_counter += 1
-        if _batch_counter >= YF_EVIDENCE_BATCH_SIZE:
-            if _batch_last_time is None:
-                _batch_last_time = time.time()
-            elapsed = time.time() - _batch_last_time
-            if elapsed < YF_EVIDENCE_BATCH_DELAY_SECONDS:
-                time.sleep(YF_EVIDENCE_BATCH_DELAY_SECONDS - elapsed)
-            _batch_counter = 0
-            _batch_last_time = time.time()
+        now = time.time()
+        if _last_batch_call_time is not None:
+            elapsed = now - _last_batch_call_time
+            if elapsed < YF_EVIDENCE_MIN_INTERVAL_SECONDS:
+                time.sleep(YF_EVIDENCE_MIN_INTERVAL_SECONDS - elapsed)
+        _last_batch_call_time = time.time()
 
 
 def _fetch_yahoo_info(ticker: str) -> dict:
@@ -263,8 +269,19 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
                           label=f"yahoo_price:{ticker}")
 
         last_price = fi.get("lastPrice") or (hist["Close"].iloc[-1] if not hist.empty else None)
-        market_cap = fi.get("marketCap")
-        shares_outstanding = fi.get("shares")
+        # Audit item B8: dulu disimpan mentah, tidak seperti field OHLCV di
+        # bawah yang eksplisit di-cast float()/int(). json_safe._sanitize
+        # cuma mengenali subclass `float` bawaan Python -- kalau fast_info
+        # suatu saat mengembalikan numpy.int64/numpy.float64 (belum terjadi,
+        # yfinance masih skalar Python murni di sini, tapi cuma berjarak
+        # satu kenaikan versi dependensi), cache_set akan TypeError,
+        # tertangkap except lebar, dan MEMBUANG fetch harga yang sebenarnya
+        # SUKSES sebagai status="missing". Cast eksplisit di titik
+        # penyimpanan menutup celah itu sebelum sempat terjadi.
+        market_cap_raw = fi.get("marketCap")
+        market_cap = float(market_cap_raw) if market_cap_raw is not None else None
+        shares_outstanding_raw = fi.get("shares")
+        shares_outstanding = int(shares_outstanding_raw) if shares_outstanding_raw is not None else None
         # fast_info TIDAK punya key "beta" sama sekali -- diverifikasi langsung
         # ke yfinance (dict fast_info nyata tidak mengandung "beta" sama sekali),
         # jadi fi.get("beta") SELALU None: 0% terisi di 4055 ticker live, ikut
@@ -394,10 +411,19 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
     try:
         info = _fetch_yahoo_info(ticker)
 
+        # Audit item B9: dulu status="ok" tanpa syarat. Ticker delisted
+        # membuat yfinance mengembalikan `.info` KOSONG ({}) -- di-cache 24
+        # jam oleh _fetch_yahoo_info (perilaku itu sendiri wajar, sama
+        # seperti cache "degraded" nihil hasil di finnhub.py), tapi
+        # metadata di sini tetap mengklaim fetch berhasil sementara SEMUA
+        # field jadi None lewat _safe_float(info.get(...)). Fungsi
+        # fetch_institutional_ownership/fetch_company_profile/
+        # fetch_analyst_estimates di modul ini sudah benar mengondisikan
+        # status pada ada-tidaknya data -- ini menyamakan pola yang sama.
         metadata = SourceMetadata(
             source="yahoo_finance",
             fetched_at=datetime.now(timezone.utc).isoformat(),
-            status="ok"
+            status="ok" if info else "missing"
         )
 
         data = FundamentalData(

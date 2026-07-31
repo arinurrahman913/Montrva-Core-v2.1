@@ -118,8 +118,14 @@ class HistoricalTrend:
 @dataclass
 class Ownership:
     """Bagian 5: Kepemilikan."""
-    institutional_pct: float | None = None  # Persentase owned institusional (0-100)
-    insider_pct: float | None = None  # Persentase owned insider (0-100)
+    # Audit item B10: dulu didokumentasikan "(0-100)", padahal nilainya
+    # PECAHAN 0-1 (langsung dari heldPercentInstitutions/heldPercentInsiders
+    # Yahoo, lihat yahoo_evidence.py -- 0.75 berarti 75%, bukan 0.75%).
+    # Konsumen saat ini (reasoning.py: `institutional_pct > 0.70`) sudah
+    # benar memperlakukannya sebagai pecahan; komentar lama akan menyesatkan
+    # konsumen BERIKUTNYA yang percaya begitu saja jadi meleset 100x.
+    institutional_pct: float | None = None  # Persentase owned institusional, PECAHAN 0-1 (0.75 = 75%)
+    insider_pct: float | None = None  # Persentase owned insider, PECAHAN 0-1 (0.05 = 5%)
     insider_transactions: list[dict] = field(default_factory=list)  # List of {date, type: "buy"|"sell", amount_usd, exec_name}
     insider_filing_activity_30d: int = 0  # Form 4 filings dalam 30 hari terakhir (indicator of insider involvement)
 

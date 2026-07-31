@@ -253,8 +253,10 @@ def calculate_financial_metrics(
     if market_cap and market_cap > 0 and revenue and revenue > 0:
         metrics['ps_ratio'] = market_cap / revenue
 
-    # FCF yield
-    if free_cash_flow and market_cap and market_cap > 0:
+    # FCF yield -- audit item B5: `free_cash_flow and ...` dulu membuang FCF
+    # tepat 0.0 (breakeven) sebagai "data hilang". market_cap TIDAK ikut
+    # diubah (pembagi harus > 0, sudah benar).
+    if free_cash_flow is not None and market_cap and market_cap > 0:
         metrics['fcf_yield_pct'] = (free_cash_flow / market_cap) * 100
 
     # Price to FCF
@@ -323,7 +325,12 @@ def compute_financial_trends(quarterly_data: list | None) -> dict:
             if hasattr(period, 'revenue') and hasattr(prior_year, 'revenue'):
                 rev = getattr(period, 'revenue')
                 prior_rev = getattr(prior_year, 'revenue')
-                if rev and prior_rev and prior_rev > 0:
+                # Audit item B5: `rev and ...` dulu membuang revenue yang
+                # jatuh tepat ke 0.0 sebagai "data hilang" -- itu justru
+                # sinyal fundamental paling mengkhawatirkan yang bisa
+                # muncul. prior_rev (pembagi) TIDAK ikut diubah (tetap
+                # harus > 0, sudah benar).
+                if rev is not None and prior_rev is not None and prior_rev > 0:
                     yoy = ((rev - prior_rev) / prior_rev) * 100
                     trends[f"revenue_yoy_{q_key}"] = yoy
 
@@ -343,8 +350,10 @@ def compute_financial_trends(quarterly_data: list | None) -> dict:
                 if hasattr(period, 'net_income') and getattr(period, 'net_income'):
                     ni = getattr(period, 'net_income')
                     trends[f"net_margin_{q_key}"] = (ni / rev) * 100
-                # CapEx as % revenue
-                if hasattr(period, 'capital_expenditures') and getattr(period, 'capital_expenditures'):
+                # CapEx as % revenue -- audit item B5: capex == 0 normal
+                # untuk perusahaan software asset-light, tapi truthy check
+                # dulu membuang justru kelompok itu sebagai "data hilang".
+                if hasattr(period, 'capital_expenditures') and getattr(period, 'capital_expenditures') is not None:
                     capex = getattr(period, 'capital_expenditures')
                     trends[f"capex_pct_revenue_{q_key}"] = (capex / rev) * 100
 

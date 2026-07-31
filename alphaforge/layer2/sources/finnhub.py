@@ -61,6 +61,15 @@ _last_call_time = None
 # yang beda-beda bersamaan.
 _lock = threading.Lock()
 
+# Audit 2026-07-30 item B3: 403 berarti paket API key TIDAK termasuk
+# company-news -- fakta level-akun/plan, bukan per-ticker, jadi begitu satu
+# ticker kena 403, SEMUA ticker berikutnya di run yang sama pasti 403 juga.
+# Tanpa circuit breaker ini, tiap ticker tetap membayar rate limit 1.05
+# detik SEBELUM tahu kena 403 (jalur 403 sengaja tidak menyimpan cache,
+# supaya kalau plan di-upgrade pertengahan hari ketahuan di run berikutnya)
+# -- ~71 menit terbakar tiap run tanpa menghasilkan satu berita pun.
+_403_confirmed = False
+
 
 def _redact(value) -> str:
     """Buang API key dari teks apa pun sebelum dicetak/di-log.
@@ -82,10 +91,14 @@ def _redact(value) -> str:
 
 
 def reset_batch_tracking():
-    """Reset rate-limit tracking (dipanggil di awal evidence run)."""
-    global _last_call_time
+    """Reset rate-limit tracking + circuit breaker 403 (dipanggil di awal
+    evidence run) -- run BARU (proses baru) harus mendeteksi ulang status
+    403 dari nol, satu request rate-limited yang "terbuang" untuk
+    mengonfirmasi, bukan mewarisi status dari sesi/proses sebelumnya."""
+    global _last_call_time, _403_confirmed
     with _lock:
         _last_call_time = None
+        _403_confirmed = False
 
 
 def _apply_rate_limit():
@@ -120,6 +133,7 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
     setengah hari. Ini membuat run ulang dalam 12 jam melewati ~71 menit itu
     sepenuhnya.
     """
+    global _403_confirmed
     cached = cache_get("finnhub_news", ticker, FINNHUB_NEWS_CACHE_TTL)
     if cached is not None:
         meta = cached.get("_metadata", {})
@@ -131,6 +145,17 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
         )
 
     if not FINNHUB_API_KEY:
+        metadata = SourceMetadata(
+            source="finnhub",
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+            status="missing"
+        )
+        return NewsCollection(news=[], metadata=metadata)
+
+    if _403_confirmed:
+        # Audit item B3: sudah terkonfirmasi 403 di ticker lain run ini --
+        # short-circuit SEBELUM _apply_rate_limit(), supaya tidak membayar
+        # 1.05 detik rate limit untuk permintaan yang pasti gagal juga.
         metadata = SourceMetadata(
             source="finnhub",
             fetched_at=datetime.now(timezone.utc).isoformat(),
@@ -166,6 +191,7 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
                      label=f"finnhub:{ticker}")
 
         if resp.status_code == 403:
+            _403_confirmed = True
             metadata = SourceMetadata(
                 source="finnhub",
                 fetched_at=datetime.now(timezone.utc).isoformat(),
@@ -176,13 +202,40 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
         resp.raise_for_status()
         data = resp.json()
 
+        # Audit 2026-07-30 item B2: parsing di bawah ini dulu hanya dijaga
+        # `except requests.exceptions.RequestException` di paling bawah.
+        # Finnhub HTTP 200 dengan body BUKAN list (mis. objek error), atau
+        # item dengan `"datetime": null` eksplisit, melempar
+        # AttributeError/TypeError yang lolos dari except itu -- naik sampai
+        # evidence.py, dan MEMBUANG SELURUH EvidencePackage ticker itu
+        # (price_market/fundamental/filing SEC yang sudah berhasil diambil
+        # ikut hilang) gara-gara satu field berita yang cacat.
+        if not isinstance(data, list):
+            print(f"[finnhub:{ticker}] respons company-news bukan list ({type(data).__name__}): {data!r:.200}",
+                  file=sys.stderr)
+            metadata = SourceMetadata(
+                source="finnhub",
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                status="missing"
+            )
+            return NewsCollection(news=[], metadata=metadata)
+
         news_list = []
         for item in data:
+            if not isinstance(item, dict):
+                continue
+            ts = item.get("datetime")
+            if not ts:  # None (null eksplisit) atau 0/absen -- bukan timestamp valid
+                continue
+            try:
+                published_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            except (TypeError, ValueError, OSError):
+                continue
             news_id = item.get("id")
             news_list.append(CompanyNews(
                 headline=item.get("headline", ""),
                 source=item.get("source", ""),
-                published_at=datetime.fromtimestamp(item.get("datetime", 0), tz=timezone.utc).isoformat(),
+                published_at=published_at,
                 url=item.get("url"),
                 evidence_id=str(news_id) if news_id is not None else None,
             ))

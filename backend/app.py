@@ -585,6 +585,89 @@ def get_evidence_summary():
     return jsonify({"packages": rows, "total": len(rows)})
 
 
+@app.get("/api/historical/summary")
+def get_historical_summary():
+    """Versi ringan historical_timeline.json untuk HistoricalView (audit
+    2026-07-30, item C6) -- file penuh sekarang ~469MB dan bertambah ~82MB
+    per run (satu snapshot AggregatorOutput UTUH per ticker per hari, sejak
+    v2.0 -- lihat historical.py docstring), jauh lebih besar dari yang view
+    itu sebenarnya pakai (5 skalar per ticker). Sebelumnya HistoricalView
+    memanggil GET /api/historical mentah: seluruh 469MB dimateralisasi jadi
+    string lalu di-gzip SEKALIGUS single-threaded sambil memegang GIL
+    (_compress_response) di setiap klik nav -- selama itu request lain,
+    termasuk /api/refresh/status yang di-poll tiap 2.5 detik, ikut menggantung.
+
+    Endpoint ini strip `entries[].aggregator_output` (payload besarnya) dan
+    cuma kirim yang dipakai HistoricalView.jsx: ticker, total_entries,
+    snapshot terakhir, plus dua boolean turunan (halted di entry terakhir,
+    ada/tidaknya entry dengan outcome terisi) yang sebelumnya dihitung ulang
+    di browser dari array `entries` penuh. Detail 1 ticker (utuh, termasuk
+    entries) tetap lewat /api/ticker/<t>, yang cuma index 1 ticker.
+
+    Catatan: ini tidak mengurangi memori yang ditahan _stage_cache (masih
+    parse penuh sekali di sini) -- itu bagian C3 yang lebih struktural
+    (pertumbuhan historical_timeline.json sendiri tidak dibatasi, dan
+    _warm_cache memuat semua stage file penuh saat startup). Endpoint ini
+    menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang merupakan risiko
+    paling akut (satu klik nav bisa membuat request lain menggantung)."""
+    timelines = _get_stage("historical")
+    rows = []
+    for ticker, t in timelines.items():
+        entries = t.get("entries") or []
+        last = entries[-1] if entries else None
+        rows.append({
+            "ticker": ticker,
+            "total_entries": t.get("total_entries", 0),
+            "last_entry_date": t.get("last_entry_date"),
+            "last_halted": (last.get("aggregator_output") or {}).get("halted") if last else None,
+            "has_outcome": any(e.get("outcome") is not None for e in entries),
+        })
+    return jsonify({"tickers": rows, "total": len(rows)})
+
+
+# 9 dari 10 stage file yang dijaga gerbang all-or-nothing punya wrapper
+# level-atas tempat "session_id" bisa disisipkan tanpa mencemari struktur
+# datanya (audit item C2/C9) -- historical_timeline.json sengaja dikecualikan
+# (bentuknya {ticker: {...}} tanpa wrapper).
+CONSISTENCY_CHECKED_STAGES = [
+    "screening", "evidence", "knowledge", "catalyst", "peer",
+    "confidence", "risk", "reasoning", "aggregator",
+]
+
+
+@app.get("/api/consistency")
+def get_consistency():
+    """Deteksi (BUKAN cegah -- lihat audit item C2/C9) dashboard/data/ yang
+    mencampur dua run pipeline berbeda. refresh_full_pipeline.py menulis 10+
+    file stage atomik SATU-SATU di gerbang "every stage succeeded", bukan
+    sebagai satu transaksi lintas file -- kill eksternal DI TENGAH blok tulis
+    itu (proses dibunuh paksa, disk penuh, dst) bisa menyisakan sebagian file
+    dari run baru (session_id baru) berdampingan dengan sebagian file yang
+    belum sempat ditimpa (session_id run sebelumnya).
+
+    Setiap file di CONSISTENCY_CHECKED_STAGES menerima "session_id" yang
+    SAMA PERSIS dari satu variabel kanonik saat run itu berhasil sampai ke
+    gerbang tulis -- jadi kalau session_id-nya tidak seragam di semua file,
+    itu berarti gerbang terakhir yang benar-benar tuntas TIDAK mencakup
+    semuanya. File lama (ditulis sebelum perbaikan ini, tidak punya
+    "session_id" sama sekali) dilaporkan sebagai None, bukan dianggap error --
+    supaya endpoint ini tidak langsung berteriak "tidak konsisten" cuma
+    karena belum semua file pernah ditulis ulang sejak perbaikan ini
+    di-deploy."""
+    session_ids: dict[str, str | None] = {}
+    for name in CONSISTENCY_CHECKED_STAGES:
+        session_ids[name] = _get_stage(name).get("session_id")
+
+    seen = {sid for sid in session_ids.values() if sid is not None}
+    consistent = len(seen) <= 1
+
+    return jsonify({
+        "consistent": consistent,
+        "session_ids": session_ids,
+        "distinct_session_ids": sorted(seen),
+    })
+
+
 @app.get("/api/capabilities")
 def get_capabilities():
     """Dibaca frontend sekali di startup untuk tahu apakah grup nav
@@ -660,6 +743,16 @@ def _warm_cache() -> None:
 
 
 if __name__ == "__main__":
+    # Audit item C7: dashboard ini diasumsikan local-only di seluruh
+    # codebase (lihat personal_routes.py -- holdings.json portofolio riil
+    # lewat sini) dan tidak punya autentikasi sama sekali, tapi sebelumnya
+    # bind ke 0.0.0.0 -- siapa pun di jaringan yang sama bisa memicu
+    # pipeline 6 jam lewat POST /api/refresh/<mode> atau membaca
+    # /api/refresh/status tanpa kredensial apa pun. render.yaml (deploy ke
+    # Render.com sebagai web service publik) sudah tidak dipakai lagi
+    # (dikonfirmasi pengguna) -- 127.0.0.1 di sini benar-benar merealisasikan
+    # asumsi "local-only" yang sudah dinyatakan di tempat lain, bukan
+    # keputusan baru.
     port = int(os.environ.get("PORT", 5000))
     _warm_cache()
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="127.0.0.1", port=port)

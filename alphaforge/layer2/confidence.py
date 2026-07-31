@@ -51,6 +51,39 @@ CONTEXT_PENALTY_CAP = 15.0
 RECENCY_PENALTY_THRESHOLD_DAYS = 91
 RECENCY_PENALTY_POINTS = 10.0
 
+# Audit 2026-07-30 item A7: menghapus 7 cek yang tak pernah terisi (lihat
+# docstring _score_valuation/_score_competitive_structure/
+# _score_competitive_momentum/_score_ownership) menaikkan DENOMINATOR 4
+# section berbobot gabungan 0.50 (valuation 0.15 + competitive_structure 0.15
+# + competitive_momentum 0.05 + ownership 0.15). Skor maksimum yang bisa
+# dicapai naik dari 81.4 ke 100 tanpa ambang band (70/40, dipertahankan dari
+# versi sebelum audit) ikut disesuaikan -- ticker yang dulu mentok di plafon
+# lama naik ~18.6 poin walau data mentahnya tidak berubah sama sekali.
+#
+# 70/40 di sini adalah 70/81.381 dan 40/81.381 dikali balik ke skala baru
+# (100/81.381 ≈ 1.2288): OLD_MAX = 100%*0.20 (financial_health, tak
+# terpengaruh) + 5/7*100%*0.15 (valuation, 5 cek asli/7 lama) + 100%*0.15
+# (historical_trend, tak terpengaruh) + 3/5*100%*0.15 (competitive_structure)
+# + 1/3*100%*0.05 (competitive_momentum) + 2/3*100%*0.15 (ownership) +
+# 100%*0.15 (governance, sudah diperbaiki di audit sebelumnya, tak
+# terpengaruh di sini) = 81.381.
+#
+# CATATAN KETEPATAN: rescale linear ini EKSAK untuk ticker yang tingkat
+# kelengkapan datanya proporsional sama di semua section (skenario paling
+# umum -- ticker dengan cakupan data buruk cenderung buruk di semua section,
+# bukan selektif). Untuk ticker dengan pola kelengkapan yang timpang antar
+# section (mis. sempurna di 4 section yang berubah tapi lemah di 3 section
+# yang tidak), pemetaan skor lama->baru TIDAK bijektif murni dari skor
+# gabungan saja (nilai per-section yang menentukan) -- lihat docstring
+# assess_confidence untuk perinciannya. Kalibrasi ini belum divalidasi
+# terhadap distribusi skor produksi nyata (tidak ada snapshot knowledge.json
+# di lingkungan pengembangan saat perbaikan ini dibuat); validasi ulang
+# begitu ada run produksi baru tersedia, sama seperti bobot/ambang lain di
+# modul ini yang sudah ditandai "kalibrasi awal, bukan angka final" (lihat
+# docstring modul).
+BAND_HIGH_THRESHOLD = 86.0
+BAND_MEDIUM_THRESHOLD = 49.0
+
 
 def assess_confidence(
     knowledge_profile: KnowledgeProfile,
@@ -104,9 +137,9 @@ def assess_confidence(
         score -= RECENCY_PENALTY_POINTS
     score = max(0.0, min(100.0, score))
 
-    if score >= 70:
+    if score >= BAND_HIGH_THRESHOLD:
         band = "high"
-    elif score >= 40:
+    elif score >= BAND_MEDIUM_THRESHOLD:
         band = "medium"
     else:
         band = "low"
@@ -118,7 +151,21 @@ def assess_confidence(
         # sebenarnya wajar (data itu memang tidak semuanya pernah 100%).
         for name, sec in by_section.items():
             if sec.score < 50:
-                limiters.append(f"{name} data incomplete ({sec.filled}/{sec.expected})")
+                if name == "competitive_momentum":
+                    # Audit item A8: tersisa 1 cek (acceleration_signal),
+                    # yang butuh revenue YoY q3 DAN q4 dari SEC EDGAR --
+                    # proksi cakupan histori EDGAR, bukan "data hilang"
+                    # generik. Pesan default "data incomplete (0/1)"
+                    # menyesatkan (kedengaran seperti gagal fetch); yang
+                    # sebenarnya terjadi: kurang dari 2 kuartal revenue
+                    # berurutan untuk dibandingkan.
+                    limiters.append(
+                        "competitive_momentum: revenue YoY quarter-over-quarter "
+                        "tidak tersedia (perlu histori SEC EDGAR untuk 2 "
+                        "kuartal berurutan)"
+                    )
+                else:
+                    limiters.append(f"{name} data incomplete ({sec.filled}/{sec.expected})")
         if peer_penalty.applied:
             limiters.append(peer_penalty.reason)
         if context_penalty.applied:

@@ -97,12 +97,28 @@ _HEADERS = {"User-Agent": SEC_USER_AGENT}
 _cik_map_memo: dict[str, str] | None = None
 _cik_map_lock = threading.Lock()
 
+# Audit 2026-07-30 item B1: memo di atas cuma menutup jalur SUKSES -- kalau
+# fetch pertama gagal (mis. sec.gov membalas 503), _cik_map_memo tetap None
+# selamanya, jadi SETIAP panggilan get_cik_from_ticker berikutnya (4x/ticker
+# x 4065 ticker = ~16.260 panggilan) mengulang seluruh siklus rate-limit +
+# retry + backoff dari nol -- minimal ~13,5 jam tambahan, run tampak
+# menggantung bukan gagal. Negative-cache dengan cooldown singkat: gagal
+# sekali -> jangan coba lagi selama _CIK_MAP_RETRY_COOLDOWN_SECONDS (supaya
+# gangguan BENERAN sesaat masih bisa pulih di tengah run panjang), tapi tidak
+# menghantam jaringan di setiap satu dari ribuan panggilan berikutnya.
+_CIK_MAP_RETRY_COOLDOWN_SECONDS = 60.0
+_cik_map_failed_at: float | None = None
+
 
 def _get_ticker_cik_map() -> dict[str, str]:
     """Fetch (atau baca dari cache/memo) mapping TICKER -> CIK 10-digit zero-padded."""
-    global _cik_map_memo
-    if _cik_map_memo is not None:
-        return _cik_map_memo
+    global _cik_map_memo, _cik_map_failed_at
+    with _cik_map_lock:
+        if _cik_map_memo is not None:
+            return _cik_map_memo
+        if _cik_map_failed_at is not None:
+            if time.time() - _cik_map_failed_at < _CIK_MAP_RETRY_COOLDOWN_SECONDS:
+                return {}
 
     cached = cache.get("sec_edgar", "ticker_cik_map", _TICKER_MAP_TTL)
     if cached is not None:
@@ -122,6 +138,8 @@ def _get_ticker_cik_map() -> dict[str, str]:
                     label="sec_ticker_map")
     except Exception as exc:
         print(f"[sec_ticker_map] gagal (final): {exc}", file=sys.stderr)
+        with _cik_map_lock:
+            _cik_map_failed_at = time.time()
         return {}
 
     mapping = {
@@ -132,6 +150,7 @@ def _get_ticker_cik_map() -> dict[str, str]:
     cache.set("sec_edgar", "ticker_cik_map", mapping)
     with _cik_map_lock:
         _cik_map_memo = mapping
+        _cik_map_failed_at = None
     return mapping
 
 

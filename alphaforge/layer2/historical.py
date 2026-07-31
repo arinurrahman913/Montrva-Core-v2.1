@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,6 +31,15 @@ from ..json_safe import dumps_safe
 
 if TYPE_CHECKING:
     from .aggregator_contracts import AggregatorOutput
+
+# Keputusan pengguna 2026-07-31 (audit 2026-07-30 item C3): file ini
+# menyimpan snapshot AggregatorOutput UTUH per ticker per hari SELAMANYA by
+# design (lihat docstring modul) -- 469MB dan bertambah ~82MB/run,
+# menahan backend/app.py::_stage_cache di memori tanpa batas dan bikin
+# _warm_cache diproyeksikan gagal dalam ~2 minggu run harian. Retensi 2
+# tahun (~730 hari) per ticker cukup untuk evaluasi horizon menengah (mis.
+# thesis multibagger 1-2 tahun) tanpa membiarkan file tumbuh tanpa batas.
+RETENTION_DAYS = 730
 
 
 def create_historical_entry(output: AggregatorOutput) -> dict:
@@ -72,13 +81,44 @@ def load_historical_timeline(timeline_file: str) -> dict[str, HistoricalTimeline
     return timelines
 
 
+def _prune_old_entries(timeline: HistoricalTimeline, cutoff: datetime) -> None:
+    """Buang entries lebih tua dari `cutoff` dari BUFFER on-disk (audit item
+    C3, retensi `RETENTION_DAYS`). `total_entries`/`first_entry_date` TIDAK
+    ikut diubah -- keduanya tetap penghitung/tanggal SEUMUR HIDUP ticker ini
+    dilacak (dipakai StatCards "Total Snapshots" & kolom "Snapshot Terakhir"
+    di HistoricalView), bukan hitungan entries yang masih tersimpan di
+    buffer. Entry dengan tanggal tak terbaca disimpan apa adanya (fail-safe,
+    bukan dibuang diam-diam)."""
+    if not timeline.entries:
+        return
+    kept = []
+    for e in timeline.entries:
+        try:
+            entry_dt = datetime.fromisoformat(_entry_date(e))
+        except (ValueError, TypeError):
+            kept.append(e)
+            continue
+        if entry_dt.tzinfo is None:
+            entry_dt = entry_dt.replace(tzinfo=timezone.utc)
+        if entry_dt >= cutoff:
+            kept.append(e)
+    timeline.entries = kept
+
+
 def update_timeline(
     timelines: dict[str, HistoricalTimeline],
     new_outputs: list[AggregatorOutput],
+    retention_days: int = RETENTION_DAYS,
 ) -> dict[str, HistoricalTimeline]:
     """Update timelines dengan AggregatorOutput baru. Satu entry per HARI
     KALENDER (UTC) per ticker — re-run di hari yang sama menimpa entry hari
-    itu, bukan menambah duplikat (lihat riwayat bug di commit 7caf44c)."""
+    itu, bukan menambah duplikat (lihat riwayat bug di commit 7caf44c).
+
+    Juga memangkas entries lebih tua dari `retention_days` (audit item C3)
+    untuk SEMUA ticker di `timelines` -- bukan cuma yang disentuh
+    `new_outputs` hari ini -- supaya ticker yang keluar dari screening tidak
+    diam-diam menyisakan histori tak terbatas yang tidak pernah dipangkas
+    lagi."""
     for output in new_outputs:
         if output.ticker not in timelines:
             timelines[output.ticker] = HistoricalTimeline(ticker=output.ticker)
@@ -100,6 +140,10 @@ def update_timeline(
         timeline.last_entry_date = _entry_date(entry)
         if not timeline.first_entry_date:
             timeline.first_entry_date = _entry_date(entry)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    for timeline in timelines.values():
+        _prune_old_entries(timeline, cutoff)
 
     return timelines
 
