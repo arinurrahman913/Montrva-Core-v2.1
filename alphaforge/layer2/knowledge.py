@@ -263,8 +263,13 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
 
 
 def _fcf_margin_pct(fcf: float | None, revenue: float | None) -> float | None:
-    """Calculate FCF margin % (FCF / Revenue)."""
-    if not fcf or not revenue or revenue <= 0:
+    """Calculate FCF margin % (FCF / Revenue).
+
+    Audit item B5: `not fcf` dulu membuang FCF tepat 0.0 (breakeven) sebagai
+    "data hilang" -- itu nilai sah, cuma numerator-nya kebetulan nol.
+    `revenue` TIDAK ikut diubah (revenue<=0 tetap benar diblokir, pembagi
+    nol/negatif memang tak terhitung)."""
+    if fcf is None or not revenue or revenue <= 0:
         return None
     return (fcf / revenue) * 100
 
