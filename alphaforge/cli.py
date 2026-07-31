@@ -161,6 +161,9 @@ def main() -> None:
         from .layer2.contracts import (
             EvidencePackage, PriceBar, SourceMetadata,
             PriceMarketData, FundamentalData, InstitutionalOwnership,
+            InstitutionalHolder, InstitutionalActivity, InstitutionalTrade,
+            CompanyProfile, AnalystEstimates, EpsSurprise,
+            RevenueEstimatePeriod, PriceTargetSnapshot,
             NewsCollection, SecFilings, QuarterlyFundamental,
             CompanyNews, SecFiling
         )
@@ -206,8 +209,44 @@ def main() -> None:
             inst_dict = pkg_dict["institutional_ownership"]
             institutional_ownership = InstitutionalOwnership(
                 metadata=SourceMetadata(**inst_dict["metadata"]),
-                percentage=inst_dict.get("percentage")
+                percentage=inst_dict.get("percentage"),
+                insider_percentage=inst_dict.get("insider_percentage"),
+                top_holders=[InstitutionalHolder(**h) for h in inst_dict.get("top_holders", [])],
             )
+
+            # Audit item B7: sebelumnya tidak direkonstruksi sama sekali --
+            # institutional_activity WAJIB (tanpa default) di EvidencePackage,
+            # jadi tidak mengisinya membuat CLI `knowledge` mati TypeError di
+            # paket pertama, sebelum sempat memproses satu pun ticker.
+            ia_dict = pkg_dict["institutional_activity"]
+            institutional_activity = InstitutionalActivity(
+                metadata=SourceMetadata(**ia_dict["metadata"]),
+                recent_trades=[InstitutionalTrade(**t) for t in ia_dict.get("recent_trades", [])],
+                buy_count_30d=ia_dict.get("buy_count_30d", 0),
+                sell_count_30d=ia_dict.get("sell_count_30d", 0),
+                net_shares_30d=ia_dict.get("net_shares_30d", 0),
+                top_buyer=ia_dict.get("top_buyer"),
+                top_seller=ia_dict.get("top_seller"),
+            )
+
+            # company_profile/analyst_estimates opsional (None kalau Evidence
+            # gagal fetch-nya) -- sebelumnya dijatuhkan diam-diam, sekarang
+            # direkonstruksi kalau ada.
+            cp_dict = pkg_dict.get("company_profile")
+            company_profile = CompanyProfile(
+                **{k: v for k, v in cp_dict.items() if k != "metadata"},
+                metadata=SourceMetadata(**cp_dict["metadata"]),
+            ) if cp_dict else None
+
+            ae_dict = pkg_dict.get("analyst_estimates")
+            analyst_estimates = AnalystEstimates(
+                **{k: v for k, v in ae_dict.items()
+                   if k not in ("metadata", "eps_surprise_history", "revenue_estimates", "price_target_history")},
+                metadata=SourceMetadata(**ae_dict["metadata"]),
+                eps_surprise_history=[EpsSurprise(**e) for e in ae_dict.get("eps_surprise_history", [])],
+                revenue_estimates=[RevenueEstimatePeriod(**r) for r in ae_dict.get("revenue_estimates", [])],
+                price_target_history=[PriceTargetSnapshot(**p) for p in ae_dict.get("price_target_history", [])],
+            ) if ae_dict else None
 
             # news/filings ada di JSON di bawah key "items" (lihat
             # EvidencePackage.to_dict() di contracts.py) — sebelumnya di sini
@@ -232,9 +271,12 @@ def main() -> None:
                 price_market=price_market,
                 fundamental=fundamental,
                 institutional_ownership=institutional_ownership,
+                institutional_activity=institutional_activity,
                 news=news,
                 sec_filings=sec_filings,
-                generated_at=pkg_dict["generated_at"]
+                generated_at=pkg_dict["generated_at"],
+                company_profile=company_profile,
+                analyst_estimates=analyst_estimates,
             )
             evidence_packages.append(pkg)
 
