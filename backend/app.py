@@ -743,6 +743,16 @@ def _warm_cache() -> None:
 
 
 if __name__ == "__main__":
+    # Audit item C7: dashboard ini diasumsikan local-only di seluruh
+    # codebase (lihat personal_routes.py -- holdings.json portofolio riil
+    # lewat sini) dan tidak punya autentikasi sama sekali, tapi sebelumnya
+    # bind ke 0.0.0.0 -- siapa pun di jaringan yang sama bisa memicu
+    # pipeline 6 jam lewat POST /api/refresh/<mode> atau membaca
+    # /api/refresh/status tanpa kredensial apa pun. render.yaml (deploy ke
+    # Render.com sebagai web service publik) sudah tidak dipakai lagi
+    # (dikonfirmasi pengguna) -- 127.0.0.1 di sini benar-benar merealisasikan
+    # asumsi "local-only" yang sudah dinyatakan di tempat lain, bukan
+    # keputusan baru.
     port = int(os.environ.get("PORT", 5000))
     _warm_cache()
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="127.0.0.1", port=port)
