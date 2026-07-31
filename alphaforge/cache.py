@@ -4,6 +4,8 @@ prinsip #2: "Caching wajib, bukan opsional."
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -48,8 +50,31 @@ def get(namespace: str, key: str, ttl_seconds: float):
 
 
 def set(namespace: str, key: str, data) -> None:
+    """Tulis cache secara ATOMIK (tmp unik-per-penulis + os.replace) — audit
+    item B4: cache di-key per-CIK, bukan per-ticker, jadi dua thread yang
+    fetch ticker BERBEDA tapi CIK SAMA (mis. GOOG/GOOGL, FOX/FOXA) bisa
+    menulis ke path cache yang SAMA bersamaan. `write_text()` lama bukan
+    atomik (open+write+close biasa) — dua penulis konkuren bisa
+    menghasilkan file JSON yang isinya bercampur (torn write). Pembaca
+    sebelumnya self-healing lewat cache-miss (JSON gagal parse -> refetch),
+    yang menutupi gejalanya tapi tetap boros satu fetch ekstra tiap kali
+    terjadi. Tmp file pakai nama UNIK per-penulis (`tempfile.mkstemp`),
+    BUKAN suffix ".tmp" tetap — kalau dua penulis konkuren berbagi nama tmp
+    yang sama, mereka bisa saling menimpa file TMP satu sama lain sebelum
+    salah satu sempat rename, cuma memindahkan torn-write dari file final
+    ke file tmp, bukan menghilangkannya."""
     p = _path(namespace, key)
-    p.write_text(dumps_safe({"cached_at": time.time(), "data": data}), encoding="utf-8")
+    fd, tmp_path = tempfile.mkstemp(dir=p.parent, prefix=p.stem + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(dumps_safe({"cached_at": time.time(), "data": data}))
+        os.replace(tmp_path, p)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def get_stale(namespace: str, key: str):
