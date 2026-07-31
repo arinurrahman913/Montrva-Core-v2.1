@@ -412,4 +412,32 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Audit item C4: alphaforge/layer2/sources/_retry.py menjalankan tiap
+    # panggilan network lewat ThreadPoolExecutor global supaya bisa dibatasi
+    # timeout -- tapi Python tidak punya cara membunuh thread yang sedang
+    # jalan, jadi panggilan yang macet (pernah teramati: yfinance menggantung
+    # 40+ menit tanpa exception) meninggalkan thread yang hidup SELAMANYA.
+    # `ThreadPoolExecutor` mendaftarkan atexit hook yang JOIN semua thread
+    # workernya sebelum interpreter benar-benar keluar -- kalau ada thread
+    # yang macet permanen, `sys.exit()` (yang cuma raise SystemExit, proses
+    # exit normal masih menunggu atexit) bisa membuat proses ini TIDAK
+    # PERNAH keluar walau semua pekerjaan (termasuk seluruh tulis file) sudah
+    # tuntas. backend/app.py menjalankan script ini lewat subprocess dengan
+    # timeout 6 jam sebagai jaring pengaman, tapi itu berarti satu run yang
+    # "sukses" bisa menggantung sampai 6 jam TAMBAHAN sebelum akhirnya
+    # dibunuh paksa dari luar.
+    #
+    # Tidak ada API publik untuk membuat worker ThreadPoolExecutor jadi
+    # daemon thread (pembuatan thread ada di _adjust_thread_count, internal
+    # privat concurrent.futures.thread, rawan berubah antar versi Python).
+    # os._exit() di sini mem-bypass SEMUA cleanup interpreter (atexit
+    # termasuk) dan keluar seketika di level OS -- aman dipakai justru
+    # karena titik ini SUDAH di ujung main(): setiap tulis file yang berarti
+    # sudah selesai lewat os.replace() (durable terlepas dari apa yang
+    # terjadi ke proses sesudahnya), tidak ada cleanup lain yang tersisa.
+    code = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    os._exit(code)

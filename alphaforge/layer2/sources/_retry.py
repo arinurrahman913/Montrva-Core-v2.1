@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
 from typing import Callable, TypeVar
@@ -35,7 +36,43 @@ def _safe(exc) -> str:
 # stays blocked on its own time, off the critical path) while retry() moves
 # on to the next attempt instead of hanging with it.
 DEFAULT_TIMEOUT_SECONDS = 60.0
-_executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="retry-fetch")
+_POOL_SIZE = 32
+# Audit item C4: ThreadPoolExecutor TIDAK PUNYA cara membunuh worker yang
+# sedang jalan -- begitu future.result(timeout=...) menyerah pada satu
+# fn() yang macet, thread di baliknya tetap hidup, terjebak, SELAMANYA
+# menempati satu slot dari _POOL_SIZE. Kerugian menumpuk sepanjang run
+# panjang (pernah teramati: satu panggilan yfinance macet 40+ menit tanpa
+# exception); kalau cukup banyak slot habis, retry() berikutnya SELALU
+# timeout (tidak ada worker bebas untuk dijalankan), bukan cuma lambat.
+# Begitu >= _MAX_ABANDONED_BEFORE_RECYCLE submission dianggap ditinggalkan
+# (timeout, bukan exception biasa -- exception biasa berarti workernya
+# BERES, cuma hasilnya gagal, itu bukan kebocoran), pool lama diganti pool
+# baru. Pool lama TIDAK di-shutdown(wait=True) -- itu akan menunggu worker
+# yang justru tidak akan pernah selesai. Dibiarkan begitu saja: Python
+# garbage-collect objek executor-nya begitu tidak ada referensi tersisa;
+# thread yang macet di dalamnya tetap hidup sebagai thread yatim piatu
+# (tidak berbahaya untuk proses lanjut jalan, cuma memori kecil per thread).
+_MAX_ABANDONED_BEFORE_RECYCLE = 8
+
+_pool_lock = threading.Lock()
+_executor = ThreadPoolExecutor(max_workers=_POOL_SIZE, thread_name_prefix="retry-fetch")
+_abandoned_count = 0
+
+
+def _submit(fn: Callable[[], T]):
+    with _pool_lock:
+        return _executor.submit(fn)
+
+
+def _note_abandoned(label: str) -> None:
+    global _executor, _abandoned_count
+    with _pool_lock:
+        _abandoned_count += 1
+        if _abandoned_count >= _MAX_ABANDONED_BEFORE_RECYCLE:
+            print(f"[{label}] {_abandoned_count} worker retry-fetch diduga macet permanen -- "
+                  f"membuat pool baru ({_POOL_SIZE} slot) untuk pulihkan kapasitas", file=sys.stderr)
+            _executor = ThreadPoolExecutor(max_workers=_POOL_SIZE, thread_name_prefix="retry-fetch")
+            _abandoned_count = 0
 
 
 def retry(fn: Callable[[], T], *, retries: int, backoff_seconds: float, label: str,
@@ -48,10 +85,11 @@ def retry(fn: Callable[[], T], *, retries: int, backoff_seconds: float, label: s
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
-            future = _executor.submit(fn)
+            future = _submit(fn)
             return future.result(timeout=timeout_seconds)
         except _FutureTimeoutError:
             last_exc = TimeoutError(f"{label} timed out after {timeout_seconds}s")
+            _note_abandoned(label)
             if attempt < retries:
                 print(f"[{label}] percobaan {attempt}/{retries} timeout ({timeout_seconds}s) — retry dalam {backoff_seconds}s",
                       file=sys.stderr)
