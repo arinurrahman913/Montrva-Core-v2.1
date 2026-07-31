@@ -189,7 +189,7 @@ disimulasikan setelah task ke-2 selesai (200 fake candidate, tiap task tidur
 0.3s): kode lama 12.03s dengan 200/200 task tetap jalan semua; kode baru
 0.60s dengan cuma 7/200 task yang sempat jalan.
 
-#### A4. Throttle untuk 3 endpoint Yahoo ternyata placebo — TERBUKA
+#### A4. Throttle untuk 3 endpoint Yahoo ternyata placebo — SELESAI
 `yahoo_evidence.py::_apply_batch_delay`
 
 `ca6bf5b` menambahkan `_apply_batch_delay()` ke `_fetch_institutional_holders_detail`,
@@ -210,7 +210,17 @@ melepas lock sebelum tidur akan membuat 5 thread menghitung target yang sama
 lalu menyerbu bersamaan. Tidak ada reentrancy dan tidak ada lock yang ditahan
 melintasi panggilan `retry()`.
 
-#### A5. `dump_safe` hanya menghapus separuh lonjakan memori — TERBUKA
+**Perbaikan**: checkpoint-per-batch diganti min-interval PER PANGGILAN (pola
+sama seperti `finnhub.py::_apply_rate_limit`) — `YF_EVIDENCE_MIN_INTERVAL_SECONDS
+= YF_EVIDENCE_BATCH_DELAY_SECONDS / YF_EVIDENCE_BATCH_SIZE` (0.1 detik).
+Diverifikasi kontras: kode lama pada 60 panggilan berjarak realistis (~0.21s)
+cuma sleep SEKALI (checkpoint pertama, bug bootstrap terpisah), nol sleep di
+checkpoint berikutnya — placebo total di steady state, persis diagnosis
+audit. Kode baru menahan 20 panggilan rapid-fire ~1.9 detik (throttle aktif),
+tidak menambah jeda untuk panggilan yang sudah lebih lambat dari interval
+minimal (tidak over-throttle).
+
+#### A5. `dump_safe` hanya menghapus separuh lonjakan memori — SELESAI
 `json_safe.py::dump_safe`
 
 Docstring mengklaim tidak ada struktur raksasa yang ditahan, tapi
@@ -218,6 +228,16 @@ Docstring mengklaim tidak ada struktur raksasa yang ditahan, tapi
 lebih dulu** — satu salinan penuh struktur — sebelum satu byte pun ditulis.
 Jadi 2 dari 4 salinan hilang, bukan 3. Kalau universe tumbuh atau downsampling
 dimatikan, `MemoryError` yang sama kembali di baris yang sama.
+
+**Perbaikan**: `_dump_streaming` baru merekursi turun ke container
+(dict/list) menulis delimiter langsung ke file handle, sanitasi NaN/inf
+PER-LEAF saat emisi — tidak ada titik yang menahan salinan penuh/sebagian
+besar struktur. Dipakai `dump_safe` hanya saat `indent is None` (satu-
+satunya pemanggil produksi memakainya justru untuk payload besar); payload
+ber-indent (selalu kecil by construction) tetap lewat jalur lama. Diverifikasi
+12 kasus uji korektnes (termasuk key non-string, NaN/Infinity, unicode) —
+semua cocok dengan baseline lama — plus `tracemalloc` pada struktur ~5000
+item bergaya evidence.json: peak memory turun dari 35.33MB ke 0.33MB (99.1%).
 
 Perbaikan sebenarnya: subclass `json.JSONEncoder` supaya sanitasi terjadi
 per-nilai saat emisi.
@@ -285,7 +305,7 @@ lingkungan pengembangan untuk validasi percentile-exact. Ambang ini tetap
 "kalibrasi awal" (sama seperti bobot/ambang lain di modul) — validasi ulang
 terhadap distribusi skor produksi nyata begitu tersedia.
 
-#### A8. `_score_competitive_momentum` jadi degenerate (0% atau 100%) — TERBUKA
+#### A8. `_score_competitive_momentum` jadi degenerate (0% atau 100%) — SELESAI (sebagian)
 `confidence.py::_score_competitive_momentum`
 
 Tersisa satu cek, jadi skornya biner dan mengayunkan `overall.score` sebesar
@@ -295,9 +315,18 @@ bukan kualitas data momentum. Saat 0, limiter "competitive_momentum data
 incomplete (0/1)" terbit untuk setiap ticker non-high, terbaca seperti data
 hilang padahal artinya "perusahaan ini punya kurang dari 5 kuartal laporan".
 
+**Perbaikan (scope terbatas, ketepatan pesan saja)**: limiter untuk
+competitive_momentum sekarang menjelaskan penyebab sebenarnya ("revenue YoY
+quarter-over-quarter tidak tersedia, perlu histori SEC EDGAR untuk 2 kuartal
+berurutan"), bukan template generik "data incomplete (N/M)".
+
+**Belum disentuh** (butuh keputusan kalibrasi seperti A7, bukan bug murni):
+apakah section 1-cek biner pantas tetap mengayunkan `overall.score` 5 poin
+penuh, atau perlu direweight/checknya diganti.
+
 ### Temuan lama yang belum dikerjakan (dikonfirmasi masih ada)
 
-#### B1. Peta CIK gagal sekali -> ~16.000 percobaan jaringan — TERBUKA
+#### B1. Peta CIK gagal sekali -> ~16.000 percobaan jaringan — SELESAI
 `sec_parser.py::_get_ticker_cik_map`
 
 Memo yang ditambahkan `ca6bf5b` hanya menutup jalur sukses; blok `except`
@@ -306,6 +335,14 @@ membalas 503 di panggilan pertama, setiap `get_cik_from_ticker` — 4x per
 ticker x 4065 ticker = ~16.260 panggilan — masuk jalur jaringan lagi, masing-
 masing membayar rate limit + 2 percobaan + backoff 3 detik. Minimal ~13,5 jam
 tambahan; run tampak menggantung, bukan gagal.
+
+**Perbaikan**: negative-cache dengan cooldown 60 detik — gagal sekali,
+jangan coba lagi sampai cooldown lewat (bukan permanent-negative-cache, yang
+akan membuat SELURUH run kehilangan data CIK kalau kegagalan pertama cuma
+gangguan sesaat). Diverifikasi: 500 panggilan rapid-fire dengan fetch yang
+selalu gagal menghasilkan cuma 2 percobaan jaringan (bukan 500), lalu
+retry beneran terjadi lagi setelah cooldown lewat; 5 thread x 50 panggilan
+konkuren menghasilkan cuma 10 percobaan total.
 
 #### B2. Error non-RequestException di parsing news membuang seluruh paket ticker — SELESAI
 `finnhub.py::fetch_company_news`
@@ -326,19 +363,34 @@ Diverifikasi 3 skenario (respons non-list, item `datetime:null` di tengah
 item valid, happy path) — semua menghasilkan status/news_count yang benar,
 item cacat di-skip tanpa membuang item valid lainnya.
 
-#### B3. Tidak ada circuit breaker saat Finnhub 403 — TERBUKA
+#### B3. Tidak ada circuit breaker saat Finnhub 403 — SELESAI
 Kalau paket Finnhub diturunkan sehingga `company-news` jadi premium, setiap
 ticker tetap membayar 1.05 detik rate limit SEBELUM tahu kena 403, dan jalur
 403 (benar) tidak menyimpan cache — jadi ~71 menit terbakar tiap run tanpa
 menghasilkan apa pun, berulang selamanya.
 
-#### B4. Cache per-CIK jadi tulis-bersamaan untuk ticker dwi-kelas — TERBUKA
+**Perbaikan**: flag `_403_confirmed` di-set begitu satu respons 403
+diterima; panggilan berikutnya short-circuit SEBELUM `_apply_rate_limit()`
+— tanpa network call maupun jeda rate limit. Direset tiap run baru (lewat
+`reset_batch_tracking()`) supaya upgrade plan di tengah hari terdeteksi
+lagi besok. Diverifikasi: call pertama yang 403 + 20 call berikutnya untuk
+ticker berbeda menghasilkan total cuma 1 network call, elapsed <1 detik.
+
+#### B4. Cache per-CIK jadi tulis-bersamaan untuk ticker dwi-kelas — SELESAI
 Tiga namespace cache (`facts_{cik}`, `submissions_{cik}`, `form4_activity_{cik}`)
 dikunci pada CIK, bukan ticker. `screening_result.passed` urut abjad, jadi
 GOOG/GOOGL, FOX/FOXA, HEI/HEI-A berdekatan dan hampir pasti berada dalam
 jendela 5 worker yang sama -> dua `write_text` bersamaan ke file yang sama.
 Self-healing (pembaca dapat parse error -> dianggap cache miss), tapi boros.
 Tidak ada saat Evidence masih serial.
+
+**Perbaikan**: `cache.py::set()` sekarang atomik (tmp unik-per-penulis via
+`tempfile.mkstemp` + `os.replace`), mengikuti pola yang sudah dipakai
+konsisten di tempat lain di codebase — `cache.py` adalah satu-satunya
+penulis file yang sebelumnya tidak memakainya. Diverifikasi: stress test 6
+writer + 6 reader konkuren ke SATU cache key selama 500 iterasi baca — kode
+lama 1864/3000 (62%) pembacaan gagal parse (torn write terkonfirmasi
+nyata); kode baru 0 pembacaan korup.
 
 #### B5. Falsy-check lain yang 0.0-nya sah — TERBUKA
 `ca6bf5b` memperbaiki 3 tempat di `knowledge.py`. Yang tersisa:
@@ -651,16 +703,10 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Semua item dari daftar prioritas sebelumnya sudah SELESAI (penuh atau
-sebagian sesuai keputusan pengguna): A3, A7, A13, B2, B6, C1, C2, C3, C6, C9,
-C10. Sisa TERBUKA yang belum tersentuh sama sekali di sesi ini:
+SELESAI (penuh atau sebagian sesuai keputusan pengguna): A3, A4, A5, A7, A8
+(sebagian), A13, B1, B2, B3, B4, B6, C1, C2, C3, C6, C9, C10. Sisa TERBUKA
+yang belum tersentuh sama sekali:
 
-- **B1** — peta CIK gagal sekali -> ~16.000 percobaan jaringan (~13,5 jam
-  tambahan)
-- **B3** — tidak ada circuit breaker saat Finnhub 403 (~71 menit terbakar
-  tiap run tanpa hasil)
-- **B4** — cache per-CIK tulis-bersamaan untuk ticker dwi-kelas (self-healing,
-  boros bukan bug fatal)
 - **B5** — falsy-check 0.0 di 4 tempat sisa (`_fcf_margin_pct`, `fcf_yield`,
   `revenue_yoy_q4`, `capex_pct_revenue_q4`)
 - **B7** — CLI `knowledge` mati total (`TypeError`, jalur produksi tidak
@@ -669,9 +715,8 @@ C10. Sisa TERBUKA yang belum tersentuh sama sekali di sesi ini:
 - **B9** — `.info` kosong di-cache dan dilaporkan `status="ok"`
 - **B10** — komentar kontrak salah skala (`institutional_pct`/`insider_pct`)
 - **B11** — `personal_evaluation.py` ikut terdampak downsampling
-- **A4** — throttle 3 endpoint Yahoo ternyata placebo
-- **A5** — `dump_safe` cuma hapus separuh lonjakan memori
-- **A8** — `_score_competitive_momentum` degenerate (0%/100%)
+- **A8 (sisa)** — apakah section 1-cek biner pantas mengayunkan skor 5 poin
+  penuh; butuh keputusan kalibrasi seperti A7, bukan bug murni
 - **C3 (sisa arsitektural)** — `_stage_cache` masih menahan SEMUA stage file
   permanen di memori tanpa lazy-loading/eviction; retensi cuma membatasi
   PERTUMBUHAN `historical_timeline.json`, bukan cara backend menahannya
