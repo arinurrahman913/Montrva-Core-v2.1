@@ -170,7 +170,7 @@ file yang diubah (dibandingkan sebelum perubahan).
 
 ### Regresi dari `ca6bf5b` — TERBUKA
 
-#### A3. `Ctrl+C` saat Evidence menggantung sampai run selesai (~70 menit) — TERBUKA
+#### A3. `Ctrl+C` saat Evidence menggantung sampai run selesai (~70 menit) — SELESAI
 `evidence.py::run_evidence`
 
 Seluruh ~4065 task disubmit di muka, dan `with ThreadPoolExecutor(...)` saat
@@ -178,8 +178,16 @@ keluar memanggil `shutdown(wait=True)` tanpa `cancel_futures=True`. Menekan
 Ctrl+C di ticker ke-200 tetap menguras 3865 task sisanya sebelum interupsi
 sempat merambat. Versi serial yang digantikan berhenti seketika.
 
-Perbaikan yang disarankan: `executor.shutdown(cancel_futures=True)` di
-`finally`, atau submit bertahap.
+**Perbaikan**: ganti `with ThreadPoolExecutor(...) as executor:` (tidak ada
+cara mengoper `cancel_futures` lewat protokol with-statement) ke try/finally
+manual, panggil `executor.shutdown(cancel_futures=True)` di `finally` — task
+yang belum mulai (mayoritas) langsung dibatalkan, cuma menunggu
+<=`EVIDENCE_WORKERS` task yang sudah mid-flight.
+
+Diverifikasi kontras langsung kode lama vs baru dengan KeyboardInterrupt
+disimulasikan setelah task ke-2 selesai (200 fake candidate, tiap task tidur
+0.3s): kode lama 12.03s dengan 200/200 task tetap jalan semua; kode baru
+0.60s dengan cuma 7/200 task yang sempat jalan.
 
 #### A4. Throttle untuk 3 endpoint Yahoo ternyata placebo — TERBUKA
 `yahoo_evidence.py::_apply_batch_delay`
@@ -547,15 +555,14 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A13, C1,
-C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
+Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A3, A13,
+C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
 1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
    (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
    selamanya di memori; butuh keputusan retention/pruning, bukan sekadar
    perbaikan serving seperti C6
 2. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
 3. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
-4. **A3** — Ctrl+C harus benar-benar berhenti
-5. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
+4. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
    satu transaksi (kill eksternal di TENGAH gerbang sukses masih bisa
    mencampur hari, beda dari mekanisme C1 yang sudah diperbaiki)
