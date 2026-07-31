@@ -242,7 +242,7 @@ memperkecil `return_5y` sekitar 1-2% relatif.
 
 ### Regresi dari `ca6bf5b` — perlu keputusan
 
-#### A7. Ambang band Confidence tidak dikalibrasi ulang setelah cek dihapus — TERBUKA
+#### A7. Ambang band Confidence tidak dikalibrasi ulang setelah cek dihapus — SELESAI
 `confidence.py` (penghapusan cek) vs ambang `>= 70 high` / `>= 40 medium`
 
 Menghapus cek untuk field yang tidak pernah terisi menaikkan *denominator*
@@ -261,9 +261,29 @@ Konsekuensi yang perlu dipertimbangkan:
   memblokir aksi eksposur penuh) berhenti memicu untuk ticker yang terdorong
   dari 35 ke 50.
 
-Ini keputusan kalibrasi, bukan bug yang jelas — perlu dibahas: apakah ambang
-70/40 dinaikkan agar makna "high/medium/low" tetap sama seperti dulu, atau
-memang diterima bahwa sekarang lebih banyak ticker layak "high".
+**Keputusan pengguna**: naikkan ambang secara proporsional supaya makna
+"high/medium/low" tetap mirip seperti sebelum penghapusan cek.
+
+**Perbaikan**: `BAND_HIGH_THRESHOLD = 86.0`, `BAND_MEDIUM_THRESHOLD = 49.0`
+(dari rasio 100/81.381 = 1.2288 dikali 70/40) jadi konstanta modul di
+`confidence.py`, menggantikan literal `70`/`40` di `assess_confidence` DAN 3
+tempat lain di `reasoning.py` yang punya band-logic duplikat atau
+membandingkan `confidence.overall.score` mentah terhadap ambang lama
+(`_module_confidence`, `run_quality_lens`, `run_multibagger_lens`).
+`personal_contracts.py` tidak perlu diubah — gatenya membaca `.band`
+kategorikal, otomatis ikut threshold baru.
+
+Diverifikasi: simulasi `KnowledgeProfile` terisi penuh (semua field non-dead
+terisi) menghasilkan `base_score` persis 100.0, mengonfirmasi derivasi rasio
+lewat kode sungguhan, bukan cuma aljabar di atas kertas.
+
+**Catatan ketepatan** (dicatat juga di kode): rescale linear ini eksak untuk
+ticker dengan kelengkapan data proporsional sama di semua section, tapi
+TIDAK bijektif murni dari skor gabungan untuk ticker dengan pola kelengkapan
+timpang antar section — tidak ada snapshot `knowledge.json` produksi di
+lingkungan pengembangan untuk validasi percentile-exact. Ambang ini tetap
+"kalibrasi awal" (sama seperti bobot/ambang lain di modul) — validasi ulang
+terhadap distribusi skor produksi nyata begitu tersedia.
 
 #### A8. `_score_competitive_momentum` jadi degenerate (0% atau 100%) — TERBUKA
 `confidence.py::_score_competitive_momentum`
@@ -576,13 +596,11 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A3, A13,
-B2, B6, C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
+Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A3, A7,
+A13, B2, B6, C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
 1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
    (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
-   selamanya di memori; butuh keputusan retention/pruning, bukan sekadar
-   perbaikan serving seperti C6
-2. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
-3. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
-   satu transaksi (kill eksternal di TENGAH gerbang sukses masih bisa
-   mencampur hari, beda dari mekanisme C1 yang sudah diperbaiki)
+   selamanya di memori; keputusan pengguna: retensi 2 tahun/ticker
+2. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
+   satu transaksi; keputusan pengguna: marker session_id/generated_at +
+   deteksi ketidaksesuaian (bukan transaksi penuh)
