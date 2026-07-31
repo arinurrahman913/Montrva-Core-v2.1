@@ -3,7 +3,7 @@ import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
-import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, BEST_ACTION } from '../format'
+import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, BEST_ACTION, rankPersonalPicks } from '../format'
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -112,25 +112,29 @@ function buildTopThreeIndex(allTimelines) {
         if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) {
           const key = `${day}|${m}`
           if (!byDayModule.has(key)) byDayModule.set(key, [])
-          // Fallback ke source_confidence kalau thesis_score gak ada di entry
-          // ini (data lama, dari sebelum audit 2026-07-27/28 yang menambahkan
-          // field ini) -- itu metrik yang BENERAN dipakai buat nentuin top-3
-          // pada hari itu waktu snapshot-nya dibuat. Tanpa fallback ini, semua
-          // entry lama ikut default ke 50 dan seri, jadi ticker yang DULU
-          // benar-benar tampil sebagai top-pick card bisa kalah undian ulang
-          // sekarang cuma karena datanya lebih tua dari field ini (bug nyata,
-          // ditemukan live: AMD hilang dari Riwayat padahal terverifikasi
-          // pernah tampil sebagai card di Agregator pada 2026-07-27).
-          const score = call.thesis_score ?? call.source_confidence ?? 50
-          byDayModule.get(key).push({ ticker: timeline.ticker, score })
+          // Fallback thesis_score -> source_confidence (data lama, dari sebelum
+          // audit 2026-07-27/28 yang menambahkan field itu) ditangani di dalam
+          // comparePersonalPicks, bukan di sini -- supaya persis sama dengan
+          // yang dipakai Agregator. Tanpa fallback itu semua entry lama ikut
+          // default ke 50 dan seri, jadi ticker yang DULU benar-benar tampil
+          // sebagai top-pick card bisa kalah undian ulang sekarang cuma karena
+          // datanya lebih tua dari field ini (bug nyata, ditemukan live: AMD
+          // hilang dari Riwayat padahal terverifikasi pernah tampil sebagai
+          // card di Agregator pada 2026-07-27).
+          byDayModule.get(key).push({ ticker: timeline.ticker, call })
         }
       }
     }
   }
   const topSetByDayModule = new Map()
   for (const [key, list] of byDayModule) {
-    list.sort((a, b) => b.score - a.score)
-    topSetByDayModule.set(key, new Set(list.slice(0, TOP_N).map((x) => x.ticker)))
+    // Peringkat yang SAMA PERSIS dengan Agregator (comparePersonalPicks) --
+    // dulu di sini cuma `b.score - a.score`, dan karena Array.sort stabil,
+    // pemenang seri ditentukan urutan array: halaman ini iterasi
+    // personal_history.json (urutan ticker pertama kali tercatat) sedangkan
+    // Agregator iterasi personal_calls.json (NASDAQ dulu baru NYSE), jadi
+    // dua halaman bisa menyebut top-3 yang beda untuk hari yang sama.
+    topSetByDayModule.set(key, new Set(rankPersonalPicks(list).slice(0, TOP_N).map((x) => x.ticker)))
   }
   return topSetByDayModule
 }

@@ -157,6 +157,68 @@ export function personalActionClass(action) {
   return 'neutral'
 }
 
+// Peringkat top pick -- SATU fungsi dipakai bareng PersonalAggregatorView
+// (top pick hari ini) dan PersonalHistoricalView (rekonstruksi top-3 per hari).
+// Dulu keduanya sort sendiri-sendiri cuma pakai thesis_score tanpa pemecah
+// seri; karena Array.sort itu stabil, pemenang seri jadi ditentukan URUTAN
+// ARRAY-nya -- dan dua halaman itu membaca file berbeda dengan urutan berbeda
+// (personal_calls.json: NASDAQ dulu baru NYSE; personal_history.json: urutan
+// ticker pertama kali tercatat). Hasilnya dua halaman bisa menyebut top-3 yang
+// beda untuk hari yang sama: live 2026-07-31, Speculative menampilkan
+// AEHR/ALAB/ALMS di Agregator tapi FLNC/AEHR/ALAB di Riwayat, ketiganya seri
+// di skor 88.
+//
+// Serinya sendiri masif karena thesis_score kasar (live: 60 ticker seri PERSIS
+// di 100.0 untuk Quality, 95 ticker di 88.0 untuk Speculative) -- itu akarnya,
+// ada di reasoning.py (lapisan publik) dan sengaja TIDAK disentuh dari sini.
+//
+// Urutan kunci: skor tesis dulu (kekuatan argumen, tetap primer), baru risiko
+// (kalau argumennya sama kuat, yang lebih bersih risikonya lebih layak tampil),
+// baru kelengkapan data, terakhir ticker sebagai jaring supaya hasilnya
+// deterministik dan bisa dijelaskan -- bukan "kebetulan urutan file".
+// CATATAN: ini cuma mengurutkan TAMPILAN. `action` tetap murni dari
+// stance+tingkat skor (ACTION_TABLE di personal_reasoning.py) -- risiko tidak
+// pernah ikut menentukan action, dan D-04 tidak tersentuh.
+export function comparePersonalPicks(a, b) {
+  const ca = a.call || a
+  const cb = b.call || b
+  const scoreA = ca.thesis_score ?? ca.source_confidence ?? 50
+  const scoreB = cb.thesis_score ?? cb.source_confidence ?? 50
+  if (scoreB !== scoreA) return scoreB - scoreA
+  const highA = ca.risk_flags_high ?? 0
+  const highB = cb.risk_flags_high ?? 0
+  if (highA !== highB) return highA - highB
+  const medA = ca.risk_flags_medium ?? 0
+  const medB = cb.risk_flags_medium ?? 0
+  if (medA !== medB) return medA - medB
+  const dataA = ca.source_confidence ?? 0
+  const dataB = cb.source_confidence ?? 0
+  if (dataB !== dataA) return dataB - dataA
+  return String(a.ticker || '').localeCompare(String(b.ticker || ''))
+}
+
+export function rankPersonalPicks(picks) {
+  return [...picks].sort(comparePersonalPicks)
+}
+
+// Berapa kandidat yang skor tesisnya SAMA PERSIS dengan pick terakhir yang
+// tampil -- dipakai buat mengungkap "3 ini cuma 3 dari sekian yang seri",
+// bukan membiarkan pembaca mengira mereka pemenang mutlak. Mengembalikan null
+// kalau tidak ada seri di batas potong (biar UI-nya tidak bising).
+export function tieAtCutoff(rankedPicks, shown) {
+  if (rankedPicks.length <= shown) return null
+  const cutoff = rankedPicks[shown - 1]
+  if (!cutoff) return null
+  const c = cutoff.call || cutoff
+  const cutoffScore = c.thesis_score ?? c.source_confidence ?? 50
+  const tied = rankedPicks.filter((p) => {
+    const pc = p.call || p
+    return (pc.thesis_score ?? pc.source_confidence ?? 50) === cutoffScore
+  })
+  if (tied.length <= shown) return null
+  return { score: cutoffScore, count: tied.length }
+}
+
 // "cicil_bertahap" -> "Cicil Bertahap"
 export function prettyAction(action) {
   return prettyStance(action)

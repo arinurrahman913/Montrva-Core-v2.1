@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
-import { prettyAction, horizonLabel, prettyHorizon, BEST_ACTION } from '../format'
+import { prettyAction, horizonLabel, prettyHorizon, BEST_ACTION, rankPersonalPicks, tieAtCutoff } from '../format'
 
 const LENSES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -19,12 +19,21 @@ const LENS_TITLES = {
 // menemukan 11 ticker seri persis di confidence yang sama padahal skor
 // tesisnya beda jauh (0.26-0.76), dan 3 yang tampil sebagai card dipilih
 // murni oleh urutan JS sort yang stabil, bukan argumen yang lebih kuat.
+//
+// Pemecah seri sekarang di comparePersonalPicks (format.js), dipakai bareng
+// PersonalHistoricalView -- lihat catatan panjang di sana soal kenapa sort
+// "cuma thesis_score" bikin dua halaman ini bisa menyebut top-3 yang beda
+// untuk hari yang sama.
+function allQualifying(callSets, module) {
+  return rankPersonalPicks(
+    callSets
+      .map((cs) => ({ ticker: cs.ticker, call: cs[module] }))
+      .filter(({ call }) => call && call.position_status === 'no_holding' && call.action === BEST_ACTION[module]),
+  )
+}
+
 function topPicks(callSets, module, n = 3) {
-  return callSets
-    .map((cs) => ({ ticker: cs.ticker, call: cs[module] }))
-    .filter(({ call }) => call && call.position_status === 'no_holding' && call.action === BEST_ACTION[module])
-    .sort((a, b) => (b.call.thesis_score ?? 50) - (a.call.thesis_score ?? 50))
-    .slice(0, n)
+  return allQualifying(callSets, module).slice(0, n)
 }
 
 // Top pick "kemarin" = generate SEBELUM yang sekarang -- entry kedua dari
@@ -209,8 +218,25 @@ function CrossLensConcentrationNote({ picksByLens }) {
   )
 }
 
+// Seri di batas potong diungkap, bukan disembunyikan: judul "Action Terkuat
+// per Lensa" bikin pembaca wajar mengira 3 kartu ini pemenang mutlak, padahal
+// live 2026-07-31 Quality punya 60 ticker yang skor tesisnya SAMA PERSIS
+// (100.0) -- yang tampil cuma 3 di antaranya, dipilih pemecah seri (risiko
+// paling sedikit). Cuma dirender kalau serinya memang ada, biar tidak bising.
+function TieNote({ tie }) {
+  if (!tie) return null
+  return (
+    <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.45 }}>
+      {tie.count} ticker seri di skor {tie.score.toFixed(0)} — 3 ini menang karena risikonya paling sedikit.
+    </div>
+  )
+}
+
 function TopPicksSection({ callSets, historyData, onSelectTicker }) {
-  const picksByLens = LENSES.map((m) => ({ module: m, picks: topPicks(callSets, m) }))
+  const picksByLens = LENSES.map((m) => {
+    const all = allQualifying(callSets, m)
+    return { module: m, picks: all.slice(0, 3), tie: tieAtCutoff(all, 3) }
+  })
   if (picksByLens.every((p) => p.picks.length === 0)) return null
   const allTickers = [...new Set(picksByLens.flatMap((p) => p.picks.map((x) => x.ticker)))]
   // computeTopPickDiff sebelumnya DIHITUNG tapi tidak pernah dipanggil dari
@@ -239,11 +265,12 @@ function TopPicksSection({ callSets, historyData, onSelectTicker }) {
       <SectorConcentrationNote tickers={allTickers} />
       <CrossLensConcentrationNote picksByLens={picksByLens} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-        {picksByLens.map(({ module, picks }) => (
+        {picksByLens.map(({ module, picks, tie }) => (
           <div key={module}>
             <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 8 }}>
               {LENS_TITLES[module]}
             </div>
+            <TieNote tie={tie} />
             {picks.length === 0 ? (
               <div style={{ fontSize: 11, color: 'var(--faint)' }}>Tidak ada ticker dengan action ini saat ini.</div>
             ) : (
