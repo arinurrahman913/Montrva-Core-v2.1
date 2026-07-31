@@ -256,8 +256,19 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
                           label=f"yahoo_price:{ticker}")
 
         last_price = fi.get("lastPrice") or (hist["Close"].iloc[-1] if not hist.empty else None)
-        market_cap = fi.get("marketCap")
-        shares_outstanding = fi.get("shares")
+        # Audit item B8: dulu disimpan mentah, tidak seperti field OHLCV di
+        # bawah yang eksplisit di-cast float()/int(). json_safe._sanitize
+        # cuma mengenali subclass `float` bawaan Python -- kalau fast_info
+        # suatu saat mengembalikan numpy.int64/numpy.float64 (belum terjadi,
+        # yfinance masih skalar Python murni di sini, tapi cuma berjarak
+        # satu kenaikan versi dependensi), cache_set akan TypeError,
+        # tertangkap except lebar, dan MEMBUANG fetch harga yang sebenarnya
+        # SUKSES sebagai status="missing". Cast eksplisit di titik
+        # penyimpanan menutup celah itu sebelum sempat terjadi.
+        market_cap_raw = fi.get("marketCap")
+        market_cap = float(market_cap_raw) if market_cap_raw is not None else None
+        shares_outstanding_raw = fi.get("shares")
+        shares_outstanding = int(shares_outstanding_raw) if shares_outstanding_raw is not None else None
         # fast_info TIDAK punya key "beta" sama sekali -- diverifikasi langsung
         # ke yfinance (dict fast_info nyata tidak mengandung "beta" sama sekali),
         # jadi fi.get("beta") SELALU None: 0% terisi di 4055 ticker live, ikut
