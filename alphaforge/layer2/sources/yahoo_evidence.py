@@ -103,6 +103,19 @@ YAHOO_INFO_CACHE_TTL = 24 * 3600  # 24 jam — sama dengan 2 di atas, sengaja di
 YF_EVIDENCE_RETRIES = 2
 YF_EVIDENCE_RETRY_BACKOFF_SECONDS = 3.0
 
+# fetch_price_market_data() lebih agresif dari 4 pemanggil retry() lain di file
+# ini: audit 2026-07-31 nemu ticker mega-cap yang jelas-jelas masih listed (SHW,
+# PJT, JOE, dst) gagal di KEDUA percobaan default dengan pesan yfinance yang
+# sama persis kayak ticker delisted beneran ("possibly delisted; no price data
+# found") -- universe pipeline ini sendiri sudah difilter dari listing NASDAQ
+# Trader yang fresh (listing.py), jadi ticker yang sampai sini sudah terverifikasi
+# masih listed; kegagalan itu throttle sesaat dari Yahoo, bukan delisting nyata.
+# Retry ke-3 + backoff lebih panjang dikasih KHUSUS di sini (bukan menaikkan
+# YF_EVIDENCE_RETRIES yang dipakai bareng 4 pemanggil lain yang tidak
+# menunjukkan pola gagal yang sama).
+YF_PRICE_HISTORY_RETRIES = 3
+YF_PRICE_HISTORY_RETRY_BACKOFF_SECONDS = 6.0
+
 COMPANY_PROFILE_CACHE_TTL = 24 * 3600  # 24 jam
 ANALYST_ESTIMATES_CACHE_TTL = 24 * 3600  # 24 jam
 
@@ -245,8 +258,8 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
                 raise ValueError(f"no price data for {ticker}")
             return fi, hist
 
-        fi, hist = retry(_do_fetch, retries=YF_EVIDENCE_RETRIES,
-                          backoff_seconds=YF_EVIDENCE_RETRY_BACKOFF_SECONDS,
+        fi, hist = retry(_do_fetch, retries=YF_PRICE_HISTORY_RETRIES,
+                          backoff_seconds=YF_PRICE_HISTORY_RETRY_BACKOFF_SECONDS,
                           label=f"yahoo_price:{ticker}")
 
         last_price = fi.get("lastPrice") or (hist["Close"].iloc[-1] if not hist.empty else None)
