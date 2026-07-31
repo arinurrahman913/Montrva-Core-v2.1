@@ -8,25 +8,27 @@ import DataTable from '../components/DataTable'
 // nyata sengaja DITUNDA ke v2.1 (bentuk outcome belum diputuskan), jadi
 // `outcome` selalu null untuk sekarang — view ini menampilkan penyimpanannya,
 // bukan akurasi (yang belum bisa dihitung).
+//
+// Pakai /api/historical/summary (bukan api.historical mentah) -- audit
+// 2026-07-30 item C6: historical_timeline.json ~469MB dan bertambah tiap
+// run, dan view ini cuma butuh 5 skalar per ticker. Backend yang menghitung
+// last_halted/has_outcome dari entries penuh, supaya browser tidak perlu
+// menerima array entries sama sekali untuk tabel ringkasan ini.
 export default function HistoricalView({ onSelectTicker }) {
-  const { data, error } = useStageData(api.historical)
+  const { data, error } = useStageData(api.historicalSummary)
 
-  if (error) return <div className="empty">Gagal memuat data/historical_timeline.json: {error}</div>
+  if (error) return <div className="empty">Gagal memuat ringkasan historical_timeline.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
 
-  const timelines = Object.values(data)
+  const timelines = data.tickers || []
   const totalEntries = timelines.reduce((s, t) => s + (t.total_entries || 0), 0)
-  const withOutcome = timelines.filter((t) =>
-    (t.entries || []).some((e) => e.outcome != null),
-  ).length
+  const withOutcome = timelines.filter((t) => t.has_outcome).length
 
   const stats = [
     { label: 'Tickers Tracked', value: timelines.length },
     { label: 'Total Snapshots', value: totalEntries },
     { label: 'Dengan Outcome', value: withOutcome, tone: withOutcome ? 'good' : undefined },
   ]
-
-  const lastEntry = (t) => (t.entries && t.entries.length ? t.entries[t.entries.length - 1] : null)
 
   const columns = [
     { key: 'ticker', label: 'Ticker', render: (r) => <span className="ticker">{r.ticker}</span> },
@@ -41,20 +43,15 @@ export default function HistoricalView({ onSelectTicker }) {
       key: 'last_halted',
       label: 'Status Terakhir',
       render: (r) => {
-        const e = lastEntry(r)
-        const halted = e?.aggregator_output?.halted
-        if (halted === true) return <span className="pill bad">halted</span>
-        if (halted === false) return <span className="pill ok">analyzed</span>
+        if (r.last_halted === true) return <span className="pill bad">halted</span>
+        if (r.last_halted === false) return <span className="pill ok">analyzed</span>
         return '—'
       },
     },
     {
       key: 'outcome',
       label: 'Outcome',
-      render: (r) => {
-        const e = lastEntry(r)
-        return e?.outcome != null ? 'ada' : <span style={{ color: 'var(--faint)' }}>menunggu v2.1</span>
-      },
+      render: (r) => (r.has_outcome ? 'ada' : <span style={{ color: 'var(--faint)' }}>menunggu v2.1</span>),
     },
   ]
 

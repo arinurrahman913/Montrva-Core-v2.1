@@ -585,6 +585,46 @@ def get_evidence_summary():
     return jsonify({"packages": rows, "total": len(rows)})
 
 
+@app.get("/api/historical/summary")
+def get_historical_summary():
+    """Versi ringan historical_timeline.json untuk HistoricalView (audit
+    2026-07-30, item C6) -- file penuh sekarang ~469MB dan bertambah ~82MB
+    per run (satu snapshot AggregatorOutput UTUH per ticker per hari, sejak
+    v2.0 -- lihat historical.py docstring), jauh lebih besar dari yang view
+    itu sebenarnya pakai (5 skalar per ticker). Sebelumnya HistoricalView
+    memanggil GET /api/historical mentah: seluruh 469MB dimateralisasi jadi
+    string lalu di-gzip SEKALIGUS single-threaded sambil memegang GIL
+    (_compress_response) di setiap klik nav -- selama itu request lain,
+    termasuk /api/refresh/status yang di-poll tiap 2.5 detik, ikut menggantung.
+
+    Endpoint ini strip `entries[].aggregator_output` (payload besarnya) dan
+    cuma kirim yang dipakai HistoricalView.jsx: ticker, total_entries,
+    snapshot terakhir, plus dua boolean turunan (halted di entry terakhir,
+    ada/tidaknya entry dengan outcome terisi) yang sebelumnya dihitung ulang
+    di browser dari array `entries` penuh. Detail 1 ticker (utuh, termasuk
+    entries) tetap lewat /api/ticker/<t>, yang cuma index 1 ticker.
+
+    Catatan: ini tidak mengurangi memori yang ditahan _stage_cache (masih
+    parse penuh sekali di sini) -- itu bagian C3 yang lebih struktural
+    (pertumbuhan historical_timeline.json sendiri tidak dibatasi, dan
+    _warm_cache memuat semua stage file penuh saat startup). Endpoint ini
+    menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang merupakan risiko
+    paling akut (satu klik nav bisa membuat request lain menggantung)."""
+    timelines = _get_stage("historical")
+    rows = []
+    for ticker, t in timelines.items():
+        entries = t.get("entries") or []
+        last = entries[-1] if entries else None
+        rows.append({
+            "ticker": ticker,
+            "total_entries": t.get("total_entries", 0),
+            "last_entry_date": t.get("last_entry_date"),
+            "last_halted": (last.get("aggregator_output") or {}).get("halted") if last else None,
+            "has_outcome": any(e.get("outcome") is not None for e in entries),
+        })
+    return jsonify({"tickers": rows, "total": len(rows)})
+
+
 @app.get("/api/capabilities")
 def get_capabilities():
     """Dibaca frontend sekali di startup untuk tahu apakah grup nav

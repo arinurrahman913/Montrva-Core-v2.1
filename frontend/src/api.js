@@ -44,6 +44,7 @@ export const api = {
   reasoning: () => getJSON('/api/reasoning'),
   aggregator: () => getJSON('/api/aggregator'),
   historical: () => getJSON('/api/historical'),
+  historicalSummary: () => getJSON('/api/historical/summary'),
   sourceHealth: () => getJSON('/api/source_health'),
   ticker: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}`),
   liveQuote: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/live`),
