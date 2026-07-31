@@ -483,16 +483,41 @@ Catatan: ini TIDAK menyelesaikan C2/C9 (blok tulis gerbang itu sendiri tetap
 (kill eksternal di TENGAH gerbang sukses), bukan yang C1 tangani (dua file
 maju duluan SEBELUM gerbang, lalu gerbang gagal total).
 
-#### C2. Blok tulis "gerbang" tetap 10 tulis file terpisah — TERBUKA
+#### C2. Blok tulis "gerbang" tetap 10 tulis file terpisah — SELESAI (sebagian)
 Masing-masing atomik sendiri (tmp + `os.replace`), tapi tanpa transaksi lintas
 file. Kill eksternal di antara dua tulis menghasilkan mis. rekomendasi
 Aggregator yang merujuk penilaian Risk dari hari berbeda.
 
-#### C3. `_get_stage` menahan seluruh file JSON di memori selamanya — TERBUKA
+**Keputusan pengguna**: perbaikan ringan (marker + deteksi), bukan transaksi
+penuh (staging+swap) yang menyentuh tiap writer dan risikonya lebih besar.
+Lihat detail perbaikan dan verifikasi di C9 di bawah (satu commit, satu fix
+untuk keduanya). **Ini mendeteksi ketidaksesuaian, tidak mencegahnya** — kill
+eksternal di tengah gerbang tetap bisa menghasilkan file campuran, sekarang
+cuma jadi TERLIHAT (banner di dashboard + `/api/consistency`) alih-alih diam.
+
+#### C3. `_get_stage` menahan seluruh file JSON di memori selamanya — SELESAI (sebagian)
 `backend/app.py` — `json.load` seluruh berkas lalu disimpan permanen di
 `_stage_cache`. Flask teramati ~2GB RSS di era evidence.json 340MB.
 `historical_timeline.json` kini 469MB dan bertambah tiap run, dan tidak ada
 endpoint ringan `/api/historical/summary` (padahal `/api/evidence/summary` ada).
+
+**Update**: endpoint ringan sudah ada (lihat C6 di atas). **Keputusan
+pengguna**: batasi pertumbuhan `historical_timeline.json` ke retensi 2 tahun
+per ticker, bukan tunda sampai bentuk evaluasi v2.1 diputuskan.
+
+**Yang SELESAI**: pertumbuhan file kini dibatasi (730 hari/ticker, lihat
+`historical.py::update_timeline`/`RETENTION_DAYS`) — tidak lagi tumbuh tanpa
+batas selamanya. `total_entries`/`first_entry_date` sengaja tetap sebagai
+penghitung/tanggal seumur hidup ticker itu dilacak (dipakai StatCards di
+dashboard), tidak ikut terpangkas — cuma buffer `entries` (snapshot penuh)
+yang dibatasi.
+
+**Yang MASIH TERBUKA**: `_stage_cache` tetap menahan SELURUH file (termasuk
+469MB `historical_timeline.json` yang sekarang dibatasi tapi belum otomatis
+menyusut sampai retensi baru "menyusul" lewat run-run berikutnya) permanen di
+memori, dan `_warm_cache` masih memuat semua 13 stage file penuh saat
+startup. Tidak ada lazy-loading/eviction — ini bagian arsitektural yang
+belum disentuh, di luar cakupan "batasi pertumbuhan" yang diputuskan.
 
 #### C4. `_retry.py` bisa kehabisan thread — TERBUKA
 Satu pool global 32 worker dipakai semua modul. Panggilan yfinance yang
@@ -528,18 +553,21 @@ tiap 2,5 detik — ikut menggantung.
 ke endpoint ini. Menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang
 merupakan risiko paling akut (satu klik nav menggantungkan request lain).
 
-**Belum diselesaikan** (sebagian, karena ini yang butuh keputusan produk):
-endpoint baru masih memanggil `_get_stage("historical")`, jadi backend tetap
-mem-parse dan menahan seluruh 469MB di `_stage_cache` — cuma respons ke
-browser yang mengecil, bukan RSS Flask. Itu bagian C3 di bawah, plus akar
-soalnya: pertumbuhan `historical_timeline.json` sendiri tidak dibatasi
-by design (v2.0 menyimpan snapshot penuh sejak hari pertama, untuk evaluasi
-v2.1 yang bentuknya belum diputuskan) — retention/pruning policy perlu
-dibahas dulu, bukan sekadar perbaikan teknis.
+**Belum diselesaikan sepenuhnya**: endpoint baru masih memanggil
+`_get_stage("historical")`, jadi backend tetap mem-parse dan menahan seluruh
+file di `_stage_cache` — cuma respons ke browser yang mengecil, bukan RSS
+Flask. Update: pertumbuhan filenya sendiri sekarang SUDAH dibatasi (retensi
+2 tahun/ticker, lihat C3 di bawah) — jadi ukurannya tidak lagi tak terbatas,
+tapi `_stage_cache` tetap menahan APAPUN ukurannya (yang sekarang sudah
+dibatasi, tapi masih besar) permanen di memori tanpa lazy-loading/eviction.
+Itu bagian arsitektural C3 yang belum disentuh.
 
 Terkait C3: total 13 berkas stage kini ~866 MB di disk, dan `_warm_cache`
-sengaja memuat **semuanya** saat startup. Dalam ~2 minggu run harian,
-`_warm_cache` sendiri akan gagal.
+sengaja memuat **semuanya** saat startup. Sebelum retensi C3 diperbaiki, ini
+diproyeksikan gagal dalam ~2 minggu run harian — dengan retensi terbatas,
+`historical_timeline.json` tidak lagi jadi kontributor pertumbuhan tak
+terbatas, tapi 12 file stage lain (termasuk evidence.json) tetap tumbuh
+mengikuti ukuran universe, bukan waktu.
 
 #### C7. `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0` — TERBUKA
 Siapa pun di jaringan yang sama bisa memulai pipeline 6 jam, atau membaca
@@ -553,10 +581,37 @@ meninggalkan JSON terpotong, dan karena berkas itu tidak ikut `_warm_cache`,
 kegagalannya baru muncul sebagai HTTP 500 di `/api/personal/*` dan tidak pulih
 sendiri.
 
-#### C9. `18` tulis berurutan, bukan 10 — TERBUKA (memperjelas C2)
+#### C9. `18` tulis berurutan, bukan 10 — SELESAI (sebagian, memperjelas C2)
 Rentang penulisan terukur 86 detik pada run 2026-07-30 (06:55:12 -> 06:56:38):
 10 berkas stage + 2 personal + 3 layer1/source-health + 4 snapshot root.
 Masing-masing atomik sendiri; tidak ada yang membuat himpunannya atomik.
+
+**Keputusan pengguna**: perbaikan ringan (marker + deteksi), bukan transaksi
+penuh.
+
+**Perbaikan**: `session_id` (satu variabel kanonik yang sudah ada untuk
+`aggregator_data`) sekarang ditulis ke SEMUA 9 file stage berwrapper
+(screening/evidence/knowledge/catalyst/peer/confidence/risk/reasoning,
+aggregator sudah punya) di `refresh_full_pipeline.py`. `historical_timeline.json`
+sengaja dikecualikan — bentuknya `{ticker: {...}}` tanpa wrapper level-atas.
+Endpoint baru `backend/app.py::GET /api/consistency` membaca `session_id` dari
+kesembilan file itu dan melaporkan `consistent` (semua sama) + rincian
+per-file. File lama tanpa `session_id` (ditulis sebelum perbaikan ini)
+dilaporkan `None`, tidak otomatis dianggap tidak konsisten. Frontend
+(`App.jsx`) fetch endpoint ini sekali di startup dan menampilkan banner
+peringatan di topbar (lintas semua view) kalau tidak konsisten.
+
+Diverifikasi: `/api/consistency` diuji 4 skenario lewat Flask test client
+(tidak ada file, semua `session_id` seragam, disimulasikan run terhenti di
+tengah gerbang dengan 3/9 file punya `session_id` baru, dan file lama tanpa
+`session_id` sama sekali) — keempatnya benar, termasuk tidak false-positive
+untuk file lama.
+
+**Belum diselesaikan** (sesuai keputusan, bukan celah yang terlewat): ini
+MENDETEKSI ketidaksesuaian, TIDAK MENCEGAHNYA. Kill eksternal di tengah
+gerbang tetap bisa menghasilkan file campuran — sekarang jadi terlihat
+(banner + endpoint), bukan diam. Transaksi penuh (staging+swap atomik)
+tetap TERBUKA kalau suatu saat mau ditingkatkan.
 
 #### C10. `catalyst_history.json` merusak diri sendiri saat run gagal — SELESAI
 Koreksi atas C1: berkas ini **tidak** disajikan backend sama sekali (tidak ada
@@ -596,11 +651,32 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A3, A7,
-A13, B2, B6, C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
-1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
-   (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
-   selamanya di memori; keputusan pengguna: retensi 2 tahun/ticker
-2. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
-   satu transaksi; keputusan pengguna: marker session_id/generated_at +
-   deteksi ketidaksesuaian (bukan transaksi penuh)
+Semua item dari daftar prioritas sebelumnya sudah SELESAI (penuh atau
+sebagian sesuai keputusan pengguna): A3, A7, A13, B2, B6, C1, C2, C3, C6, C9,
+C10. Sisa TERBUKA yang belum tersentuh sama sekali di sesi ini:
+
+- **B1** — peta CIK gagal sekali -> ~16.000 percobaan jaringan (~13,5 jam
+  tambahan)
+- **B3** — tidak ada circuit breaker saat Finnhub 403 (~71 menit terbakar
+  tiap run tanpa hasil)
+- **B4** — cache per-CIK tulis-bersamaan untuk ticker dwi-kelas (self-healing,
+  boros bukan bug fatal)
+- **B5** — falsy-check 0.0 di 4 tempat sisa (`_fcf_margin_pct`, `fcf_yield`,
+  `revenue_yoy_q4`, `capex_pct_revenue_q4`)
+- **B7** — CLI `knowledge` mati total (`TypeError`, jalur produksi tidak
+  terpengaruh)
+- **B8** — dua nilai `fast_info` lolos koersi tipe (laten, belum terjadi)
+- **B9** — `.info` kosong di-cache dan dilaporkan `status="ok"`
+- **B10** — komentar kontrak salah skala (`institutional_pct`/`insider_pct`)
+- **B11** — `personal_evaluation.py` ikut terdampak downsampling
+- **A4** — throttle 3 endpoint Yahoo ternyata placebo
+- **A5** — `dump_safe` cuma hapus separuh lonjakan memori
+- **A8** — `_score_competitive_momentum` degenerate (0%/100%)
+- **C3 (sisa arsitektural)** — `_stage_cache` masih menahan SEMUA stage file
+  permanen di memori tanpa lazy-loading/eviction; retensi cuma membatasi
+  PERTUMBUHAN `historical_timeline.json`, bukan cara backend menahannya
+- **C2/C9 (peningkatan)** — kalau suatu saat mau transaksi penuh
+  (staging+swap), bukan cuma deteksi
+- **C4** — `_retry.py` bisa kehabisan thread (pool global 32 worker)
+- **C7** — `POST /api/refresh/<mode>` tanpa autentikasi di `0.0.0.0`
+- **C8** — `save_personal_history` menulis non-atomik
