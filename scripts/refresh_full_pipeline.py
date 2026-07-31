@@ -15,6 +15,18 @@ that fails partway through must never leave the dashboard in a state
 where e.g. Aggregator references a ticker Knowledge doesn't have yet —
 that's a worse failure mode than just leaving yesterday's (consistent)
 data in place and trying again at the next scheduled run.
+
+This includes price_target_history.json and catalyst_history.json (audit
+2026-07-30 item C1/C10): sync_price_target_history()/sync_catalyst_history()
+only COMPUTE the updated store now, in-memory, right after Evidence/Catalyst
+run — the actual save_*_store() disk write happens down in the
+all-succeeded block below, same as every other stage file. They used to
+write immediately on call, which meant a failure in any LATER stage still
+left these two files advanced to today while the rest of dashboard/data/
+stayed on yesterday — /api/ticker/<t> would merge the two with no way for
+anyone to detect the mismatch, and catalyst_history's internal diff-state
+would get "used up" against a run that never produced a matching
+catalysts.json.
 """
 from __future__ import annotations
 
@@ -33,10 +45,10 @@ from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
 from alphaforge.layer2.screening import run_screening  # noqa: E402
 from alphaforge.layer2.evidence import run_evidence  # noqa: E402
-from alphaforge.layer2.price_target import sync_price_target_history  # noqa: E402
+from alphaforge.layer2.price_target import sync_price_target_history, save_price_target_store  # noqa: E402
 from alphaforge.layer2.knowledge import run_knowledge  # noqa: E402
 from alphaforge.layer2.catalyst import run_catalyst  # noqa: E402
-from alphaforge.layer2.catalyst_history import sync_catalyst_history  # noqa: E402
+from alphaforge.layer2.catalyst_history import sync_catalyst_history, save_catalyst_history_store  # noqa: E402
 from alphaforge.layer2.peer import run_peer_comparison  # noqa: E402
 from alphaforge.layer2.confidence import run_confidence  # noqa: E402
 from alphaforge.layer2.risk import run_risk_assessment  # noqa: E402
@@ -170,9 +182,11 @@ def main() -> int:
         log.info(f"Evidence: {len(evidence_packages)} packages")
 
         # Yahoo has no free historical price-target time series — this
-        # appends today's snapshot/ticker to an on-disk store and attaches
-        # the accumulated series back onto each package, so Knowledge (next)
-        # sees the up-to-date history for its 3-month trend calc.
+        # computes today's snapshot/ticker against the on-disk store (in
+        # memory only, see save_price_target_store() call further down) and
+        # attaches the accumulated series back onto each package, so
+        # Knowledge (next) sees the up-to-date history for its 3-month trend
+        # calc.
         pt_store = sync_price_target_history(evidence_packages, DATA_DIR / "price_target_history.json")
         n_pt = sum(1 for p in evidence_packages if p.analyst_estimates and p.analyst_estimates.target_mean is not None)
         log.info(f"Price target: {n_pt} tickers snapshotted ({len(pt_store)} tracked total)")
@@ -337,6 +351,13 @@ def main() -> int:
     _atomic_write(DATA_DIR / "reasoning_outputs.json", reasoning_data)
     _atomic_write(DATA_DIR / "final_recommendations.json", aggregator_data)
     _atomic_write(DATA_DIR / "historical_timeline.json", timeline_data)
+    # pt_store/ch_store dihitung jauh di atas (segera setelah Evidence/Catalyst
+    # run), tapi tulis disknya sengaja ditunda sampai sini -- lihat docstring
+    # modul tentang C1/C10. Sebelum ini, sync_price_target_history()/
+    # sync_catalyst_history() menulis sendiri saat dipanggil, di luar gerbang
+    # all-or-nothing.
+    save_price_target_store(pt_store, DATA_DIR / "price_target_history.json")
+    save_catalyst_history_store(ch_store, DATA_DIR / "catalyst_history.json")
 
     # Lapisan pribadi -- file terpisah, folder terpisah (dashboard/data/
     # personal/), TIDAK ikut menyentuh file publik di atas sama sekali.

@@ -53,14 +53,21 @@ def sync_price_target_history(
     path: str | Path,
     max_entries: int = MAX_SNAPSHOTS_PER_TICKER,
 ) -> dict[str, list[dict]]:
-    """Append today's snapshot per ticker to the on-disk store, then attach
-    the accumulated history back onto each package's analyst_estimates.
+    """Compute today's snapshot per ticker and attach the accumulated
+    history back onto each package's analyst_estimates. Mutates
+    `evidence_packages` in place. Call this once per pipeline run, right
+    after `run_evidence()`, so Knowledge (which reads price_target_history
+    for the 3-month trend) sees the up-to-date series.
 
-    Mutates `evidence_packages` in place (sets
-    `analyst_estimates.price_target_history`) and writes `path` atomically.
-    Call this once per pipeline run, right after `run_evidence()`, so
-    Knowledge (which reads price_target_history for the 3-month trend) sees
-    the up-to-date series.
+    Does NOT write `path` to disk (audit 2026-07-30 item C1) — the caller
+    must call `save_price_target_store(store, path)` itself, deferred until
+    the rest of the pipeline run has also succeeded. This used to write
+    immediately, which broke the all-or-nothing invariant every other stage
+    file honors: if a later stage failed, this file alone had already
+    advanced to today while evidence.json/knowledge.json/etc stayed on
+    yesterday's data, and `/api/ticker/<t>` would merge the two, handing the
+    frontend a response that mixes two different pipeline runs with no way
+    to detect it.
     """
     store = load_price_target_store(path)
     today = datetime.now(timezone.utc).date().isoformat()
@@ -99,5 +106,4 @@ def sync_price_target_history(
             for snap in ticker_history
         ]
 
-    save_price_target_store(store, path)
     return store

@@ -91,9 +91,18 @@ def sync_catalyst_history(
     max_resolved: int = MAX_RESOLVED_PER_TICKER,
 ) -> dict:
     """Bandingkan tiap CatalystSet.catalysts hari ini vs state tersimpan,
-    set `lifecycle_status`/`previous_expected_at` di tempat (mutate), append
-    ke resolved_history begitu ada yang completed/cancelled, dan tulis store
-    ke disk. Panggil sekali per run, tepat setelah `run_catalyst()`."""
+    set `lifecycle_status`/`previous_expected_at` di tempat (mutate), dan
+    append ke resolved_history begitu ada yang completed/cancelled. Panggil
+    sekali per run, tepat setelah `run_catalyst()`.
+
+    TIDAK menulis `path` ke disk (audit 2026-07-30 item C1/C10) -- caller
+    harus memanggil `save_catalyst_history_store(store, path)` sendiri,
+    ditunda sampai sisa pipeline run ini juga sukses. Sebelumnya menulis
+    segera di sini, yang berarti run yang GAGAL di tahap sesudahnya tetap
+    memajukan state "active"/"resolved" (dipakai buat diff run BERIKUTNYA)
+    tanpa pernah menghasilkan catalysts.json yang sepadan -- run sukses
+    berikutnya lalu membandingkan terhadap state yang sudah "terpakai",
+    dan satu hari transisi katalis hilang tanpa jejak (C10)."""
     store = load_catalyst_history_store(path)
     today = datetime.now(timezone.utc).date().isoformat()
     today_date = datetime.now(timezone.utc).date()
@@ -161,5 +170,4 @@ def sync_catalyst_history(
             for r in resolved
         ]
 
-    save_catalyst_history_store(store, path)
     return store
