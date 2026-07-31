@@ -287,7 +287,7 @@ ticker x 4065 ticker = ~16.260 panggilan — masuk jalur jaringan lagi, masing-
 masing membayar rate limit + 2 percobaan + backoff 3 detik. Minimal ~13,5 jam
 tambahan; run tampak menggantung, bukan gagal.
 
-#### B2. Error non-RequestException di parsing news membuang seluruh paket ticker — TERBUKA
+#### B2. Error non-RequestException di parsing news membuang seluruh paket ticker — SELESAI
 `finnhub.py::fetch_company_news`
 
 Blok parsing hanya dijaga `except requests.exceptions.RequestException`.
@@ -295,6 +295,16 @@ Kalau Finnhub membalas HTTP 200 dengan objek JSON (bukan list), atau ada item
 dengan `"datetime": null`, yang terlempar `AttributeError`/`TypeError` —
 lolos sampai `evidence.py`, dan `price_market`, `fundamental`, filing SEC yang
 sudah berhasil diambil **ikut dibuang** gara-gara berita.
+
+**Perbaikan**: validasi `data` adalah list sebelum diiterasi (kalau bukan,
+diperlakukan sebagai fetch gagal — `status="missing"`). Per-item: skip item
+dengan `datetime` None/0/absen atau timestamp yang tidak bisa diparse, alih-
+alih membiarkan `datetime.fromtimestamp(None, ...)` melempar `TypeError` yang
+membawa turun item-item lain yang valid.
+
+Diverifikasi 3 skenario (respons non-list, item `datetime:null` di tengah
+item valid, happy path) — semua menghasilkan status/news_count yang benar,
+item cacat di-skip tanpa membuang item valid lainnya.
 
 #### B3. Tidak ada circuit breaker saat Finnhub 403 — TERBUKA
 Kalau paket Finnhub diturunkan sehingga `company-news` jadi premium, setiap
@@ -322,7 +332,7 @@ Tidak ada saat Evidence masih serial.
 - `capital_expenditures == 0` normal untuk perusahaan software asset-light,
   tapi `capex_pct_revenue_q4` jadi hilang untuk justru kelompok itu
 
-#### B6. Kegagalan Yahoo sesaat memalsukan katalis "cancelled" — TERBUKA
+#### B6. Kegagalan Yahoo sesaat memalsukan katalis "cancelled" — SELESAI
 `catalyst_history.py`
 
 Loop yang meresolusi katalis yang hilang tidak menjaga `cs.status == "missing"`.
@@ -330,6 +340,17 @@ Kalau `_fetch_yahoo_info` gagal sekali, `CatalystSet` kosong -> tanggal earnings
 yang masih di masa depan ditulis sebagai `lifecycle_status="cancelled"`.
 Pembatalan palsu itu permanen dan tampil di UI; katalis aslinya muncul lagi
 esok hari sebagai entri "scheduled" baru tanpa kesinambungan.
+
+**Perbaikan**: guard `if cs.status == "missing": continue` di awal iterasi
+per-ticker di `sync_catalyst_history` — kegagalan fetch sekarang membiarkan
+state tersimpan (`active`/`resolved`) apa adanya, dicoba lagi run berikutnya,
+alih-alih menyimpulkan katalisnya sungguh hilang.
+
+Diverifikasi kontras kode lama vs baru lewat simulasi 3 hari (aktif -> Yahoo
+gagal sesaat -> Yahoo pulih): kode lama membuat `active={}` dan `resolved`
+mencatat "cancelled" untuk katalis 20 hari ke depan di hari gagal; kode baru
+`active`/`resolved` tidak berubah di hari gagal, katalis tetap `scheduled`
+begitu fetch pulih.
 
 #### B7. CLI `knowledge` mati total — TERBUKA
 `cli.py` — `EvidencePackage(...)` dibangun tanpa `institutional_activity`, yang
@@ -556,13 +577,12 @@ sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
 Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A3, A13,
-C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
+B2, B6, C1, C10 sudah SELESAI, C6 SELESAI sebagian — lihat di atas):
 1. **C3** — sisa dari C6: `_stage_cache` masih menahan semua stage file
    (termasuk `historical_timeline.json` yang tak dibatasi pertumbuhannya)
    selamanya di memori; butuh keputusan retention/pruning, bukan sekadar
    perbaikan serving seperti C6
 2. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
-3. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
-4. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
+3. **C2/C9** — blok tulis gerbang sendiri masih 18 tulis file terpisah, bukan
    satu transaksi (kill eksternal di TENGAH gerbang sukses masih bisa
    mencampur hari, beda dari mekanisme C1 yang sudah diperbaiki)
