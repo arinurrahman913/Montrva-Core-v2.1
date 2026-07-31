@@ -176,13 +176,40 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
         resp.raise_for_status()
         data = resp.json()
 
+        # Audit 2026-07-30 item B2: parsing di bawah ini dulu hanya dijaga
+        # `except requests.exceptions.RequestException` di paling bawah.
+        # Finnhub HTTP 200 dengan body BUKAN list (mis. objek error), atau
+        # item dengan `"datetime": null` eksplisit, melempar
+        # AttributeError/TypeError yang lolos dari except itu -- naik sampai
+        # evidence.py, dan MEMBUANG SELURUH EvidencePackage ticker itu
+        # (price_market/fundamental/filing SEC yang sudah berhasil diambil
+        # ikut hilang) gara-gara satu field berita yang cacat.
+        if not isinstance(data, list):
+            print(f"[finnhub:{ticker}] respons company-news bukan list ({type(data).__name__}): {data!r:.200}",
+                  file=sys.stderr)
+            metadata = SourceMetadata(
+                source="finnhub",
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                status="missing"
+            )
+            return NewsCollection(news=[], metadata=metadata)
+
         news_list = []
         for item in data:
+            if not isinstance(item, dict):
+                continue
+            ts = item.get("datetime")
+            if not ts:  # None (null eksplisit) atau 0/absen -- bukan timestamp valid
+                continue
+            try:
+                published_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            except (TypeError, ValueError, OSError):
+                continue
             news_id = item.get("id")
             news_list.append(CompanyNews(
                 headline=item.get("headline", ""),
                 source=item.get("source", ""),
-                published_at=datetime.fromtimestamp(item.get("datetime", 0), tz=timezone.utc).isoformat(),
+                published_at=published_at,
                 url=item.get("url"),
                 evidence_id=str(news_id) if news_id is not None else None,
             ))

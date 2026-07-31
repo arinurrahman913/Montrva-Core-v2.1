@@ -112,6 +112,28 @@ def sync_catalyst_history(
         active_prev: dict = store["active"].get(cs.ticker, {})
         resolved: list = store["resolved"].get(cs.ticker, [])
 
+        if cs.status == "missing":
+            # Audit 2026-07-30 item B6: `_fetch_yahoo_info` gagal (atau field
+            # earnings kosong) hari ini -> `cs.catalysts` nyaris/kosong tanpa
+            # itu berarti katalisnya benar-benar hilang. Tanpa guard ini, loop
+            # diff di bawah membaca "kind yang ada di active_prev tapi hilang
+            # dari fresh hari ini" dan menyimpulkan completed/cancelled --
+            # kegagalan Yahoo SESAAT jadi menulis katalis yang tanggalnya
+            # masih di masa depan sebagai `lifecycle_status="cancelled"`
+            # PERMANEN di resolved_history, sementara katalisnya masih ada
+            # dan cuma muncul lagi besok sebagai entri "scheduled" baru tanpa
+            # kesinambungan. Biarkan state tersimpan apa adanya -- jangan
+            # diff, jangan advance active/resolved -- dan coba lagi run
+            # berikutnya saat fetch-nya sukses.
+            cs.resolved_history = [
+                ResolvedCatalyst(
+                    kind=r["kind"], expected_at=r["expected_at"], lifecycle_status=r["lifecycle_status"],
+                    resolved_on=r["resolved_on"], outcome_note=r.get("outcome_note"),
+                )
+                for r in resolved
+            ]
+            continue
+
         fresh_by_kind: dict = {}
         for c in cs.catalysts:
             fresh_by_kind[c.kind] = c  # kind terakhir menang kalau ada duplikat — lihat catatan modul
