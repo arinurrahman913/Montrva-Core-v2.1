@@ -145,6 +145,29 @@ mengganti satu angka salah dengan angka salah lain.
 **Perbaikan**: log lengkap ikut disimpan pada timeout, dan durasi dinyatakan
 dalam menit bila di bawah sejam.
 
+#### A13. Chart `price_history` diplot per-indeks, dan dilabeli "Tren 1 Tahun" — SELESAI
+`frontend/src/format.js` (`sparklinePoints`), `TickerModal.jsx`, `ThesisProof.jsx`
+
+Sumbu X murni ordinal (`x = (i / (sample.length - 1)) * width`); tidak ada
+plotting berbasis tanggal di mana pun di frontend. Dengan 301 bar (indeks 0-48
+= 4 tahun bulanan, indeks 49-300 = 1 tahun harian), 4 tahun pertama menempati
+~16% lebar chart sementara satu tahun terakhir menempati 84% — dan judulnya
+masih "Tren 1 Tahun", dengan normalisasi lo/hi melintasi 5 tahun penuh.
+
+**Perbaikan**: `sparklinePoints` kini memposisikan X berdasarkan `bar.date`
+(proporsional terhadap rentang waktu), dengan fallback ke index-based kalau
+ada bar tanpa tanggal valid (mis. titik quote live yang disuntik terpisah).
+`TickerModal.jsx` memakai `trendSpanLabel()` baru yang menghitung label dari
+rentang tanggal sebenarnya, bukan string statis. `ThesisProof.jsx`: titik
+quote live kini dikasih tanggal hari ini supaya ikut positioning date-based;
+sekalian diperbaiki `b.date >= since` yang membandingkan `"YYYY-MM-DD"`
+dengan timestamp ISO penuh dan leksikografis menjatuhkan bar hari anchor itu
+sendiri. `contracts.py` diperbarui dari komentar "1-year daily OHLCV" yang
+sudah tidak akurat.
+
+Diverifikasi: `vite build` sukses, `oxlint` tidak menambah temuan baru pada
+file yang diubah (dibandingkan sebelum perubahan).
+
 ### Regresi dari `ca6bf5b` — TERBUKA
 
 #### A3. `Ctrl+C` saat Evidence menggantung sampai run selesai (~70 menit) — TERBUKA
@@ -178,29 +201,6 @@ memegang lock itu justru konstruksi yang benar untuk throttle global —
 melepas lock sebelum tidur akan membuat 5 thread menghitung target yang sama
 lalu menyerbu bersamaan. Tidak ada reentrancy dan tidak ada lock yang ditahan
 melintasi panggilan `retry()`.
-
-#### A13. Chart `price_history` diplot per-indeks, dan dilabeli "Tren 1 Tahun" — TERBUKA
-`frontend/src/format.js` (`sparklinePoints`), `TickerModal.jsx`, `ThesisProof.jsx`
-
-Sumbu X murni ordinal (`x = (i / (sample.length - 1)) * width`); tidak ada
-plotting berbasis tanggal di mana pun di frontend. Dengan 301 bar (indeks 0-48
-= **4 tahun** bulanan, indeks 49-300 = **1 tahun** harian), 4 tahun pertama
-menempati ~16% lebar chart sementara satu tahun terakhir menempati 84% —
-dan judulnya masih **"Tren 1 Tahun"**, dengan normalisasi lo/hi melintasi
-5 tahun penuh.
-
-Contoh dampak: saham yang naik $2 -> $200 dalam lima tahun lalu datar di ~$195
-sepanjang tahun ini akan menampilkan lonjakan hampir vertikal di 16% kiri
-(kejadian empat tahun lalu) di bawah judul "Tren 1 Tahun".
-
-`ThesisProof.jsx` aman untuk saat ini karena menyaring `b.date >= since` dan
-belum ada tesis yang lebih tua dari setahun — akan terdistorsi begitu ada.
-(Laten di baris yang sama: `since` berupa timestamp ISO penuh sementara
-`b.date` hanya `YYYY-MM-DD`, jadi perbandingan string menjatuhkan bar hari
-anchor itu sendiri.)
-
-Terkait: `contracts.py` masih mendokumentasikan `price_history` sebagai
-"1-year daily OHLCV" — asumsi yang sama yang tertanam di UI.
 
 #### A5. `dump_safe` hanya menghapus separuh lonjakan memori — TERBUKA
 `json_safe.py::dump_safe`
@@ -507,11 +507,10 @@ bentuk data (seperti downsampling), karena konsumennya tersebar dan asumsinya
 sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
-Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan:
-1. **A13** — chart 5 tahun dilabeli "Tren 1 Tahun"; ini yang langsung salah di
-   mata pengguna sejak sekarang
-2. **C6 + C3** — satu klik nav dari OOM, dan makin dekat tiap run
-3. **C1/C10** — kegagalan run merusak data yang sudah benar, tanpa jejak
-4. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
-5. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
-6. **A3** — Ctrl+C harus benar-benar berhenti
+Yang paling berdampak kalau mau dikerjakan berikutnya, berurutan (A13 sudah
+SELESAI — lihat di atas):
+1. **C6 + C3** — satu klik nav dari OOM, dan makin dekat tiap run
+2. **C1/C10** — kegagalan run merusak data yang sudah benar, tanpa jejak
+3. **A7** — kalibrasi band Confidence; butuh keputusan, bukan sekadar perbaikan
+4. **B2/B6** — kegagalan sesaat membuang kerja yang sudah berhasil
+5. **A3** — Ctrl+C harus benar-benar berhenti
