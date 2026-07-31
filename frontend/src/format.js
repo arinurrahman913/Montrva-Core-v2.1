@@ -397,25 +397,53 @@ export function fmtCompact(v) {
   return v === null || v === undefined ? '—' : v.toLocaleString()
 }
 
-// Polyline SVG points buat sparkline dari price_history (array {close}) —
-// sample turun ke ~N titik biar path-nya nggak terlalu padat, normalized ke
+// Polyline SVG points buat sparkline dari price_history (array {close, date})
+// — sample turun ke ~N titik biar path-nya nggak terlalu padat, normalized ke
 // viewBox width x height.
+//
+// Sumbu X diposisikan berdasarkan TANGGAL, bukan indeks array. price_history
+// produksi tidak berjarak seragam: ~1 tahun terakhir daily + ~4 tahun
+// sebelumnya bulanan (lihat _downsample_price_history). Positioning by index
+// akan memampatkan 4 tahun pertama ke ~16% lebar chart dan melebarkan 1 tahun
+// terakhir ke 84% -- distorsi yang salah menampilkan pergerakan lama sebagai
+// baru. Turun ke index-based cuma kalau ada bar tanpa `date` yang valid
+// (mis. titik quote live yang belum dikasih tanggal oleh pemanggil).
 export function sparklinePoints(bars, width = 300, height = 56, maxPoints = 30) {
   if (!bars || bars.length < 2) return ''
   const step = Math.max(1, Math.floor(bars.length / maxPoints))
   const sample = []
-  for (let i = 0; i < bars.length; i += step) sample.push(bars[i].close)
-  if (sample[sample.length - 1] !== bars[bars.length - 1].close) sample.push(bars[bars.length - 1].close)
-  const lo = Math.min(...sample)
-  const hi = Math.max(...sample)
+  for (let i = 0; i < bars.length; i += step) sample.push(bars[i])
+  if (sample[sample.length - 1] !== bars[bars.length - 1]) sample.push(bars[bars.length - 1])
+
+  const times = sample.map((b) => (b.date ? new Date(b.date).getTime() : NaN))
+  const hasDates = times.every((t) => !Number.isNaN(t))
+  const firstT = times[0]
+  const spanT = hasDates ? (times[times.length - 1] - firstT || 1) : null
+
+  const closes = sample.map((b) => b.close)
+  const lo = Math.min(...closes)
+  const hi = Math.max(...closes)
   const range = hi - lo || 1
+
   return sample
-    .map((c, i) => {
-      const x = (i / (sample.length - 1)) * width
-      const y = height - ((c - lo) / range) * height
+    .map((b, i) => {
+      const x = hasDates ? ((times[i] - firstT) / spanT) * width : (i / (sample.length - 1)) * width
+      const y = height - ((b.close - lo) / range) * height
       return `${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
+}
+
+// Label chart yang mencerminkan rentang tanggal price_history yang SEBENARNYA
+// (bisa sampai 5 tahun -- lihat _downsample_price_history di backend), bukan
+// nilai "1 Tahun" yang hardcoded dan salah begitu histori diperpanjang.
+export function trendSpanLabel(bars) {
+  if (!bars || bars.length < 2) return 'Tren Harga'
+  const first = new Date(bars[0].date).getTime()
+  const last = new Date(bars[bars.length - 1].date).getTime()
+  if (Number.isNaN(first) || Number.isNaN(last) || last <= first) return 'Tren Harga'
+  const years = (last - first) / (365.25 * 24 * 3600 * 1000)
+  return years >= 1.5 ? `Tren ${Math.round(years)} Tahun` : 'Tren 1 Tahun'
 }
 
 const ACRONYMS = { pct: '%', ma: 'MA', vix: 'VIX', dxy: 'DXY', wti: 'WTI', oas: 'OAS', gdp: 'GDP', m2: 'M2', spx: 'SPX', bps: 'bps', yoy: 'YoY', qoq: 'QoQ' }

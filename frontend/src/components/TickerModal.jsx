@@ -3,7 +3,7 @@ import { api } from '../api'
 import { RiskBadge } from './ThesisProof'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
-  fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, MODULE_LABELS,
+  fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, trendSpanLabel, MODULE_LABELS,
   AVAILABILITY_INFO, QUALITY_INFO, METRIC_DEFINITIONS,
   personalActionClass, prettyAction, horizonLabel, prettyHorizon, horizonStatusInfo, isEntryDueForReview,
   outcomeClass, prettyOutcome,
@@ -1450,6 +1450,7 @@ function PriceSnapshotBlock({ priceMarket }) {
     ? Math.max(0, Math.min(100, ((close - lo52) / (hi52 - lo52)) * 100))
     : null
   const points = sparklinePoints(priceMarket.price_history)
+  const trendLabel = trendSpanLabel(priceMarket.price_history)
 
   return (
     <div className="mrow" style={{ marginBottom: 4 }}>
@@ -1496,7 +1497,7 @@ function PriceSnapshotBlock({ priceMarket }) {
 
       {points && (
         <div className="mcell" style={{ gridColumn: '1 / -1' }}>
-          <div className="mcell-label">Tren 1 Tahun</div>
+          <div className="mcell-label">{trendLabel}</div>
           <svg viewBox="0 0 300 56" width="100%" height="40" preserveAspectRatio="none">
             <polyline points={points} fill="none" stroke="var(--good)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

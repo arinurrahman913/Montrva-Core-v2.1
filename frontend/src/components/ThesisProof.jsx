@@ -121,14 +121,22 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
   if (priceHistory === null) return <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8 }}>Memuat bukti harga…</div>
 
   const since = firstSeenAt(historyEntries, module, action)
-  let bars = since ? priceHistory.filter((b) => b.date >= since) : priceHistory.slice(-5)
+  // `since` adalah timestamp ISO penuh ("2026-07-15T10:30:00"), `b.date`
+  // cuma "YYYY-MM-DD". Bandingkan sebagai string apa adanya menjatuhkan bar
+  // hari anchor itu sendiri, karena "2026-07-15" < "2026-07-15T10:30:00"
+  // secara leksikografis (prefix pendek < string yang lebih panjang).
+  const sinceDate = since ? since.slice(0, 10) : null
+  let bars = sinceDate ? priceHistory.filter((b) => b.date >= sinceDate) : priceHistory.slice(-5)
   if (bars.length === 0) bars = priceHistory.slice(-2)
 
   // Tambahkan quote live sebagai titik "sekarang" -- lebih segar dari
   // last_price harian pipeline, ini yang bikin grafiknya kerasa live, bukan
-  // cuma snapshot kemarin.
+  // cuma snapshot kemarin. Dikasih tanggal hari ini supaya ikut positioning
+  // date-based di sparklinePoints, bukan jatuh ke fallback index-based.
   const liveClose = live && !live.stale && live.last_price != null ? live.last_price : null
-  const chartBars = liveClose != null ? [...bars, { close: liveClose }] : bars
+  const chartBars = liveClose != null
+    ? [...bars, { close: liveClose, date: new Date().toISOString().slice(0, 10) }]
+    : bars
 
   if (chartBars.length < 2) {
     return <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8 }}>Belum cukup data harga untuk grafik.</div>

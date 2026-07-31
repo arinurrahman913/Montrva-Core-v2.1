@@ -102,7 +102,11 @@ class PriceMarketData:
     beta: float | None = None
     high_52w: float | None = None
     low_52w: float | None = None
-    price_history: list[PriceBar] = field(default_factory=list)  # 1-year daily OHLCV
+    # ~5 tahun OHLCV: ~1 tahun terakhir daily (252 bar), sisanya downsampled
+    # ke akhir-bulan -- lihat _downsample_price_history. Bar TIDAK berjarak
+    # seragam; konsumen yang plot chart harus posisikan berdasarkan `date`,
+    # bukan indeks array (lihat sparklinePoints di frontend).
+    price_history: list[PriceBar] = field(default_factory=list)
 
 
 @dataclass
