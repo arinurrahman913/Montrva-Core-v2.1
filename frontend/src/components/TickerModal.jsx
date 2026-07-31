@@ -896,6 +896,18 @@ function PersonalCallCard({ module, call }) {
         )}
       </div>
       <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
+      {/* Tanpa keterangan ini, ticker berskor tinggi yang muncul dengan action
+          bertahap terbaca seperti inkonsistensi sistem. P4 menurunkannya
+          dengan sengaja: skor tesis boleh kuat, tapi data lensa ini terlalu
+          tipis (band "low") untuk membenarkan eksposur penuh. */}
+      {call.action_downgraded_from && (
+        <div
+          style={{ marginTop: 5, fontSize: 10, color: 'var(--warn)', lineHeight: 1.45 }}
+          title="P4: confidence lensa ini 'low' — action penuh diganti versi bertahap"
+        >
+          ⓘ Diturunkan dari <strong>{prettyAction(call.action_downgraded_from)}</strong> — data lensa ini tipis, belum cukup untuk eksposur penuh.
+        </div>
+      )}
       {call.action_rationale && <p className="lens-card-rationale">{call.action_rationale}</p>}
       <RiskBadge call={call} />
 

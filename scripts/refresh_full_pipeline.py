@@ -263,6 +263,34 @@ def main() -> int:
                 )
                 log.info(f"Personal: {len(personal_call_sets)} call sets ({len(holdings)} holdings loaded)")
 
+                # P1-P5 sekarang benar-benar dilaporkan. Sebelumnya
+                # PersonalCall.violations dihitung tiap run, ikut ditulis ke
+                # personal_calls.json, lalu TIDAK PERNAH dibaca siapa pun --
+                # tidak di-log di sini, tidak dirender di frontend. Akibatnya 44
+                # pelanggaran P4 berjalan diam-diam berhari-hari (audit
+                # 2026-07-31). Sesudah P4 ditegakkan di build_personal_call,
+                # angka ini SEHARUSNYA 0; kalau muncul lagi berarti regresi
+                # nyata -- persis fungsi "pengaman regresi" yang dijanjikan
+                # docstring validate_personal_call. Pola log-tapi-tidak-halt
+                # sama dengan validate_module_output di reasoning.py.
+                _p_violations = [
+                    (cs.ticker, m, getattr(cs, m).violations)
+                    for cs in personal_call_sets
+                    for m in ("multibagger", "quality_compound", "speculative")
+                    if getattr(cs, m).violations
+                ]
+                _n_downgraded = sum(
+                    1 for cs in personal_call_sets
+                    for m in ("multibagger", "quality_compound", "speculative")
+                    if getattr(cs, m).action_downgraded_from
+                )
+                if _n_downgraded:
+                    log.info(f"Personal: {_n_downgraded} action diturunkan ke versi bertahap (P4, confidence lensa 'low')")
+                if _p_violations:
+                    log.warning(f"Personal: {len(_p_violations)} pelanggaran P1-P5 TERSISA setelah penegakan -- ini regresi, bukan kondisi normal")
+                    for _t, _m, _v in _p_violations[:10]:
+                        log.warning(f"  {_t}/{_m}: {_v}")
+
                 personal_timelines = load_personal_history(DATA_DIR / "personal" / "personal_history.json")
                 personal_timelines = update_personal_timeline(personal_timelines, personal_call_sets)
 

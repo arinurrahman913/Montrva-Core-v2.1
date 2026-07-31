@@ -44,6 +44,39 @@ ACTION_VOCAB: dict[PositionStatus, dict[Module, tuple[str, ...]]] = {
 # justru pengganti mekanis untuk tindakan penuh saat confidence turun.
 ACTION_FULL_EXPOSURE = frozenset({"mulai_posisi", "akumulasi", "masuk_spekulatif", "tambah"})
 
+# Pengganti bertahap saat P4 menolak action penuh — DIPETAKAN PER SEL
+# (position_status, module), BUKAN peta datar action->action. Peta datar
+# kelihatannya cukup ("tambah" -> "tambah_bertahap") tapi salah: dua nama itu
+# hidup di kosakata yang BERBEDA — "tambah" cuma ada di holding/quality_compound
+# sedangkan "tambah_bertahap" cuma ada di holding/multibagger (lihat
+# ACTION_VOCAB di atas). Memakai peta datar berarti memberi Quality sebuah
+# action di luar kosakatanya sendiri: memperbaiki P4 sambil MELANGGAR P5.
+# Karena itu holding/quality_compound turun ke "tahan" (satu-satunya alternatif
+# non-penuh di kosakatanya), bukan ke versi "bertahap" yang tidak dimilikinya.
+#
+# Sel kosong = tidak ada yang perlu diturunkan: holding/multibagger sudah
+# memakai "tambah_bertahap" (bukan anggota ACTION_FULL_EXPOSURE), dan
+# holding/speculative tidak punya action penambah eksposur sama sekali.
+FULL_TO_GRADED_ACTION: dict[PositionStatus, dict[Module, dict[str, str]]] = {
+    "no_holding": {
+        "multibagger": {"mulai_posisi": "cicil_bertahap"},
+        "quality_compound": {"akumulasi": "akumulasi_saat_koreksi"},
+        "speculative": {"masuk_spekulatif": "tunggu_katalis"},
+    },
+    "holding": {
+        "multibagger": {},
+        "quality_compound": {"tambah": "tahan"},
+        "speculative": {},
+    },
+}
+
+
+def downgrade_full_exposure(action: str, position_status: str, module: str) -> str | None:
+    """Versi bertahap dari `action` untuk sel ini, atau None kalau tidak ada
+    yang perlu diturunkan. Dipakai personal_reasoning.build_personal_call
+    untuk MENEGAKKAN P4, bukan sekadar melaporkannya."""
+    return FULL_TO_GRADED_ACTION.get(position_status, {}).get(module, {}).get(action)
+
 # P3: action paling pasif per position_status — dipakai kalau stance
 # *_tak_terbaca (lens sendiri bilang datanya tak terbaca, tidak boleh
 # menganjurkan tindakan aktif).
@@ -96,6 +129,12 @@ class PersonalCall:
     horizon: str  # dari HORIZON_ALLOWED[module]
     horizon_basis: str
     horizon_anchor: str | None = None
+
+    # Terisi kalau P4 menurunkan action penuh jadi versi bertahap (band lensa
+    # ini "low" = datanya terlalu tipis buat dipercaya penuh). Disimpan supaya
+    # UI bisa menjelaskan kenapa ticker berskor tinggi muncul dengan action
+    # bertahap — tanpa ini penurunannya terlihat seperti inkonsistensi.
+    action_downgraded_from: str | None = None
 
     source_stance: str = ""  # ModuleOutput.stance — jejak audit balik ke Reasoning Umum
     source_confidence: float = 0.0  # ModuleOutput.confidence.score saat itu

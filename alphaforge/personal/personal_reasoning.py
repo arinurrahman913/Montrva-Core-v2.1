@@ -19,7 +19,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .personal_contracts import PersonalCall, validate_personal_call
+from .personal_contracts import PersonalCall, downgrade_full_exposure, validate_personal_call
 
 if TYPE_CHECKING:
     from ..layer2.reasoning_contracts import ModuleOutput
@@ -352,6 +352,25 @@ def build_personal_call(
 
     action = ACTION_TABLE[position_status][module][module_output.stance][score_tier]
 
+    # P4 DITEGAKKAN di sini, bukan cuma dilaporkan belakangan. Sampai
+    # 2026-07-29 aturan ini mustahil dilanggar by construction: ACTION_TABLE
+    # dulu dikunci ke confidence.band, dan kolom "low" memang tidak pernah
+    # berisi action eksposur penuh. Begitu gerbangnya pindah ke thesis_score,
+    # band dan kolom tabel jadi terpisah — dan P4 mulai benar-benar dilanggar
+    # (44 call pada 2026-07-31) tanpa ada yang tahu, karena `violations` tidak
+    # pernah di-log maupun ditampilkan di mana pun. Ini bukan pembatalan
+    # keputusan 2026-07-29: docstring _thesis_score_tier sudah menyatakan band
+    # tetap dipakai TERPISAH di P4 sebagai penjaga "data terlalu buruk buat
+    # dipercaya", bukan lagi penentu tingkat action. Dampaknya kecil & bedah
+    # (44 dari 2636 call eksposur penuh) justru karena band "low" jarang
+    # berbarengan dengan skor tesis tinggi.
+    action_downgraded_from = None
+    if band == "low":
+        graded = downgrade_full_exposure(action, position_status, module)
+        if graded is not None:
+            action_downgraded_from = action
+            action = graded
+
     if module == "speculative":
         horizon, horizon_basis, horizon_anchor = _speculative_horizon(catalyst, today)
     elif module == "multibagger":
@@ -370,10 +389,17 @@ def build_personal_call(
         exchange=module_output.exchange,
         method_version=METHOD_VERSION,
         action=action,
-        action_rationale=f"Stance '{module_output.stance}' (skor tesis {module_output.thesis_score:.0f}, tingkat {score_tier}): {module_output.stance_rationale}",
+        action_rationale=(
+            f"Stance '{module_output.stance}' (skor tesis {module_output.thesis_score:.0f}, "
+            f"tingkat {score_tier}): {module_output.stance_rationale}"
+            + (f" — diturunkan dari '{action_downgraded_from}' karena confidence lensa ini "
+               f"'low' (P4: data terlalu tipis untuk eksposur penuh)."
+               if action_downgraded_from else "")
+        ),
         horizon=horizon,
         horizon_basis=horizon_basis,
         horizon_anchor=horizon_anchor,
+        action_downgraded_from=action_downgraded_from,
         source_stance=module_output.stance,
         source_confidence=module_output.confidence.score,
         thesis_score=getattr(module_output, "thesis_score", 50.0),
