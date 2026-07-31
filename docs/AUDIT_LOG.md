@@ -392,7 +392,7 @@ writer + 6 reader konkuren ke SATU cache key selama 500 iterasi baca — kode
 lama 1864/3000 (62%) pembacaan gagal parse (torn write terkonfirmasi
 nyata); kode baru 0 pembacaan korup.
 
-#### B5. Falsy-check lain yang 0.0-nya sah — TERBUKA
+#### B5. Falsy-check lain yang 0.0-nya sah — SELESAI
 `ca6bf5b` memperbaiki 3 tempat di `knowledge.py`. Yang tersisa:
 - `knowledge.py::_fcf_margin_pct` — FCF tepat 0.0 (breakeven) -> `None`
 - `knowledge_helpers.py` `fcf_yield` — sama; ini merambat: dihitung hilang oleh
@@ -403,6 +403,12 @@ nyata); kode baru 0 pembacaan korup.
   mengkhawatirkan yang bisa muncul
 - `capital_expenditures == 0` normal untuk perusahaan software asset-light,
   tapi `capex_pct_revenue_q4` jadi hilang untuk justru kelompok itu
+
+**Perbaikan**: keempat tempat diganti `is None`/`is not None` untuk NUMERATOR.
+Pembagi (revenue, market_cap, prior_rev) sengaja tidak diubah — pembagi
+0/negatif tetap harus diblokir. Diverifikasi 4 skenario nilai 0.0 legitimate
+menghasilkan angka benar (0.0/-100.0), dikonfirmasi kontras via `git stash`
+bahwa keempatnya `None` di kode lama.
 
 #### B6. Kegagalan Yahoo sesaat memalsukan katalis "cancelled" — SELESAI
 `catalyst_history.py`
@@ -424,7 +430,7 @@ mencatat "cancelled" untuk katalis 20 hari ke depan di hari gagal; kode baru
 `active`/`resolved` tidak berubah di hari gagal, katalis tetap `scheduled`
 begitu fetch pulih.
 
-#### B7. CLI `knowledge` mati total — TERBUKA
+#### B7. CLI `knowledge` mati total — SELESAI (sebagian)
 `cli.py` — `EvidencePackage(...)` dibangun tanpa `institutional_activity`, yang
 wajib dan tanpa default -> `TypeError` di paket pertama. Jalur produksi
 (`scripts/refresh_full_pipeline.py`) memanggil `run_knowledge` langsung, jadi
@@ -433,7 +439,19 @@ ini tidak pernah ketahuan. CLI juga menjatuhkan `company_profile`,
 memanggil reasoning tanpa peer/catalyst/Layer 1 — sehingga skor dari CLI tidak
 sebanding dengan skor produksi.
 
-#### B8. Dua nilai `fast_info` lolos koersi tipe — TERBUKA
+**Perbaikan**: `institutional_activity` direkonstruksi penuh (menutup crash),
+`institutional_ownership` sekarang bawa `insider_percentage`/`top_holders`,
+`company_profile`/`analyst_estimates` direkonstruksi kalau ada. `roe`/`roa`
+ternyata sudah dibawa otomatis lewat spread `**fund_dict` yang ada sebelumnya
+(tidak perlu perbaikan terpisah). Diverifikasi lewat subprocess CLI
+sungguhan: kode lama crash `TypeError` persis seperti temuan audit, kode baru
+selesai dan `insider_percentage` mengalir sampai ke output.
+
+**Belum disentuh** (penambahan fitur, bukan bug): CLI `reasoning` tidak
+menerima argumen peer/catalyst/layer1 sama sekali — keterbatasan scope tool
+debug per-stage yang didokumentasikan di help text-nya sendiri.
+
+#### B8. Dua nilai `fast_info` lolos koersi tipe — SELESAI
 `yahoo_evidence.py` — `market_cap` dan `shares_outstanding` disimpan mentah,
 tidak seperti field OHLCV di bawahnya yang di-cast eksplisit. `json_safe`
 hanya mengenali subclass `float`, jadi `numpy.int64` dari `fast_info` akan
@@ -442,23 +460,44 @@ membuang fetch harga yang **sebenarnya sukses** sebagai `status="missing"`.
 Belum terjadi (yfinance mengembalikan skalar Python di sini), tapi hanya
 berjarak satu kenaikan versi dependensi.
 
-#### B9. `.info` kosong di-cache dan dilaporkan `status="ok"` — TERBUKA
+**Perbaikan**: cast eksplisit `float()`/`int()` di titik penyimpanan.
+Diverifikasi: `numpy.int64` dikonfirmasi BUKAN subclass Python `int`, dan
+`json.dumps(numpy.int64(...))` benar-benar `TypeError` persis prediksi audit.
+
+#### B9. `.info` kosong di-cache dan dilaporkan `status="ok"` — SELESAI
 Ticker delisted yang membuat yfinance mengembalikan `{}` menuliskan `{}` itu
 ke cache `yahoo_info` dan disajikan 24 jam; `fetch_fundamental_data`
 menetapkan `status="ok"` tanpa syarat, jadi semua field `None` sementara
 metadata mengklaim fetch berhasil.
 
-#### B10. Komentar kontrak bertentangan dengan skala sebenarnya — TERBUKA
+**Perbaikan**: `status="ok" if info else "missing"` — menyamakan pola yang
+sudah benar di 3 fungsi sejenis (`fetch_institutional_ownership`,
+`fetch_company_profile`, `fetch_analyst_estimates`), yang ternyata SUDAH
+mengondisikan status dengan benar (bukan bug berulang).
+
+#### B10. Komentar kontrak bertentangan dengan skala sebenarnya — SELESAI
 `knowledge_contracts.py` mendokumentasikan `institutional_pct`/`insider_pct`
 sebagai "(0-100)", padahal nilainya pecahan 0-1 dari Yahoo. Konsumen saat ini
 (`reasoning.py`) memperlakukannya sebagai pecahan sehingga perilakunya benar,
 tapi konsumen berikutnya yang percaya docstring akan meleset 100x.
 
-#### B11. `personal_evaluation.py` ikut terdampak downsampling — TERBUKA
+**Perbaikan**: komentar diperbaiki ke "PECAHAN 0-1 (0.75 = 75%)". Diverifikasi
+konsisten dengan semua pemakaian nyata (`reasoning.py`, `TickerModal.jsx`,
+`KnowledgeView.jsx`).
+
+#### B11. `personal_evaluation.py` ikut terdampak downsampling — SELESAI
 `_reconstruct_start_price` mengambil `bars[0]` dari semua bar sejak
 `since_date`. Untuk call berumur 18 bulan, sekarang mengembalikan harga akhir
 bulan yang meleset sampai 30 hari dari tanggal call sebenarnya, dan hasilnya
 memberi makan klasifikasi `terbukti`/`meleset`.
+
+**Perbaikan**: sekarang mencari bar TERDEKAT ke `since_date` (arah mana pun),
+toleransi 45 hari (`_RECONSTRUCT_TOLERANCE_DAYS`, sama seperti
+`_ANCHOR_TOLERANCE_DAYS` di `knowledge_helpers.py`). Di luar toleransi ->
+`None`, sudah ditangani pemanggil (entry dibiarkan pending). Diverifikasi:
+`since_date` sehari setelah akhir bulan — kode lama memilih bar 30 hari
+kemudian (25% lebih tinggi dari harga sebenarnya), kode baru benar memilih
+bar sehari sebelumnya.
 
 ### Diperiksa dan bersih
 
@@ -704,19 +743,14 @@ sering implisit (jarak bar seragam, jumlah bar sebagai proksi waktu, sumbu X
 ordinal).
 
 SELESAI (penuh atau sebagian sesuai keputusan pengguna): A3, A4, A5, A7, A8
-(sebagian), A13, B1, B2, B3, B4, B6, C1, C2, C3, C6, C9, C10. Sisa TERBUKA
-yang belum tersentuh sama sekali:
+(sebagian), A13, B1, B2, B3, B4, B5, B6, B7 (sebagian), B8, B9, B10, B11, C1,
+C2, C3, C6, C9, C10. Sisa TERBUKA:
 
-- **B5** — falsy-check 0.0 di 4 tempat sisa (`_fcf_margin_pct`, `fcf_yield`,
-  `revenue_yoy_q4`, `capex_pct_revenue_q4`)
-- **B7** — CLI `knowledge` mati total (`TypeError`, jalur produksi tidak
-  terpengaruh)
-- **B8** — dua nilai `fast_info` lolos koersi tipe (laten, belum terjadi)
-- **B9** — `.info` kosong di-cache dan dilaporkan `status="ok"`
-- **B10** — komentar kontrak salah skala (`institutional_pct`/`insider_pct`)
-- **B11** — `personal_evaluation.py` ikut terdampak downsampling
 - **A8 (sisa)** — apakah section 1-cek biner pantas mengayunkan skor 5 poin
   penuh; butuh keputusan kalibrasi seperti A7, bukan bug murni
+- **B7 (sisa)** — CLI `reasoning` tidak menerima argumen peer/catalyst/layer1;
+  penambahan fitur, bukan bug (keterbatasan scope tool debug per-stage yang
+  sudah didokumentasikan)
 - **C3 (sisa arsitektural)** — `_stage_cache` masih menahan SEMUA stage file
   permanen di memori tanpa lazy-loading/eviction; retensi cuma membatasi
   PERTUMBUHAN `historical_timeline.json`, bukan cara backend menahannya
