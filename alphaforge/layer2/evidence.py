@@ -151,7 +151,18 @@ def run_evidence(screening_result: ScreeningResult) -> list[EvidencePackage]:
     results: list[EvidencePackage | None] = [None] * total
     done = 0
 
-    with ThreadPoolExecutor(max_workers=EVIDENCE_WORKERS, thread_name_prefix="evidence-fetch") as executor:
+    # Bukan `with ThreadPoolExecutor(...) as executor:` (audit 2026-07-30 item
+    # A3): context manager itu memanggil `shutdown(wait=True)` TANPA
+    # `cancel_futures` di __exit__ -- tidak ada cara mengoper cancel_futures
+    # lewat protokol with-statement. Semua ~4065 task disubmit di muka; Ctrl+C
+    # di ticker ke-200 dulu tetap menguras 3865 task SISA sebelum interupsi
+    # sempat merambat ke pemanggil, jadi Ctrl+C butuh ~70 menit buat benar-
+    # benar berhenti -- versi serial yang digantikan berhenti seketika.
+    # `finally` di bawah memanggil shutdown() manual dengan cancel_futures=True
+    # supaya task yang BELUM mulai (mayoritas dari 4065-nya) langsung
+    # dibatalkan; cuma menunggu <=EVIDENCE_WORKERS task yang sudah mid-flight.
+    executor = ThreadPoolExecutor(max_workers=EVIDENCE_WORKERS, thread_name_prefix="evidence-fetch")
+    try:
         future_to_index = {
             executor.submit(build_evidence_for_ticker, candidate): idx
             for idx, candidate in enumerate(candidates)
@@ -166,6 +177,8 @@ def run_evidence(screening_result: ScreeningResult) -> list[EvidencePackage]:
                 results[idx] = future.result()
             except Exception as e:
                 print(f"Error building evidence for {candidate.ticker}: {e}", file=sys.stderr)
+    finally:
+        executor.shutdown(cancel_futures=True)
 
     packages = [pkg for pkg in results if pkg]
     print(f"Evidence complete: {len(packages)} packages", file=sys.stderr)
