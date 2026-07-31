@@ -151,7 +151,21 @@ def assess_confidence(
         # sebenarnya wajar (data itu memang tidak semuanya pernah 100%).
         for name, sec in by_section.items():
             if sec.score < 50:
-                limiters.append(f"{name} data incomplete ({sec.filled}/{sec.expected})")
+                if name == "competitive_momentum":
+                    # Audit item A8: tersisa 1 cek (acceleration_signal),
+                    # yang butuh revenue YoY q3 DAN q4 dari SEC EDGAR --
+                    # proksi cakupan histori EDGAR, bukan "data hilang"
+                    # generik. Pesan default "data incomplete (0/1)"
+                    # menyesatkan (kedengaran seperti gagal fetch); yang
+                    # sebenarnya terjadi: kurang dari 2 kuartal revenue
+                    # berurutan untuk dibandingkan.
+                    limiters.append(
+                        "competitive_momentum: revenue YoY quarter-over-quarter "
+                        "tidak tersedia (perlu histori SEC EDGAR untuk 2 "
+                        "kuartal berurutan)"
+                    )
+                else:
+                    limiters.append(f"{name} data incomplete ({sec.filled}/{sec.expected})")
         if peer_penalty.applied:
             limiters.append(peer_penalty.reason)
         if context_penalty.applied:
