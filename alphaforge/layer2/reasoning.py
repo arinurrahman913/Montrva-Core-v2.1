@@ -533,45 +533,60 @@ def run_speculative_lens(
     positive = []
     negative = []
     metrics = {}
+    breakdown: dict[str, float] = {}
 
     ht = profile.historical_trend
-    if ht.volatility_daily is not None:
-        if ht.volatility_daily > 4.0:
-            score += 10
-            positive.append("High volatility - trading opportunity")
-            metrics["volatility_daily"] = ht.volatility_daily
-        elif ht.volatility_daily < 1.0:
-            score -= 5
-            negative.append("Low volatility - boring")
-            metrics["volatility_daily"] = ht.volatility_daily
+    vol = ht.volatility_daily
+    score += _record(
+        breakdown, positive, negative, metrics, "volatility",
+        _ramp(vol, 1.0, 4.0,
+              full_below=0.5, weight_below=-5.0,
+              full_above=7.0, weight_above=10.0),          # p07 / p93
+        "High volatility - trading opportunity", "Low volatility - boring",
+        "volatility_daily", vol,
+    )
 
-    if ht.return_1y is not None and ht.return_1y > 30:
-        score += 15
-        positive.append("Strong momentum (>30% 1Y)")
-        metrics["return_1y"] = ht.return_1y
-    elif ht.return_1y is not None and ht.return_1y < -30:
-        score -= 10
-        negative.append("Negative momentum")
-        metrics["return_1y"] = ht.return_1y
+    r1y = ht.return_1y
+    score += _record(
+        breakdown, positive, negative, metrics, "return_1y",
+        _ramp(r1y, -30.0, 30.0,
+              full_below=-60.0, weight_below=-10.0,
+              full_above=100.0, weight_above=15.0),        # p04 / p90
+        "Strong momentum (>30% 1Y)", "Negative momentum",
+        "return_1y", r1y,
+    )
 
     own = profile.ownership
-    if own.institutional_pct is not None and own.institutional_pct > 0.70:
-        score += 8
-        positive.append("High institutional ownership")
-        metrics["institutional_pct"] = own.institutional_pct
-    elif own.institutional_pct is not None and own.institutional_pct < 0.10:
-        score -= 5
-        negative.append("Low institutional ownership")
-        metrics["institutional_pct"] = own.institutional_pct
+    inst = own.institutional_pct
+    score += _record(
+        breakdown, positive, negative, metrics, "institutional_pct",
+        _ramp(inst, 0.10, 0.70,
+              full_below=0.02, weight_below=-5.0,
+              full_above=0.95, weight_above=8.0),          # p05 / p72
+        "High institutional ownership", "Low institutional ownership",
+        "institutional_pct", inst,
+    )
 
-    if len(own.insider_transactions or []) > 0:
-        score += 10
-        positive.append("Recent insider activity")
-        metrics["insider_transactions"] = len(own.insider_transactions)
+    # INERT: insider_transactions kosong di 4056/4056 -- SEC EDGAR fetcher
+    # memfilter Form 3/4/144, jadi list ini tidak pernah terisi. Dipertahankan
+    # (bukan dihapus) karena kriterianya sah begitu ada sumbernya. Hitungan,
+    # jadi ramp atas jumlah -- bukan besaran.
+    n_insider = len(own.insider_transactions or [])
+    if n_insider > 0:
+        score += _record(
+            breakdown, positive, negative, metrics, "insider_transactions",
+            _ramp(float(n_insider), 0.0, 0.0, full_above=3.0, weight_above=10.0),
+            "Recent insider activity", "",
+            "insider_transactions", n_insider,
+        )
 
-    if confidence and confidence.by_section["historical_trend"].score < 40:
-        score -= 15
-        negative.append("Insufficient price data for technical analysis")
+    if confidence:
+        score += _record(
+            breakdown, positive, negative, metrics, "price_data_confidence",
+            _ramp(confidence.by_section["historical_trend"].score, 40.0, INF,
+                  full_below=10.0, weight_below=-15.0),
+            "", "Insufficient price data for technical analysis",
+        )
 
     # Catalysts: explicit (earnings, events) + implicit (insider conviction via Form 4)
     has_catalyst = catalyst is not None and catalyst.has_upcoming
@@ -593,10 +608,14 @@ def run_speculative_lens(
     # Ownership per its own access-list), and — unlike before — can NOT by itself flip the
     # stance to "asimetri_berkatalis". A real forward-looking Catalyst is still required for
     # that stance.
-    if own.insider_filing_activity_30d and own.insider_filing_activity_30d >= 2:
-        score += 5
-        positive.append(f"Recent Form 4 filing activity ({own.insider_filing_activity_30d} in 30d)")
-        metrics["insider_filing_activity_30d"] = own.insider_filing_activity_30d
+    if own.insider_filing_activity_30d:
+        score += _record(
+            breakdown, positive, negative, metrics, "form4_activity",
+            _ramp(float(own.insider_filing_activity_30d), -INF, 1.0,
+                  full_above=6.0, weight_above=5.0),
+            f"Recent Form 4 filing activity ({own.insider_filing_activity_30d} in 30d)", "",
+            "insider_filing_activity_30d", own.insider_filing_activity_30d,
+        )
 
     score = max(0, min(100, score + 50))
 
@@ -627,7 +646,7 @@ def run_speculative_lens(
         positive_factors=positive,
         negative_factors=negative,
         key_metrics=metrics,
-        score_breakdown={"momentum": (score - 50) / 50},
+        score_breakdown=breakdown,
         thesis_score=float(score),
         fields_accessed=["identity", "historical_trend", "ownership"],
     )
@@ -649,6 +668,7 @@ def run_multibagger_lens(
     positive = []
     negative = []
     metrics = {}
+    breakdown: dict[str, float] = {}
 
     cs = profile.competitive_structure
     # INERT: tam_estimate belum punya sumber data sama sekali -- None di
@@ -656,20 +676,30 @@ def run_multibagger_lens(
     # (bukan dihapus) karena kriterianya sendiri sah menurut
     # 07_MODULE_MULTIBAGGER.md; begitu ada sumber TAM, ia langsung hidup.
     # Jangan salah baca skor Multibagger seolah-olah TAM ikut dinilai hari ini.
+    #
+    # KATEGORIKAL: tiga cabang berikut (tam_estimate, segment_growth,
+    # acceleration_signal) tetap step, bukan ramp -- isinya label teks
+    # ("large", "high", "accelerating"), bukan besaran. Memberinya kemiringan
+    # berarti mengarang jarak antar-label yang tidak ada di datanya, sama
+    # alasannya dengan recommendation_key di Quality lens.
     if cs.total_revenue_ttm is not None and cs.total_revenue_ttm > 100e6:
         if cs.tam_estimate and "large" in str(cs.tam_estimate).lower():
-            score += 12
-            positive.append("Large TAM - multibagger potential")
-            metrics["tam_estimate"] = cs.tam_estimate
+            score += _record(
+                breakdown, positive, negative, metrics, "tam",
+                12.0, "Large TAM - multibagger potential", "",
+                "tam_estimate", cs.tam_estimate,
+            )
 
     cm = profile.competitive_momentum
     # INERT juga: segment_growth None di 4056/4056 (alasan sama dengan
     # tam_estimate di atas). Praktisnya cabang `elif` di bawah yang selalu
     # dievaluasi.
     if cm.segment_growth and "high" in str(cm.segment_growth).lower():
-        score += 15
-        positive.append("High segment growth")
-        metrics["segment_growth"] = cm.segment_growth
+        score += _record(
+            breakdown, positive, negative, metrics, "segment_growth",
+            15.0, "High segment growth", "",
+            "segment_growth", cm.segment_growth,
+        )
     # Dulu mencari kata "positive", yang TIDAK PERNAH ditulis oleh siapa pun:
     # follow-up Knowledge 2026-07-22 mengisi acceleration_signal lewat
     # knowledge.py:_compute_acceleration_signal dengan kosakata
@@ -683,40 +713,57 @@ def run_multibagger_lens(
     # gerbang confidence.band=='high' yang tidak pernah tercapai (2026-07-29).
     # Aman dari false positive: "decelerating" tidak mengandung "accelerating".
     elif cm.acceleration_signal and "accelerating" in str(cm.acceleration_signal).lower():
-        score += 10
-        positive.append("Revenue growth accelerating")
-        metrics["acceleration_signal"] = cm.acceleration_signal
+        score += _record(
+            breakdown, positive, negative, metrics, "acceleration",
+            10.0, "Revenue growth accelerating", "",
+            "acceleration_signal", cm.acceleration_signal,
+        )
 
+    # Dua tingkat lama (>50 -> +12, >20 -> +8) dilebur jadi satu kemiringan:
+    # ambang bawah 20 tetap jadi tepi zona mati, bobot penuh +12 dicapai di
+    # 60 (p82). Return 50% yang dulu langsung memungut +12 sekarang dapat +9 --
+    # justru itu maksudnya, "eksplosif" tidak lagi disamakan mulai dari 50%
+    # sampai 500%.
     ht = profile.historical_trend
-    if ht.return_1y is not None and ht.return_1y > 50:
-        score += 12
-        positive.append("Explosive 1Y return (>50%)")
-        metrics["return_1y"] = ht.return_1y
-    elif ht.return_1y is not None and ht.return_1y > 20:
-        score += 8
-        positive.append("Strong 1Y return (>20%)")
-        metrics["return_1y"] = ht.return_1y
+    r1y = ht.return_1y
+    score += _record(
+        breakdown, positive, negative, metrics, "return_1y",
+        _ramp(r1y, -INF, 20.0, full_above=60.0, weight_above=12.0),   # p82
+        "Strong 1Y return (>20%)", "",
+        "return_1y", r1y,
+    )
 
     val = profile.valuation
     if val.pe_ratio_trailing is not None:
+        # Cabang "premium wajar" SENGAJA tetap step: syaratnya konjungsi dua
+        # metrik (P/E tinggi DAN return tinggi), bukan besaran tunggal yang
+        # bisa dipetakan ke satu kemiringan.
         if val.pe_ratio_trailing > 50 and ht.return_1y and ht.return_1y > 30:
-            score += 8
-            positive.append("High growth justifies premium valuation")
-            metrics["pe_ratio"] = val.pe_ratio_trailing
-        elif val.pe_ratio_trailing > 100:
-            score -= 10
-            negative.append("Extreme valuation - limited upside")
-            metrics["pe_ratio"] = val.pe_ratio_trailing
+            score += _record(
+                breakdown, positive, negative, metrics, "premium_justified",
+                8.0, "High growth justifies premium valuation", "",
+                "pe_ratio", val.pe_ratio_trailing,
+            )
+        else:
+            score += _record(
+                breakdown, positive, negative, metrics, "pe_extreme",
+                _ramp(val.pe_ratio_trailing, -INF, 100.0,
+                      full_above=250.0, weight_above=-10.0),
+                "", "Extreme valuation - limited upside",
+                "pe_ratio", val.pe_ratio_trailing,
+            )
 
     # Peer: pertumbuhan revenue relatif — 07_MODULE_MULTIBAGGER.md butuh
     # posisi relatif buat menilai "pertumbuhan cepat dibanding sejenis, atau
     # cuma sektornya lagi naik semua". Bobot kecil, sama seperti Quality.
     if peer and peer.revenue_growth_comparison and peer.revenue_growth_comparison.percentile is not None:
         pct = peer.revenue_growth_comparison.percentile
-        if pct >= 80:
-            score += 6
-            positive.append(f"Revenue growth faster than {pct:.0f}% of peers")
-            metrics["revenue_growth_peer_percentile"] = pct
+        score += _record(
+            breakdown, positive, negative, metrics, "growth_vs_peer",
+            _ramp(pct, -INF, 80.0, full_above=98.0, weight_above=6.0),
+            f"Revenue growth faster than {pct:.0f}% of peers", "",
+            "revenue_growth_peer_percentile", pct,
+        )
 
     # Analyst consensus price target (bagian 6, upgrade 2026-07-25) — dibaca
     # sebagai indikator "masih ada ruang naik" versi eksternal, sejalan
@@ -724,37 +771,43 @@ def run_multibagger_lens(
     # sinyal yang sama tidak diberi bobot berbeda-beda antar modul tanpa alasan.
     pt = val.price_target
     if pt and pt.upside_pct is not None:
-        if pt.upside_pct > 15:
-            score += 8
-            positive.append(f"Analyst consensus sees {pt.upside_pct:.0f}% more room to run")
-            metrics["analyst_upside_pct"] = pt.upside_pct
-        elif pt.upside_pct < -10:
-            score -= 8
-            negative.append(f"Analyst consensus sees limited room ({pt.upside_pct:.0f}%)")
-            metrics["analyst_upside_pct"] = pt.upside_pct
+        score += _record(
+            breakdown, positive, negative, metrics, "analyst_upside",
+            _ramp(pt.upside_pct, -10.0, 15.0,
+                  full_below=-30.0, weight_below=-8.0,
+                  full_above=50.0, weight_above=8.0),
+            f"Analyst consensus sees {pt.upside_pct:.0f}% more room to run",
+            f"Analyst consensus sees limited room ({pt.upside_pct:.0f}%)",
+            "analyst_upside_pct", pt.upside_pct,
+        )
 
     # recommendation_key & price_target_trend_3m -- sama seperti Quality lens
     # di atas, bobot lebih kecil (+/-5) karena satu sumber data (analyst_
-    # estimates) dengan upside_pct.
+    # estimates) dengan upside_pct. recommendation_key kategorikal -> tetap step.
     if pt and pt.recommendation_key:
+        rating = 0.0
         if pt.recommendation_key in ("strong_buy", "buy"):
-            score += 5
-            positive.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
-            metrics["analyst_recommendation"] = pt.recommendation_key
+            rating = 5.0
         elif pt.recommendation_key in ("sell", "strong_sell"):
-            score -= 5
-            negative.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
-            metrics["analyst_recommendation"] = pt.recommendation_key
+            rating = -5.0
+        rating_label = f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}"
+        score += _record(
+            breakdown, positive, negative, metrics, "analyst_rating",
+            rating, rating_label, rating_label,
+            "analyst_recommendation", pt.recommendation_key,
+        )
 
     if pt and pt.price_target_trend_3m is not None:
-        if pt.price_target_trend_3m > 10:
-            score += 5
-            positive.append(f"Analyst targets rising ({pt.price_target_trend_3m:.0f}% over 3M)")
-            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
-        elif pt.price_target_trend_3m < -10:
-            score -= 5
-            negative.append(f"Analyst targets falling ({pt.price_target_trend_3m:.0f}% over 3M)")
-            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
+        t3 = pt.price_target_trend_3m
+        score += _record(
+            breakdown, positive, negative, metrics, "target_trend_3m",
+            _ramp(t3, -10.0, 10.0,
+                  full_below=-30.0, weight_below=-5.0,
+                  full_above=30.0, weight_above=5.0),
+            f"Analyst targets rising ({t3:.0f}% over 3M)",
+            f"Analyst targets falling ({t3:.0f}% over 3M)",
+            "price_target_trend_3m", t3,
+        )
 
     if ht.earnings_beat_miss_streak:
         try:
@@ -762,20 +815,25 @@ def run_multibagger_lens(
             beats, total = int(beats_str), int(total_str.split()[0])
             if total > 0:
                 beat_rate = beats / total
-                if beat_rate >= 0.75:
-                    score += 6
-                    positive.append(f"Consistent execution vs. estimates ({ht.earnings_beat_miss_streak})")
-                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
-                elif beat_rate <= 0.25:
-                    score -= 6
-                    negative.append(f"Inconsistent execution vs. estimates ({ht.earnings_beat_miss_streak})")
-                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+                score += _record(
+                    breakdown, positive, negative, metrics, "eps_beat_rate",
+                    _ramp(beat_rate, 0.25, 0.75,
+                          full_below=0.0, weight_below=-6.0,
+                          full_above=1.0, weight_above=6.0),
+                    f"Consistent execution vs. estimates ({ht.earnings_beat_miss_streak})",
+                    f"Inconsistent execution vs. estimates ({ht.earnings_beat_miss_streak})",
+                    "eps_beat_streak", ht.earnings_beat_miss_streak,
+                )
         except (ValueError, IndexError):
             pass
 
-    if confidence and confidence.overall.score < BAND_MEDIUM_THRESHOLD:
-        score -= 12
-        negative.append("Insufficient data for growth thesis")
+    if confidence:
+        score += _record(
+            breakdown, positive, negative, metrics, "data_confidence",
+            _ramp(confidence.overall.score, BAND_MEDIUM_THRESHOLD, INF,
+                  full_below=20.0, weight_below=-12.0),
+            "", "Insufficient data for growth thesis",
+        )
 
     # Insider Form 4 filing activity DELIBERATELY NOT scored here (removed post-audit,
     # 2026-07-24) — same reasons as Quality lens above: D-12 scope (this module's own
@@ -812,7 +870,7 @@ def run_multibagger_lens(
         positive_factors=positive,
         negative_factors=negative,
         key_metrics=metrics,
-        score_breakdown={"growth": (score - 50) / 50},
+        score_breakdown=breakdown,
         thesis_score=float(score),
         fields_accessed=["identity", "competitive_structure", "competitive_momentum", "historical_trend", "valuation"],
     )

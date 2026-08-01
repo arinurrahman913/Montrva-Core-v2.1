@@ -7,6 +7,7 @@ import {
   AVAILABILITY_INFO, QUALITY_INFO, METRIC_DEFINITIONS,
   personalActionClass, prettyAction, horizonLabel, prettyHorizon, horizonStatusInfo, isEntryDueForReview,
   outcomeClass, prettyOutcome,
+  factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -755,6 +756,46 @@ const ROOT_CAUSE_LABELS = {
   context_reading: 'Interpretasi konteks makro berbeda',
 }
 
+// Panel penuh "Bobot Faktor" -- versi lengkap dari blok ringkas di kartu top
+// pick Agregator Pribadi (ScoreDrivers). Di sini SEMUA faktor ditampilkan,
+// bukan cuma 3+1, karena modal punya ruang dan ini tempat menelusuri skor
+// baris per baris.
+//
+// Sebelumnya panel ini merender score_breakdown yang isinya SATU kunci
+// turunan dari totalnya sendiri, diskalakan ke nilai maksimum di dalam dirinya
+// sendiri -- artinya satu batang yang selalu selebar penuh, tidak pernah
+// memberi informasi apa pun. Sejak reasoning.py mengisi sumbangan per faktor,
+// panel ini akhirnya punya isi.
+function FactorWeights({ breakdown, thesisScore }) {
+  if (!breakdown || Object.keys(breakdown).length === 0 || isLegacyBreakdown(breakdown)) return null
+  const { shown, total } = splitFactors(breakdown, Infinity, Infinity)
+  const clamped = thesisScore != null && Math.abs(50 + total - thesisScore) > 0.5
+  return (
+    <div className="score-drivers" style={{ margin: '2px 0 10px' }}>
+      <div className="sd-label">Bobot Faktor</div>
+      {shown.map(([key, v]) => (
+        <div key={key} className="sd-row">
+          <span className="sd-name">{factorLabel(key)}</span>
+          <span className="sd-track">
+            <i
+              style={{
+                left: v > 0 ? '50%' : `${50 - (Math.abs(v) / FACTOR_AXIS) * 50}%`,
+                width: `${Math.min(Math.abs(v) / FACTOR_AXIS, 1) * 50}%`,
+                background: v > 0 ? 'var(--good)' : 'var(--bad)',
+              }}
+            />
+          </span>
+          <span className={`sd-val ${v > 0 ? 'pos' : 'neg'}`}>{v > 0 ? '+' : ''}{v.toFixed(1)}</span>
+        </div>
+      ))}
+      <div className="sd-foot">
+        total {total > 0 ? '+' : ''}{total.toFixed(1)} → skor {thesisScore != null ? thesisScore.toFixed(0) : '—'}
+        {clamped && ' (terklamp)'}
+      </div>
+    </div>
+  )
+}
+
 function LensGrid({ reasoning }) {
   return (
     <div className="lens-grid">
@@ -763,7 +804,6 @@ function LensGrid({ reasoning }) {
         if (!o) return null
         const metricEntries = Object.entries(o.key_metrics || {})
         const weightEntries = Object.entries(o.score_breakdown || {})
-        const maxWeight = weightEntries.length > 0 ? Math.max(...weightEntries.map(([, v]) => Math.abs(v)), 1) : 1
         const hasDetail =
           (o.positive_factors || []).length > 0 ||
           (o.negative_factors || []).length > 0 ||
@@ -793,24 +833,7 @@ function LensGrid({ reasoning }) {
             {hasDetail && (
               <details className="lens-details">
                 <summary>Detail lainnya</summary>
-                {weightEntries.length > 0 && (
-                  <div style={{ margin: '2px 0 10px' }}>
-                    <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
-                      Bobot Faktor
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {weightEntries.map(([k, v]) => (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: 'var(--dim)', flexShrink: 0, minWidth: 88 }}>{prettyLabel(k)}</span>
-                          <div style={{ flex: 1, height: 4, background: 'var(--panel3)', borderRadius: 2, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${(Math.abs(v) / maxWeight) * 100}%`, background: 'var(--accent2)' }} />
-                          </div>
-                          <span style={{ fontSize: 9.5, color: 'var(--faint)', width: 26, textAlign: 'right' }}>{fmtMetricValue(v)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <FactorWeights breakdown={o.score_breakdown} thesisScore={o.thesis_score} />
                 {(o.context_used || []).length > 0 && (
                   <div style={{ margin: '2px 0 10px' }}>
                     <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
