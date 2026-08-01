@@ -125,6 +125,74 @@ export const MODULE_LABELS = {
   speculative: 'Speculative',
 }
 
+// --- Penggerak skor (ModuleOutput.score_breakdown) ---
+//
+// Kunci breakdown ditulis mentah oleh reasoning.py (`net_margin`, `pe_ratio`,
+// `debt_to_equity`, ...). Peta ini dipakai bareng oleh kartu top pick di
+// Agregator Pribadi dan panel "Bobot Faktor" di TickerModal supaya keduanya
+// tidak pernah menyebut faktor yang sama dengan nama berbeda.
+export const FACTOR_LABELS = {
+  net_margin: 'Net margin',
+  current_ratio: 'Current ratio',
+  debt_to_equity: 'Debt/Equity',
+  return_1y: 'Return 1 thn',
+  pe_ratio: 'P/E',
+  pb_ratio: 'P/B',
+  pe_vs_peer: 'P/E vs peer',
+  analyst_upside: 'Upside analis',
+  analyst_rating: 'Rating analis',
+  target_trend_3m: 'Tren target 3bln',
+  eps_beat_rate: 'EPS beat',
+  restatements: 'Restatement',
+  auditor_changes: 'Ganti auditor',
+  data_confidence: 'Confidence data',
+  risk_flags: 'Flag risiko',
+}
+
+export function factorLabel(key) {
+  return FACTOR_LABELS[key] || prettyLabel(key)
+}
+
+// Sumbu batang penggerak skor sengaja TETAP (-15..+15) untuk semua ticker,
+// bukan diskalakan ke sumbangan terbesar milik ticker itu sendiri. Kalau
+// diskalakan relatif, faktor terkuat selalu memenuhi setengah lebar dan
+// panjang batang berhenti berarti apa-apa selain "terkuat di antara temannya
+// sendiri" -- tidak bisa dibandingkan antar-ticker, dan faktor berbobot kecil
+// terlihat sama besar dengan yang berbobot besar. 15 = bobot maksimum faktor
+// terbesar di lensa mana pun (net margin / momentum).
+export const FACTOR_AXIS = 15
+
+// score_breakdown format LAMA berisi tepat satu kunci turunan dari totalnya
+// sendiri (`{"fundamentals": (score-50)/50}`), bukan sumbangan per faktor.
+// File stage di disk masih berformat itu sampai pipeline dijalankan ulang
+// dengan reasoning.py yang baru -- kalau tidak dibedakan, blok penggerak akan
+// menggambar satu batang tak berarti DAN salah menyimpulkan skornya terklamp
+// (karena 50 + 0.64 jelas tidak sama dengan skor sebenarnya) di hampir semua
+// ticker. Dideteksi dari bentuknya, bukan dari versi: satu kunci saja, bernama
+// salah satu dari tiga kunci lama itu.
+const LEGACY_BREAKDOWN_KEYS = new Set(['fundamentals', 'growth', 'momentum'])
+
+export function isLegacyBreakdown(breakdown) {
+  const keys = Object.keys(breakdown || {})
+  return keys.length === 1 && LEGACY_BREAKDOWN_KEYS.has(keys[0])
+}
+
+// Penggerak & penahan terkuat dari score_breakdown, masing-masing sudah
+// terurut menurut besar sumbangan. Faktor bersumbangan nol tidak pernah masuk
+// breakdown (lihat _record di reasoning.py), jadi tidak perlu disaring lagi.
+export function splitFactors(breakdown, maxPositive = 3, maxNegative = 1) {
+  const entries = Object.entries(breakdown || {})
+  const drivers = entries.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+  const blockers = entries.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1])
+  const shown = drivers.slice(0, maxPositive).concat(blockers.slice(0, maxNegative))
+  return {
+    shown,
+    total: entries.reduce((s, [, v]) => s + v, 0),
+    hidden: entries.length - shown.length,
+    hasBlocker: blockers.length > 0,
+  }
+}
+
 // --- Lapisan pribadi (personal layer) -- action/horizon per lens ---
 // action TIDAK sebanding lintas modul (sama alasan dengan stance, D-09-
 // style) -- kategorinya (warna) yang sebanding, bukan nilai literalnya.

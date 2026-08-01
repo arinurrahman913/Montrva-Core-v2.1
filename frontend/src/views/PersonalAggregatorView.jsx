@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
-import { prettyAction, horizonLabel, prettyHorizon, BEST_ACTION, rankPersonalPicks, tieAtCutoff } from '../format'
+import {
+  prettyAction, horizonLabel, prettyHorizon, BEST_ACTION, rankPersonalPicks, tieAtCutoff,
+  factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
+} from '../format'
 
 const LENSES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -87,7 +90,14 @@ function computeTopPickDiff(callSets, historyData) {
 // (bukan dari dalam ThesisProof, yang fokus ke harga SEJAK tesis muncul,
 // bukan harga sekarang) supaya kartu langsung kasih konteks "ini saham apa,
 // harganya berapa sekarang" sebelum baca detail live di bawahnya.
-function useTickerMeta(ticker) {
+//
+// score_breakdown ikut diambil di sini, dari respons api.ticker() yang MEMANG
+// SUDAH dipanggil untuk sektor+harga -- bukan request baru, dan bukan lewat
+// /api/personal/ticker/. Endpoint pribadi sengaja tetap terpisah (§9 draft
+// personal layer); aturan itu melarang data pribadi bocor ke jalur publik,
+// bukan sebaliknya, dan kartu ini memang sudah membaca sektor & harga dari
+// endpoint publik sejak awal.
+function useTickerMeta(ticker, module) {
   const [meta, setMeta] = useState(null)
   useEffect(() => {
     let cancelled = false
@@ -97,16 +107,61 @@ function useTickerMeta(ticker) {
         const sector = t?.evidence?.fundamental?.sector ?? null
         const livePrice = l && !l.stale && l.last_price != null ? l.last_price : null
         const fallbackPrice = t?.evidence?.price_market?.last_price ?? null
-        setMeta({ sector, price: livePrice ?? fallbackPrice })
+        const breakdown = t?.reasoning?.[module]?.score_breakdown ?? null
+        setMeta({ sector, price: livePrice ?? fallbackPrice, breakdown })
       })
-      .catch(() => { if (!cancelled) setMeta({ sector: null, price: null }) })
+      .catch(() => { if (!cancelled) setMeta({ sector: null, price: null, breakdown: null }) })
     return () => { cancelled = true }
-  }, [ticker])
+  }, [ticker, module])
   return meta
 }
 
+// Kenapa skornya segini -- 3 penggerak terkuat + 1 penahan. Skor tesis sudah
+// lama jadi penentu kartu mana yang muncul di halaman ini (lihat
+// allQualifying), tapi angkanya selalu tampil tanpa penjelasan apa pun.
+//
+// Batang bersumbu nol di tengah dengan skala TETAP (FACTOR_AXIS), bukan
+// diskalakan ke sumbangan terbesar ticker ini sendiri -- alasannya di komentar
+// FACTOR_AXIS (format.js).
+function ScoreDrivers({ breakdown, thesisScore }) {
+  // Format lama (satu kunci turunan) tidak dirender sama sekali -- lihat
+  // isLegacyBreakdown. Blok ini baru muncul setelah pipeline dijalankan ulang.
+  if (!breakdown || Object.keys(breakdown).length === 0 || isLegacyBreakdown(breakdown)) return null
+  const { shown, total, hidden, hasBlocker } = splitFactors(breakdown)
+  // Skor di-clamp 0-100 di reasoning.py, jadi total sumbangan bisa melebihi
+  // +50 tanpa terlihat di angka skor. Diungkap, bukan disembunyikan: ticker
+  // yang mentok tidak bisa dibedakan dari ticker mentok lainnya.
+  const clamped = Math.abs(50 + total - thesisScore) > 0.5
+  return (
+    <div className="score-drivers">
+      <div className="sd-label">Penggerak skor</div>
+      {shown.map(([key, v]) => (
+        <div key={key} className="sd-row">
+          <span className="sd-name">{factorLabel(key)}</span>
+          <span className="sd-track">
+            <i
+              style={{
+                left: v > 0 ? '50%' : `${50 - (Math.abs(v) / FACTOR_AXIS) * 50}%`,
+                width: `${Math.min(Math.abs(v) / FACTOR_AXIS, 1) * 50}%`,
+                background: v > 0 ? 'var(--good)' : 'var(--bad)',
+              }}
+            />
+          </span>
+          <span className={`sd-val ${v > 0 ? 'pos' : 'neg'}`}>{v > 0 ? '+' : ''}{v.toFixed(1)}</span>
+        </div>
+      ))}
+      <div className="sd-foot">
+        {!hasBlocker && 'Tidak ada penahan · '}
+        {hidden > 0 && `+${hidden} faktor lain · `}
+        total {total > 0 ? '+' : ''}{total.toFixed(1)}
+        {clamped && `, terklamp di ${thesisScore.toFixed(0)}`}
+      </div>
+    </div>
+  )
+}
+
 function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
-  const meta = useTickerMeta(ticker)
+  const meta = useTickerMeta(ticker, module)
   const thesisScore = call.thesis_score ?? 50
   const scoreColor = thesisScore >= 65 ? 'var(--good)' : thesisScore >= 50 ? 'var(--gold)' : 'var(--faint)'
   return (
@@ -137,6 +192,7 @@ function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
         <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 4 }}>{meta.sector}</div>
       )}
       <RiskBadge call={call} />
+      <ScoreDrivers breakdown={meta?.breakdown} thesisScore={thesisScore} />
       <div style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 4 }}>
         {horizonLabel(call.action)}: <span style={{ color: 'var(--dim)' }}>{prettyHorizon(call.horizon)}</span>
       </div>
