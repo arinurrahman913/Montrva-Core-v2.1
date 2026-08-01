@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..json_safe import dumps_safe
+from ..json_safe import dumps_safe, write_text_atomic
 
 if TYPE_CHECKING:
     from .contracts import MarketContextPackage
@@ -91,7 +91,5 @@ def append_entry(path: str | Path, pkg: "MarketContextPackage", max_entries: int
 
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(dumps_safe(history, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    write_text_atomic(p, dumps_safe(history, indent=2, ensure_ascii=False))
     return history

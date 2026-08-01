@@ -127,3 +127,38 @@ def dump_safe(obj, fp, **kwargs) -> None:
         _dump_streaming(obj, fp, **kwargs)
     else:
         json.dump(_sanitize(obj), fp, **kwargs)
+
+
+def write_text_atomic(path, text: str) -> None:
+    """Tulis teks ke file secara atomik: tmp UNIK-per-penulis lalu os.replace.
+
+    Empat pemanggil (layer1/historical, layer2/ai_narrative,
+    layer2/catalyst_history, layer2/price_target) dulu memakai nama tmp TETAP
+    `<nama>.tmp`. cache.py sudah meninggalkan pola itu setelah audit: dua
+    penulis konkuren yang berbagi nama tmp bisa saling menimpa file TMP satu
+    sama lain sebelum salah satunya sempat rename -- torn-write cuma pindah
+    dari file final ke file tmp, tidak hilang. Keempat tempat ini terlewat
+    saat itu.
+
+    Kegagalan di tengah juga membersihkan tmp-nya. Tanpa itu, run yang mati
+    (Flask restart membunuh anak proses, MemoryError, Ctrl+C) meninggalkan
+    .tmp yatim -- terjadi nyata 2026-08-01, menyisakan peer_results.json.tmp
+    23,8 MB berisi JSON separuh.
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_path, p)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise

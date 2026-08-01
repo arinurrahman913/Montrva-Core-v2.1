@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .contracts import PriceTargetSnapshot
-from ..json_safe import dumps_safe
+from ..json_safe import dumps_safe, write_text_atomic
 
 if TYPE_CHECKING:
     from .contracts import EvidencePackage
@@ -43,9 +43,7 @@ def load_price_target_store(path: str | Path) -> dict[str, list[dict]]:
 def save_price_target_store(store: dict[str, list[dict]], path: str | Path) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(dumps_safe(store, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    write_text_atomic(p, dumps_safe(store, indent=2, ensure_ascii=False))
 
 
 def sync_price_target_history(

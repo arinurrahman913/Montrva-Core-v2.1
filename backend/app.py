@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request, send_from_directory
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from alphaforge import runlock  # noqa: E402
 from alphaforge.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
 from alphaforge.layer2.sources.sector_map import (  # noqa: E402
     KNOWN_SECTORS, load_sector_map_meta as sector_map_meta
@@ -395,9 +396,24 @@ def start_refresh(mode: str):
     if mode not in REFRESH_SCRIPTS:
         return jsonify({"error": f"unknown mode '{mode}'"}), 404
     sector = request.args.get("sector") or None
+
     with _refresh_lock:
         if _refresh_state["running"]:
             return jsonify({"running": True, "mode": _refresh_state["mode"], "already": True}), 409
+
+        # Kunci di disk dicek juga, bukan cuma state in-memory: run bisa
+        # dijalankan dari terminal atau Task Scheduler, di luar sepengetahuan
+        # proses Flask ini. Tanpa cek ini tombol Generate tetap bisa menembak
+        # run kedua di atas run manual yang sedang jalan -- persis tabrakan
+        # 2026-08-01. Kalau _refresh_state bilang tidak running tapi kunci ada,
+        # pemegangnya pasti proses lain.
+        active = runlock.read_lock()
+        if active is not None:
+            return jsonify({
+                "running": True, "already": True, "external": True, "mode": None,
+                "message": f"Run lain sedang jalan di luar dashboard: {active.get('script')} "
+                           f"(pid {active.get('pid')}, mulai {active.get('started_at')})",
+            }), 409
         _refresh_state.update(
             running=True, mode=mode, sector=sector, started_at=time.time(), finished_at=None, ok=None, message=None
         )
@@ -407,8 +423,27 @@ def start_refresh(mode: str):
 
 @app.get("/api/refresh/status")
 def refresh_status():
+    """Status gabungan: state in-memory + kunci di disk.
+
+    State in-memory saja tidak cukup dan pernah berbohong: 2026-08-01 Flask
+    restart di tengah pekerjaan, ingatannya hilang, dan endpoint ini melaporkan
+    running=false padahal masih ada .tmp separuh tertulis. Kunci di disk
+    bertahan melintasi restart, jadi dia yang jadi sumber kebenaran untuk
+    "ada yang sedang jalan atau tidak"."""
     with _refresh_lock:
-        return jsonify(dict(_refresh_state))
+        state = dict(_refresh_state)
+
+    active = runlock.read_lock()
+    if active is not None and not state["running"]:
+        # Ada run yang jalan, tapi bukan yang dispawn dashboard ini.
+        state.update(
+            running=True, external=True, mode=None,
+            started_at=active.get("started_epoch"),
+            message=f"{active.get('script')} (pid {active.get('pid')})",
+        )
+    else:
+        state["external"] = False
+    return jsonify(state)
 
 
 def _avg(vals: list[float]) -> float | None:

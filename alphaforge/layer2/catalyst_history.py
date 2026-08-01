@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .catalyst_contracts import ResolvedCatalyst
-from ..json_safe import dumps_safe
+from ..json_safe import dumps_safe, write_text_atomic
 
 if TYPE_CHECKING:
     from .catalyst_contracts import CatalystSet
@@ -49,9 +49,7 @@ def load_catalyst_history_store(path: str | Path) -> dict:
 def save_catalyst_history_store(store: dict, path: str | Path) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(dumps_safe(store, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    write_text_atomic(p, dumps_safe(store, indent=2, ensure_ascii=False))
 
 
 def _find_earnings_outcome(ticker_evidence: "EvidencePackage | None", expected_at: str) -> str | None:

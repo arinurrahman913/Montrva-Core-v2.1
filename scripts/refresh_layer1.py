@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from alphaforge import runlock  # noqa: E402
 from alphaforge.json_safe import dumps_safe  # noqa: E402
 from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
@@ -55,11 +56,27 @@ def _passed_tickers() -> list[str] | None:
 
 
 def main() -> int:
-    price_cache = load_cached_price_cache(_passed_tickers())
-    pkg = build_market_context_package(price_cache=price_cache or None)
-    data = pkg.to_dict()
-    _atomic_write(OUT_PATH, data)
-    layer1_historical.append_entry(HISTORY_PATH, pkg)
+    # Job terjadwal (AlphaForge-Layer1-Refresh, tiap 2 jam) TIDAK boleh
+    # menyela run pipeline penuh: 2026-08-01 keduanya beririsan, berebut cache
+    # sector ETF yang sama, dan money_flow jatuh jadi `missing`. Keluar diam-
+    # diam dengan exit 0 -- ini bukan kegagalan, cuma tidak ada yang perlu
+    # dikerjakan; exit non-nol akan tercatat sebagai job gagal di Task
+    # Scheduler dan memicu alarm palsu tiap kali run manual kebetulan jalan.
+    force = "--force-unlock" in sys.argv
+    try:
+        runlock.acquire("refresh_layer1.py", force=force)
+    except runlock.AlreadyRunning as exc:
+        print(f"Layer 1 refresh dilewati -- {exc}")
+        return 0
+
+    try:
+        price_cache = load_cached_price_cache(_passed_tickers())
+        pkg = build_market_context_package(price_cache=price_cache or None)
+        data = pkg.to_dict()
+        _atomic_write(OUT_PATH, data)
+        layer1_historical.append_entry(HISTORY_PATH, pkg)
+    finally:
+        runlock.release()
 
     n_ok = sum(1 for c in data["components"].values() if c["status"] == "ok")
     score = data["layer_score"]["final_score"] if data["layer_score"] else None

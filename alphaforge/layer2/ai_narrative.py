@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+from ..json_safe import write_text_atomic
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -277,9 +278,7 @@ def load_narrative_cache(path: str | Path) -> dict[str, dict]:
 def save_narrative_cache(cache: dict[str, dict], path: str | Path) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    write_text_atomic(p, json.dumps(cache, indent=2, ensure_ascii=False))
 
 
 _EMPTY_RESULT = {"qualitative": None, "quantitative_highlights": [], "catalyst_note": None, "peer_note": None}

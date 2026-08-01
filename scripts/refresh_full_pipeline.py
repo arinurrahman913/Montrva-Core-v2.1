@@ -40,6 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from alphaforge import runlock  # noqa: E402
 from alphaforge.json_safe import dump_safe  # noqa: E402
 from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
@@ -156,6 +157,27 @@ def _atomic_write(path: Path, data: dict) -> None:
 
 
 def main() -> int:
+    # Kunci eksklusif: run ini menulis 10 file tahap di AKHIR, jadi run kedua
+    # yang tumpang-tindih bisa meninggalkan campuran dua sesi di
+    # dashboard/data/ -- persis yang dideteksi /api/consistency. Retry di
+    # cache.py tidak menolong untuk itu, karena kedua penulisan sama-sama
+    # "berhasil". Beda dari refresh_layer1.py, di sini exit NON-NOL: run penuh
+    # selalu dipicu sengaja (manual atau tombol Generate), jadi kalau ditolak
+    # pemanggilnya memang perlu tahu.
+    force = "--force-unlock" in sys.argv
+    try:
+        runlock.acquire("refresh_full_pipeline.py", force=force)
+    except runlock.AlreadyRunning as exc:
+        log.error(str(exc))
+        return 2
+
+    try:
+        return _run()
+    finally:
+        runlock.release()
+
+
+def _run() -> int:
     started = datetime.now(timezone.utc)
     session_id = f"session-{started.strftime('%Y%m%dT%H%M%S')}"
     log.info(f"Full pipeline refresh started (session_id={session_id})")
