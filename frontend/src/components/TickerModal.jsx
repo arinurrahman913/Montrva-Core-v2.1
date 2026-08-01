@@ -280,7 +280,7 @@ function KnowledgeDetailCards({ knowledge, evidence }) {
       </DetailCard>
 
       <DetailCard title="Balance Sheet & Liquidity">
-        <DetailRow label="Debt/Equity" value={fmtNum(bs.debt_to_equity)} />
+        <DetailRow label="Debt/Equity" value={bs.debt_to_equity != null ? `${fmtNum(bs.debt_to_equity, 2)}x` : '—'} />
         <DetailRow label="Current · Quick ratio" value={`${fmtNum(bs.current_ratio)} · ${fmtNum(bs.quick_ratio)}`} />
         <DetailRow label="Cash & equiv." value={bs.cash_and_equivalents != null ? fmtMoney(bs.cash_and_equivalents) : '—'} />
       </DetailCard>
@@ -1770,7 +1770,7 @@ const RATIO_FIELDS = [
   ['free_cash_flow', 'Free Cash Flow', (v) => fmtMoney(v)],
   ['payout_ratio', 'Payout Ratio', (v) => fmtPct(v * 100, 1)],
   ['dividend_yield', 'Dividend Yield', (v) => fmtPct(v * 100, 1)],
-  ['debt_to_equity', 'Debt/Equity', (v) => fmtNum(v, 2)],
+  ['debt_to_equity', 'Debt/Equity (%)', (v) => fmtNum(v, 2)],
   ['shares_outstanding_change_12m', 'Shares Out. Δ12m', (v) => fmtPct(v, 1)],
 ]
 

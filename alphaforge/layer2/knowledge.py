@@ -114,7 +114,7 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
             q4=trends.get('net_margin_q4') if trends.get('net_margin_q4') is not None else metrics['net_margin_pct']
         ),
         balance_sheet=BalanceSheet(
-            debt_to_equity=evidence.fundamental.debt_to_equity,
+            debt_to_equity=_debt_to_equity_ratio(evidence.fundamental.debt_to_equity),
             current_ratio=evidence.fundamental.current_ratio,
             quick_ratio=evidence.fundamental.quick_ratio
         ),
@@ -272,6 +272,34 @@ def _fcf_margin_pct(fcf: float | None, revenue: float | None) -> float | None:
     if fcf is None or not revenue or revenue <= 0:
         return None
     return (fcf / revenue) * 100
+
+
+def _debt_to_equity_ratio(raw: float | None) -> float | None:
+    """Normalisasi D/E dari PERSEN (satuan Evidence/Yahoo) ke RASIO.
+
+    Yahoo `.info["debtToEquity"]` dikembalikan dalam persen: AAPL 79.5,
+    MSFT 30.3, KO 113.6 -- artinya 0.80x, 0.30x, 1.14x. Evidence menyimpan
+    angka itu apa adanya (prinsip "fakta, bukan tafsir"), jadi konversinya
+    dilakukan di sini, satu-satunya tempat BalanceSheet dibangun dari
+    Evidence -- supaya SEMUA konsumen hilir (reasoning.py, risk.py, dan apa
+    pun yang menyusul) membaca satuan yang sama tanpa masing-masing perlu
+    tahu asal-usulnya.
+
+    Sebelum ini, ambang hilir dibandingkan sebagai rasio terhadap nilai
+    persen: `debt_to_equity > 2.0` sebenarnya berbunyi "di atas 0.02x",
+    sehingga 72% universe kena penalti leverage di Quality lens dan 71%
+    dapat RedFlag `high_debt` severity "high" dari risk.py (yang lalu
+    memicu penalti -15 kedua di lensa yang sama). Ambang hilirnya sendiri
+    (1.0 / 2.0 / 3.0) TIDAK diubah -- angka-angka itu memang sudah benar
+    sebagai rasio, yang salah cuma satuan yang masuk ke sana.
+
+    0.0 (bebas utang) adalah nilai sah dan dipertahankan, bukan dibuang
+    sebagai falsy -- bug class yang sama seperti catatan di
+    _count_completed_fields.
+    """
+    if raw is None:
+        return None
+    return raw / 100.0
 
 
 def _count_completed_fields(

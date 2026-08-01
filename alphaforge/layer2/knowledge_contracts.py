@@ -39,6 +39,10 @@ class MarginTrend:
 @dataclass
 class BalanceSheet:
     """Snapshot balance sheet: debt, liquidity, equity position."""
+    # RASIO (0.80 = 0.80x), BUKAN persen. Evidence menyimpannya dalam persen
+    # apa adanya dari Yahoo (79.5); knowledge.py:_debt_to_equity_ratio yang
+    # mengonversi. Ambang hilir (reasoning.py, risk.py) membandingkan sebagai
+    # rasio -- jangan masukkan nilai persen ke field ini.
     debt_to_equity: float | None = None
     current_ratio: float | None = None
     quick_ratio: float | None = None

@@ -63,7 +63,7 @@ export const METRIC_DEFINITIONS = {
   free_cash_flow: 'Kas dari operasi dikurangi belanja modal (capex).',
   payout_ratio: 'Persentase laba bersih yang dibagikan sebagai dividen.',
   dividend_yield: 'Dividen tahunan dibagi harga saham saat ini.',
-  debt_to_equity: 'Total utang dibagi ekuitas pemegang saham.',
+  debt_to_equity: 'Total utang dibagi ekuitas pemegang saham. Yahoo melaporkannya dalam persen — 79,5 berarti 0,80x. Kartu Knowledge menampilkannya sebagai rasio (x).',
   shares_outstanding_change_12m: 'Perubahan jumlah saham beredar dalam 12 bulan terakhir — indikator dilusi.',
 }
 
