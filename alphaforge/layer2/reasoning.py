@@ -155,6 +155,94 @@ def _build_flag_responses(risk: RiskAssessment | None) -> list[FlagResponse]:
     return responses
 
 
+INF = float("inf")
+
+
+def _ramp(
+    value: float | None,
+    dead_lo: float,
+    dead_hi: float,
+    full_below: float | None = None,
+    weight_below: float = 0.0,
+    full_above: float | None = None,
+    weight_above: float = 0.0,
+) -> float:
+    """Sumbangan skor satu faktor sebagai "dead-band ramp", bukan step.
+
+    Sebelumnya tiap faktor adalah step function: lolos ambang dapat bobot
+    PENUH, tidak lolos dapat nol. Besaran metriknya dibuang -- P/E 3 dan
+    P/E 19.9 sama-sama +12, P/E 20.1 dapat 0. Karena skor lensa cuma
+    penjumlahan segelintir bilangan bulat tetap, nilai yang mungkin muncul
+    sangat sedikit: dari 4056 ticker, Quality cuma menghasilkan 101 nilai
+    unik dan Speculative 24. Itu cukup untuk memilih tier stance, tapi tidak
+    cukup untuk memeringkat ticker -- padahal `_thesis_score_tier` di lapisan
+    personal dan urutan top-pick di dashboard sama-sama bersandar padanya.
+
+    Ambang lama TIDAK diganti: dia jadi tepi zona mati [dead_lo, dead_hi],
+    tempat sumbangan tetap nol. Di luar zona itu sumbangan naik linier
+    sampai bobot penuh di `full_below` / `full_above`. Efeknya: ticker yang
+    cuma lewat tipis dari ambang berhenti memungut bobot penuh, sementara
+    yang benar-benar ekstrem tetap memungutnya.
+
+    Arah faktor tidak diasumsikan -- `weight_below`/`weight_above` membawa
+    tandanya masing-masing, jadi fungsi ini sama saja dipakai untuk metrik
+    yang makin besar makin baik (net margin) maupun sebaliknya (P/E, D/E).
+    Sisi yang memang tidak punya cabang (mis. P/B tidak pernah menghukum)
+    cukup dibiarkan None, bukan dikarang cabang barunya.
+
+    value None -> 0.0: data hilang berarti faktor ini tidak bersuara,
+    PERSIS seperti perilaku lama (semua cabang lama dijaga `is not None`).
+    Data hilang bukan sinyal negatif -- itu urusan confidence & knowledge_gaps.
+    """
+    if value is None:
+        return 0.0
+    if value < dead_lo and full_below is not None:
+        span = dead_lo - full_below
+        frac = 1.0 if span <= 0 else min(1.0, (dead_lo - value) / span)
+        return weight_below * frac
+    if value > dead_hi and full_above is not None:
+        span = full_above - dead_hi
+        frac = 1.0 if span <= 0 else min(1.0, (value - dead_hi) / span)
+        return weight_above * frac
+    return 0.0
+
+
+def _record(
+    breakdown: dict[str, float],
+    positive: list[str],
+    negative: list[str],
+    metrics: dict,
+    key: str,
+    contribution: float,
+    text_positive: str,
+    text_negative: str,
+    metric_key: str | None = None,
+    metric_value=None,
+) -> float:
+    """Catat sumbangan satu faktor ke score_breakdown + daftar faktor.
+
+    score_breakdown selama ini berisi SATU kunci yang diturunkan dari
+    totalnya sendiri (`{"fundamentals": (score-50)/50}`), sehingga panel
+    "Bobot Faktor" di TickerModal secara matematis cuma bisa menggambar satu
+    batang dan batang itu selalu selebar penuh. Ramp menghasilkan sumbangan
+    per faktor sebagai produk sampingan, jadi panel itu akhirnya punya isi.
+
+    Faktor bersumbangan nol TIDAK dicatat -- daftar faktor, breakdown, dan
+    key_metrics hanya memuat yang benar-benar menggerakkan skor, sama seperti
+    perilaku lama (dulu metrics[...] cuma diisi di dalam cabang yang menyala).
+    """
+    if contribution == 0:
+        return 0.0
+    if contribution > 0:
+        positive.append(text_positive)
+    else:
+        negative.append(text_negative)
+    breakdown[key] = round(contribution, 2)
+    if metric_key is not None and metric_value is not None:
+        metrics[metric_key] = metric_value
+    return contribution
+
+
 def run_quality_lens(
     profile: KnowledgeProfile,
     confidence: ConfidenceReport | None = None,
@@ -171,60 +259,84 @@ def run_quality_lens(
     positive = []
     negative = []
     metrics = {}
+    breakdown: dict[str, float] = {}
 
+    # Tiap faktor kontinu dihitung sebagai dead-band ramp (lihat _ramp):
+    # ambang lama jadi tepi zona mati, anchor kedua tempat bobot penuh
+    # tercapai. Komentar pXX di tiap baris = posisi anchor itu di distribusi
+    # 4056 ticker nyata, supaya pilihannya bisa ditimbang ulang nanti alih-alih
+    # jadi angka ajaib. Dua di antaranya sekaligus menjelaskan kenapa skor lama
+    # tumpul: ambang "P/E menarik <20" persis di p49 -- praktis lempar koin,
+    # bukan sinyal -- dan "current ratio kuat >1.5" di p41, jadi mayoritas
+    # universe memungut +10 penuh tanpa dibedakan satu sama lain.
     fh = profile.financial_health
-    if fh.net_margin_trend.q4 is not None and fh.net_margin_trend.q4 > 5:
-        score += 15
-        positive.append("Strong net margins (>5%)")
-        metrics["net_margin_q4"] = fh.net_margin_trend.q4
-    elif fh.net_margin_trend.q4 is not None and fh.net_margin_trend.q4 < 0:
-        score -= 15
-        negative.append("Negative net margin")
-        metrics["net_margin_q4"] = fh.net_margin_trend.q4
 
-    if fh.balance_sheet.current_ratio is not None and fh.balance_sheet.current_ratio > 1.5:
-        score += 10
-        positive.append("Strong current ratio (>1.5)")
-        metrics["current_ratio"] = fh.balance_sheet.current_ratio
-    elif fh.balance_sheet.current_ratio is not None and fh.balance_sheet.current_ratio < 1.0:
-        score -= 10
-        negative.append("Weak liquidity (current ratio <1)")
-        metrics["current_ratio"] = fh.balance_sheet.current_ratio
+    nm = fh.net_margin_trend.q4
+    score += _record(
+        breakdown, positive, negative, metrics, "net_margin",
+        _ramp(nm, 0.0, 5.0,
+              full_below=-15.0, weight_below=-15.0,      # p19
+              full_above=20.0, weight_above=15.0),       # p74
+        "Strong net margins (>5%)", "Negative net margin",
+        "net_margin_q4", nm,
+    )
 
-    if fh.balance_sheet.debt_to_equity is not None and fh.balance_sheet.debt_to_equity < 1.0:
-        score += 10
-        positive.append("Conservative leverage (D/E <1)")
-        metrics["debt_to_equity"] = fh.balance_sheet.debt_to_equity
-    elif fh.balance_sheet.debt_to_equity is not None and fh.balance_sheet.debt_to_equity > 2.0:
-        score -= 12
-        negative.append("High leverage (D/E >2)")
-        metrics["debt_to_equity"] = fh.balance_sheet.debt_to_equity
+    cr = fh.balance_sheet.current_ratio
+    score += _record(
+        breakdown, positive, negative, metrics, "current_ratio",
+        _ramp(cr, 1.0, 1.5,
+              full_below=0.6, weight_below=-10.0,        # p10
+              full_above=3.5, weight_above=10.0),        # p75
+        "Strong current ratio (>1.5)", "Weak liquidity (current ratio <1)",
+        "current_ratio", cr,
+    )
+
+    # D/E: makin KECIL makin baik, jadi cabang bawah yang bernilai positif.
+    # Satuannya rasio (0.80 = 0.80x) sejak fix satuan di knowledge.py --
+    # nilai persen mentah dari Yahoo tidak boleh masuk ke sini.
+    de = fh.balance_sheet.debt_to_equity
+    score += _record(
+        breakdown, positive, negative, metrics, "debt_to_equity",
+        _ramp(de, 1.0, 2.0,
+              full_below=0.2, weight_below=10.0,         # p29
+              full_above=4.0, weight_above=-12.0),       # p93
+        "Conservative leverage (D/E <1)", "High leverage (D/E >2)",
+        "debt_to_equity", de,
+    )
 
     ht = profile.historical_trend
-    if ht.return_1y is not None and ht.return_1y > 10:
-        score += 8
-        positive.append("Positive 1Y return")
-        metrics["return_1y"] = ht.return_1y
-    elif ht.return_1y is not None and ht.return_1y < -20:
-        score -= 8
-        negative.append("Severe drawdown")
-        metrics["return_1y"] = ht.return_1y
+    r1y = ht.return_1y
+    score += _record(
+        breakdown, positive, negative, metrics, "return_1y",
+        _ramp(r1y, -20.0, 10.0,
+              full_below=-50.0, weight_below=-8.0,       # p06
+              full_above=60.0, weight_above=8.0),        # p82
+        "Positive 1Y return", "Severe drawdown",
+        "return_1y", r1y,
+    )
 
     val = profile.valuation
-    if val.pe_ratio_trailing is not None:
-        if val.pe_ratio_trailing < 20:
-            score += 12
-            positive.append("Attractive P/E (<20x)")
-            metrics["pe_ratio"] = val.pe_ratio_trailing
-        elif val.pe_ratio_trailing > 50:
-            score -= 8
-            negative.append("Expensive valuation (P/E >50x)")
-            metrics["pe_ratio"] = val.pe_ratio_trailing
+    pe = val.pe_ratio_trailing
+    score += _record(
+        breakdown, positive, negative, metrics, "pe_ratio",
+        _ramp(pe, 20.0, 50.0,
+              full_below=8.0, weight_below=12.0,         # p10
+              full_above=100.0, weight_above=-8.0),      # p93
+        "Attractive P/E (<20x)", "Expensive valuation (P/E >50x)",
+        "pe_ratio", pe,
+    )
 
-    if val.pb_ratio is not None and val.pb_ratio < 2.0:
-        score += 8
-        positive.append("Fair P/B ratio (<2x)")
-        metrics["pb_ratio"] = val.pb_ratio
+    # P/B sengaja tetap satu sisi: kriteria lama tidak pernah menghukum P/B
+    # tinggi, dan menambahkan cabang negatif di sini berarti mengarang kriteria
+    # baru yang belum ada di spec modul -- bukan sekadar menambah resolusi.
+    pb = val.pb_ratio
+    score += _record(
+        breakdown, positive, negative, metrics, "pb_ratio",
+        _ramp(pb, 2.0, INF,
+              full_below=0.8, weight_below=8.0),         # p09
+        "Fair P/B ratio (<2x)", "",
+        "pb_ratio", pb,
+    )
 
     # Peer: valuasi relatif — sebelumnya modul ini gak pernah baca Peer sama
     # sekali padahal 08_MODULE_QUALITY_COMPOUND.md butuh percentile peer
@@ -232,28 +344,30 @@ def run_quality_lens(
     # bukan pengganti kriteria valuasi absolut di atas.
     if peer and peer.pe_ratio_comparison and peer.pe_ratio_comparison.percentile is not None:
         pct = peer.pe_ratio_comparison.percentile
-        if pct <= 30:
-            score += 6
-            positive.append(f"P/E cheaper than {100-pct:.0f}% of peers")
-            metrics["pe_peer_percentile"] = pct
-        elif pct >= 85:
-            score -= 6
-            negative.append(f"P/E more expensive than {pct:.0f}% of peers")
-            metrics["pe_peer_percentile"] = pct
+        score += _record(
+            breakdown, positive, negative, metrics, "pe_vs_peer",
+            _ramp(pct, 30.0, 85.0,
+                  full_below=5.0, weight_below=6.0,
+                  full_above=97.0, weight_above=-6.0),
+            f"P/E cheaper than {100-pct:.0f}% of peers",
+            f"P/E more expensive than {pct:.0f}% of peers",
+            "pe_peer_percentile", pct,
+        )
 
     # Analyst consensus price target (bagian 6, upgrade 2026-07-25) — sinyal
     # eksternal (banyak analis) di luar valuasi absolut/peer di atas. Bobot
     # sedang (+/-8), sejajar peer percentile: pelengkap, bukan pengganti.
     pt = val.price_target
     if pt and pt.upside_pct is not None:
-        if pt.upside_pct > 15:
-            score += 8
-            positive.append(f"Analyst consensus implies {pt.upside_pct:.0f}% upside")
-            metrics["analyst_upside_pct"] = pt.upside_pct
-        elif pt.upside_pct < -10:
-            score -= 8
-            negative.append(f"Analyst consensus implies {abs(pt.upside_pct):.0f}% downside")
-            metrics["analyst_upside_pct"] = pt.upside_pct
+        score += _record(
+            breakdown, positive, negative, metrics, "analyst_upside",
+            _ramp(pt.upside_pct, -10.0, 15.0,
+                  full_below=-30.0, weight_below=-8.0,
+                  full_above=50.0, weight_above=8.0),
+            f"Analyst consensus implies {pt.upside_pct:.0f}% upside",
+            f"Analyst consensus implies {abs(pt.upside_pct):.0f}% downside",
+            "analyst_upside_pct", pt.upside_pct,
+        )
 
     # recommendation_key & price_target_trend_3m (bagian 6) — dua sinyal
     # analyst-consensus TAMBAHAN di luar upside_pct di atas: recommendation_key
@@ -264,25 +378,34 @@ def run_quality_lens(
     # ketiganya sama-sama berasal dari analyst_estimates -- supaya satu
     # sumber data eksternal tidak mendominasi skor lensa cuma karena
     # direpresentasikan di 3 field berbeda.
+    #
+    # recommendation_key SENGAJA tetap step -- satu-satunya faktor yang begitu.
+    # "buy"/"strong_buy" itu kategori, bukan besaran; memberinya kemiringan
+    # berarti mengarang jarak antar-label yang tidak ada di datanya.
     if pt and pt.recommendation_key:
+        rating = 0.0
         if pt.recommendation_key in ("strong_buy", "buy"):
-            score += 5
-            positive.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
-            metrics["analyst_recommendation"] = pt.recommendation_key
+            rating = 5.0
         elif pt.recommendation_key in ("sell", "strong_sell"):
-            score -= 5
-            negative.append(f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}")
-            metrics["analyst_recommendation"] = pt.recommendation_key
+            rating = -5.0
+        rating_label = f"Analyst rating: {pt.recommendation_key.replace('_', ' ')}"
+        score += _record(
+            breakdown, positive, negative, metrics, "analyst_rating",
+            rating, rating_label, rating_label,
+            "analyst_recommendation", pt.recommendation_key,
+        )
 
     if pt and pt.price_target_trend_3m is not None:
-        if pt.price_target_trend_3m > 10:
-            score += 5
-            positive.append(f"Analyst targets rising ({pt.price_target_trend_3m:.0f}% over 3M)")
-            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
-        elif pt.price_target_trend_3m < -10:
-            score -= 5
-            negative.append(f"Analyst targets falling ({pt.price_target_trend_3m:.0f}% over 3M)")
-            metrics["price_target_trend_3m"] = pt.price_target_trend_3m
+        t3 = pt.price_target_trend_3m
+        score += _record(
+            breakdown, positive, negative, metrics, "target_trend_3m",
+            _ramp(t3, -10.0, 10.0,
+                  full_below=-30.0, weight_below=-5.0,
+                  full_above=30.0, weight_above=5.0),
+            f"Analyst targets rising ({t3:.0f}% over 3M)",
+            f"Analyst targets falling ({t3:.0f}% over 3M)",
+            "price_target_trend_3m", t3,
+        )
 
     # EPS beat/miss streak (bagian 4) — "N/M beat" string diparse defensif
     # (try/except) karena formatnya dihasilkan Knowledge (_compute_earnings_
@@ -294,32 +417,54 @@ def run_quality_lens(
             beats, total = int(beats_str), int(total_str.split()[0])
             if total > 0:
                 beat_rate = beats / total
-                if beat_rate >= 0.75:
-                    score += 6
-                    positive.append(f"Strong EPS beat record ({ht.earnings_beat_miss_streak})")
-                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
-                elif beat_rate <= 0.25:
-                    score -= 6
-                    negative.append(f"Weak EPS beat record ({ht.earnings_beat_miss_streak})")
-                    metrics["eps_beat_streak"] = ht.earnings_beat_miss_streak
+                score += _record(
+                    breakdown, positive, negative, metrics, "eps_beat_rate",
+                    _ramp(beat_rate, 0.25, 0.75,
+                          full_below=0.0, weight_below=-6.0,
+                          full_above=1.0, weight_above=6.0),
+                    f"Strong EPS beat record ({ht.earnings_beat_miss_streak})",
+                    f"Weak EPS beat record ({ht.earnings_beat_miss_streak})",
+                    "eps_beat_streak", ht.earnings_beat_miss_streak,
+                )
         except (ValueError, IndexError):
             pass
 
+    # Faktor hitungan: kemiringan atas JUMLAH kejadian, bukan atas besaran
+    # sebuah metrik. Satu restatement sudah serius tapi bukan hal yang sama
+    # dengan dua; dulu keduanya dihukum identik -15.
     gov = profile.governance
-    if len(gov.restatements or []) > 0:
-        score -= 15
-        negative.append(f"Financial restatements ({len(gov.restatements)})")
-    elif len(gov.auditor_changes or []) > 0:
-        score -= 8
-        negative.append(f"Auditor changes ({len(gov.auditor_changes)})")
+    n_restate = len(gov.restatements or [])
+    n_auditor = len(gov.auditor_changes or [])
+    if n_restate > 0:
+        score += _record(
+            breakdown, positive, negative, metrics, "restatements",
+            _ramp(float(n_restate), 0.0, 0.0, full_above=2.0, weight_above=-15.0),
+            "", f"Financial restatements ({n_restate})",
+        )
+    elif n_auditor > 0:
+        score += _record(
+            breakdown, positive, negative, metrics, "auditor_changes",
+            _ramp(float(n_auditor), 0.0, 0.0, full_above=2.0, weight_above=-8.0),
+            "", f"Auditor changes ({n_auditor})",
+        )
 
-    if confidence and confidence.overall.score < BAND_MEDIUM_THRESHOLD:
-        score -= 10
-        negative.append("Low data confidence")
+    # confidence.overall.score sudah kontinu 0-100 di hulu -- selama ini justru
+    # dipotong jadi biner di ambang band. Sekarang dipakai apa adanya.
+    if confidence:
+        score += _record(
+            breakdown, positive, negative, metrics, "data_confidence",
+            _ramp(confidence.overall.score, BAND_MEDIUM_THRESHOLD, INF,
+                  full_below=20.0, weight_below=-10.0),
+            "", "Low data confidence",
+        )
 
     if risk and risk.high_severity_count > 0:
-        score -= 15
-        negative.append(f"High-risk flags ({risk.high_severity_count})")
+        score += _record(
+            breakdown, positive, negative, metrics, "risk_flags",
+            _ramp(float(risk.high_severity_count), 0.0, 0.0,
+                  full_above=3.0, weight_above=-15.0),
+            "", f"High-risk flags ({risk.high_severity_count})",
+        )
 
     # Insider Form 4 filing activity DELIBERATELY NOT scored here (removed post-audit,
     # 2026-07-24). Reasons: (1) D-12 scope — this module's own access-list (1,2,3a,4,6,7)
@@ -359,7 +504,7 @@ def run_quality_lens(
         positive_factors=positive,
         negative_factors=negative,
         key_metrics=metrics,
-        score_breakdown={"fundamentals": (score - 50) / 50},
+        score_breakdown=breakdown,
         thesis_score=float(score),
         fields_accessed=["identity", "financial_health", "historical_trend", "valuation", "governance"],
     )
