@@ -157,6 +157,27 @@ def _build_flag_responses(risk: RiskAssessment | None) -> list[FlagResponse]:
 
 INF = float("inf")
 
+# Ambang pita ATAS stance (Quality & Multibagger). SENGAJA tidak 70.
+#
+# personal_reasoning.py:_thesis_score_tier memakai >=70 sebagai gerbang tier
+# "high", dan ACTION_TABLE di-index oleh stance DAN tier sekaligus. Selama
+# ambang stance juga 70, kedua sel campuran tabel itu mustahil tercapai:
+# "pita atas + tier medium" butuh skor >=70 sekaligus <70, dan "pita tengah +
+# tier high" butuh skor <70 sekaligus >=70. Akibatnya action perantara
+# (`akumulasi_saat_koreksi` di Quality, `cicil_bertahap` di Multibagger) tidak
+# pernah bisa muncul untuk ticker no_holding -- terukur 0 dari 4056. Kelas bug
+# yang sama dengan gerbang confidence.band=='high' yang tak pernah tercapai
+# (2026-07-29) dan horizon lima_tahun yang mustahil (2026-07-31): dua ambang
+# yang kebetulan sama membuat satu cabang mati diam-diam.
+#
+# +5 di atas gerbang, seragam untuk kedua lensa, supaya angkanya tidak jadi
+# tebakan per-lensa. Efek sampingnya sekalian memperbaiki keluhan label:
+# "compounding kuat" turun dari 36% universe ke 27%, sejajar dengan lensa lain.
+#
+# Speculative TIDAK ikut: ambangnya 60, sudah beda dari gerbang, jadi sel
+# campurannya memang sudah hidup.
+STANCE_STRONG_THRESHOLD = 75.0
+
 
 def _ramp(
     value: float | None,
@@ -479,7 +500,7 @@ def run_quality_lens(
     score = max(0, min(100, score + 50))
 
     gaps = _knowledge_gaps(profile, "quality_compound")
-    if score >= 70:
+    if score >= STANCE_STRONG_THRESHOLD:
         stance = "compounding_kuat"
     elif score >= 45:
         stance = "compounding_rapuh"
@@ -845,7 +866,7 @@ def run_multibagger_lens(
     score = max(0, min(100, score + 50))
 
     gaps = _knowledge_gaps(profile, "multibagger")
-    if score >= 70:
+    if score >= STANCE_STRONG_THRESHOLD:
         stance = "ruang_terbuka"
     elif score >= 45:
         stance = "ruang_sempit"
