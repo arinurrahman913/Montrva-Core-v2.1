@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from .confidence_contracts import (
     ConfidenceReport, OverallConfidence, SectionScore, PeerPenalty, ContextPenalty,
-    RecencyPenalty,
+    RecencyPenalty, ConsistencyPenalty,
 )
 
 if TYPE_CHECKING:
@@ -50,6 +50,12 @@ CONTEXT_PENALTY_CAP = 15.0
 # sebagai starting point yang konsisten, bukan angka final.
 RECENCY_PENALTY_THRESHOLD_DAYS = 91
 RECENCY_PENALTY_POINTS = 10.0
+# 05_CONFIDENCE_DATA_QUALITY.md komponen #3 "konsistensi antar-sumber" —
+# sebelumnya cuma 3/4 komponen spec yang jalan (kelengkapan, kebaruan, flag
+# Screening); ini menutup yang terakhir. Sama magnitude-nya dengan
+# PEER/RECENCY sebagai starting point konsisten (belum kalibrasi final,
+# sama seperti bobot lain di modul ini).
+CONSISTENCY_PENALTY_POINTS = 10.0
 
 # Audit 2026-07-30 item A7: menghapus 7 cek yang tak pernah terisi (lihat
 # docstring _score_valuation/_score_competitive_structure/
@@ -124,6 +130,7 @@ def assess_confidence(
     context_penalty = _assess_context_penalty(components_degraded)
     evidence_age = _get_data_age_days(knowledge_profile.metadata.evidence_date)
     recency_penalty = _assess_recency_penalty(evidence_age)
+    consistency_penalty = _assess_consistency_penalty(knowledge_profile.metadata.cross_reference_notes)
 
     score = base_score
     if peer_penalty.applied:
@@ -135,6 +142,8 @@ def assess_confidence(
         )
     if recency_penalty.applied:
         score -= RECENCY_PENALTY_POINTS
+    if consistency_penalty.applied:
+        score -= CONSISTENCY_PENALTY_POINTS
     score = max(0.0, min(100.0, score))
 
     if score >= BAND_HIGH_THRESHOLD:
@@ -174,6 +183,8 @@ def assess_confidence(
             )
         if recency_penalty.applied:
             limiters.append(recency_penalty.reason)
+        if consistency_penalty.applied:
+            limiters.extend(consistency_penalty.notes)
         # V3 (Data Contracts): limiters WAJIB terisi kalau band != "high". Kasus
         # nyata yang bisa lolos semua cek di atas tanpa masuk sini: band="medium"
         # dari rata-rata tertimbang section yang moderat merata (tidak ada satu
@@ -194,6 +205,7 @@ def assess_confidence(
         peer_penalty=peer_penalty,
         context_penalty=context_penalty,
         recency_penalty=recency_penalty,
+        consistency_penalty=consistency_penalty,
         evidence_age_days=evidence_age,
         assessed_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -371,6 +383,12 @@ def _assess_recency_penalty(evidence_age_days: int | None) -> RecencyPenalty:
         age_days=evidence_age_days,
         reason=f"Evidence {evidence_age_days} days old (>1 full quarter, {RECENCY_PENALTY_THRESHOLD_DAYS}d threshold)",
     )
+
+
+def _assess_consistency_penalty(cross_reference_notes: list[str] | None) -> ConsistencyPenalty:
+    if not cross_reference_notes:
+        return ConsistencyPenalty(applied=False)
+    return ConsistencyPenalty(applied=True, notes=list(cross_reference_notes))
 
 
 def _get_data_age_days(iso_datetime: str | None) -> int | None:

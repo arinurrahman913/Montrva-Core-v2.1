@@ -242,7 +242,8 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         fields_expected=expected_fields,
         missing_fields=missing_fields,
         sources_used=_extract_sources(evidence),
-        data_quality_notes=_generate_quality_notes(evidence, returns, volatility)
+        data_quality_notes=_generate_quality_notes(evidence, returns, volatility),
+        cross_reference_notes=list(evidence.fundamental.cross_reference_notes or [])
     )
 
     return KnowledgeProfile(

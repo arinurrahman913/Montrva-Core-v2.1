@@ -54,6 +54,17 @@ class RecencyPenalty:
 
 
 @dataclass
+class ConsistencyPenalty:
+    """Penalti dari 05_CONFIDENCE_DATA_QUALITY.md komponen #3: 'apakah data
+    dari sumber berbeda (misal Yahoo Finance vs. SEC EDGAR untuk fundamental)
+    saling menguatkan atau berbeda signifikan'. Sumbernya evidence.py's
+    `_cross_reference_fundamental` (revenue Yahoo vs SEC EDGAR >15% divergen),
+    diteruskan lewat KnowledgeMetadata.cross_reference_notes."""
+    applied: bool
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ConfidenceReport:
     """Confidence Report untuk satu ticker — Data Contracts §5c.
 
@@ -69,6 +80,7 @@ class ConfidenceReport:
     peer_penalty: PeerPenalty
     context_penalty: ContextPenalty
     recency_penalty: RecencyPenalty
+    consistency_penalty: ConsistencyPenalty
     evidence_age_days: int | None
 
     assessed_at: str = ""  # ISO datetime

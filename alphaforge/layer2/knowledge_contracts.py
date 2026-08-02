@@ -201,6 +201,7 @@ class KnowledgeMetadata:
     missing_fields: list[str] = field(default_factory=list)  # Nama field (dotted path) yang kosong — Data Contracts §4/§6 V4
     sources_used: list[str] = field(default_factory=list)  # List sumber dari Evidence (yahoo_finance, finnhub, sec_edgar)
     data_quality_notes: str | None = None
+    cross_reference_notes: list[str] = field(default_factory=list)  # Diteruskan dari evidence.fundamental.cross_reference_notes — dipakai Confidence komponen #3 (konsistensi antar-sumber)
 
 
 @dataclass

@@ -700,6 +700,7 @@ function ConfidenceDetail({ confidence }) {
   const peerP = confidence.peer_penalty || {}
   const contextP = confidence.context_penalty || {}
   const recencyP = confidence.recency_penalty || {}
+  const consistencyP = confidence.consistency_penalty || {}
 
   return (
     <div className="mcell">
@@ -739,6 +740,11 @@ function ConfidenceDetail({ confidence }) {
           reasonText={`degraded: ${(contextP.components_degraded || []).join(', ')}`}
         />
         <PenaltyRow label="Recency penalty" applied={recencyP.applied} reasonText={recencyP.reason} />
+        <PenaltyRow
+          label="Consistency penalty (antar-sumber)"
+          applied={consistencyP.applied}
+          reasonText={(consistencyP.notes || []).join('; ')}
+        />
       </div>
 
       <div style={{ borderTop: '1px solid var(--rule)', paddingTop: 8, fontSize: 11, color: 'var(--dim)' }}>
