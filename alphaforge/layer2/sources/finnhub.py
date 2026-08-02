@@ -48,8 +48,10 @@ FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 FINNHUB_MIN_INTERVAL_SECONDS = float(os.environ.get("FINNHUB_MIN_INTERVAL_SECONDS", "1.05"))
 FINNHUB_RETRIES = 2
 FINNHUB_RETRY_BACKOFF_SECONDS = 3.0
-# Lihat docstring fetch_company_news untuk kenapa 12 jam.
-FINNHUB_NEWS_CACHE_TTL = float(os.environ.get("FINNHUB_NEWS_CACHE_TTL", 12 * 3600))
+# Lihat docstring fetch_company_news untuk kenapa 36 jam (naik dari 12 jam,
+# 2026-08-02) — singkatnya: TTL 12 jam LEBIH PENDEK dari jarak antar-run
+# harian, jadi cache-nya dijamin selalu kedaluwarsa tepat sebelum dipakai.
+FINNHUB_NEWS_CACHE_TTL = float(os.environ.get("FINNHUB_NEWS_CACHE_TTL", 36 * 3600))
 
 _last_call_time = None
 # Evidence sekarang fetch multi-ticker concurrent (lihat evidence.py
@@ -128,10 +130,28 @@ def fetch_company_news(ticker: str, lookback_days: int = 30) -> NewsCollection:
     itu — artinya concurrency 5-thread sudah nyaris sempurna dan sisa waktunya
     murni menunggu Finnhub.
 
-    TTL 12 jam aman secara makna: jendela berita yang diminta 30 hari ke belakang
-    dan pipeline dijalankan harian, jadi isinya praktis tidak berubah dalam
-    setengah hari. Ini membuat run ulang dalam 12 jam melewati ~71 menit itu
-    sepenuhnya.
+    TTL 36 JAM (naik dari 12 jam, 2026-08-02). Angka 12 jam yang lama benar
+    secara MAKNA (berita 30 hari ke belakang memang tidak berubah berarti dalam
+    setengah hari) tapi salah secara OPERASIONAL, dan justru membatalkan sendiri
+    manfaat cache yang dijelaskan di paragraf atas: jarak antar-run harian ~24
+    jam > TTL 12 jam, jadi cache DIJAMIN sudah kedaluwarsa setiap kali run
+    berikutnya membacanya. Efeknya ~71 menit itu tetap dibayar penuh SETIAP run
+    meski datanya sudah ada di disk — kalimat "run ulang dalam 12 jam melewati
+    ~71 menit itu sepenuhnya" cuma berlaku untuk re-run manual di hari yang
+    sama, bukan untuk irama harian yang sebenarnya dipakai.
+
+    Kenapa 36 dan bukan 26: syaratnya cuma TTL > jarak antar-run, dan nilai mana
+    pun di rentang (24, 48) jam menghasilkan irama yang sama — kena cache di run
+    berikutnya, menyegarkan paling lambat 2 hari sekali. Di dalam rentang itu,
+    angka yang lebih besar murni menambah toleransi. Itu penting di sini karena
+    jam mulai run nyata memang berpencar (tercatat 02:19, 03:29, 05:45, 12:45),
+    jadi jarak antar-run bisa jauh dari 24 jam persis; 26 jam cuma memberi 2 jam
+    kelonggaran dan gampang meleset, 36 jam menutup sebaran yang teramati.
+
+    Konsekuensi yang diterima sadar: berita yang disajikan bisa tertinggal
+    sampai ~1 hari lebih lama dari sebelumnya. Dinilai wajar karena berita di
+    sini dipakai sebagai KONTEKS (3 headline di modal ticker, 5 headline untuk
+    prompt narasi AI), bukan sinyal dagang waktu-nyata.
     """
     global _403_confirmed
     cached = cache_get("finnhub_news", ticker, FINNHUB_NEWS_CACHE_TTL)
