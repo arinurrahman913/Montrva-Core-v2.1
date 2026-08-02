@@ -268,6 +268,7 @@ class SecFiling:
     form_type: str  # "10-K", "10-Q", "8-K", dll
     filing_date: str  # ISO date
     url: str | None
+    items: str | None = None  # Kode item 8-K resmi SEC, comma-separated (mis. "4.01,9.01") — cuma bermakna untuk form_type=="8-K"
 
 
 @dataclass

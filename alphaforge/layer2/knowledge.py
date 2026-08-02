@@ -447,6 +447,14 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
         10-Q/A, 8-K/A) dari sec_edgar.py fetch_sec_filings(). Amandemen filing
         itu sendiri adalah fakta ("filing tidak biasa"), bukan interpretasi —
         cocok dengan contoh spec ("filing tidak biasa lainnya").
+      - auditor_changes / restatements / bankruptcy_notices / delisting_notices
+        (2026-08-02): dari kode item 8-K resmi SEC (SecFiling.items) — data
+        yang sebenarnya sudah kefetch API sejak awal tapi dibuang di
+        sec_edgar.py, ketauan pas audit ulang risk.py. Item 4.01 = ganti
+        auditor, 4.02 = restatement, 1.03 = bangkrut/receivership, 3.01 =
+        notice delisting. Ini FAKTA filing (kode item resmi tercantum di
+        response SEC), bukan interpretasi teks — konsisten dengan prinsip
+        Evidence "fakta bukan tafsir".
       - filing_data_available: BENAR/SALAH-nya fetch SEC EDGAR itu sendiri
         (evidence.sec_filings.metadata.status=="ok"), dipakai Confidence
         sebagai sinyal kelengkapan bagian ini (bukan len(unusual_filings)>0
@@ -463,12 +471,27 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
     bukan bug — butuh data yang belum dikumpulkan di Evidence stage, DAN
     sejak audit 2026-07-29 sengaja TIDAK ikut dihitung sebagai "data hilang"
     oleh Confidence lagi, persis karena inilah alasannya):
-      - auditor_changes / restatements / material_litigation: butuh parsing isi
-        filing (mis. item number 8-K 4.01 untuk auditor change, 4.02 untuk
-        restatement, atau teks litigation disclosure). sec_edgar.py cuma
-        menyimpan form_type + tanggal + URL filing, bukan isi/item filing.
+      - material_litigation: tidak ada kode item 8-K khusus buat litigasi —
+        Item 8.01 "Other Events" kadang dipakai tapi isinya campur aduk
+        (dividen, ganti nama, dll), terlalu berisik buat jadi sinyal
+        litigasi yang bisa dipercaya. Litigasi beneran ada di teks "Legal
+        Proceedings" 10-K/10-Q, yang sec_edgar.py tidak parse (cuma simpan
+        form_type + tanggal + URL + item code, bukan isi dokumen) — butuh
+        scope terpisah (text parsing), bukan kode item.
+
+    Catatan cakupan: fetch_sec_filings() dibatasi max_filings=10 filing
+    RELEVAN terbaru (10-K/10-Q/8-K/DEF 14A) — kalau ticker rajin filing 8-K
+    rutin (mis. earnings tiap kuartal), event lama di luar window bisa
+    kepotong dari 10 filing ini sebelum window waktu di risk.py sempat
+    dievaluasi. Batasan yang sudah ada dari awal (bukan baru diperkenalkan
+    perubahan ini), cuma baru kelihatan dampaknya sekarang karena field ini
+    baru pernah keisi data nyata.
     """
     unusual_filings: list[GovernanceEvent] = []
+    auditor_changes: list[GovernanceEvent] = []
+    restatements: list[GovernanceEvent] = []
+    bankruptcy_notices: list[GovernanceEvent] = []
+    delisting_notices: list[GovernanceEvent] = []
     for f in evidence.sec_filings.filings or []:
         if f.form_type and f.form_type.endswith("/A"):
             unusual_filings.append(GovernanceEvent(
@@ -476,16 +499,43 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
                 date=f.filing_date,
                 description=f"{f.form_type} filed (amended filing)"
             ))
+        item_codes = set((f.items or "").split(",")) if f.items else set()
+        if "4.01" in item_codes:
+            auditor_changes.append(GovernanceEvent(
+                event_type="auditor_change",
+                date=f.filing_date,
+                description="8-K item 4.01 filed (change in certifying accountant)"
+            ))
+        if "4.02" in item_codes:
+            restatements.append(GovernanceEvent(
+                event_type="restatement",
+                date=f.filing_date,
+                description="8-K item 4.02 filed (non-reliance on previously issued financials)"
+            ))
+        if "1.03" in item_codes:
+            bankruptcy_notices.append(GovernanceEvent(
+                event_type="bankruptcy_notice",
+                date=f.filing_date,
+                description="8-K item 1.03 filed (bankruptcy or receivership)"
+            ))
+        if "3.01" in item_codes:
+            delisting_notices.append(GovernanceEvent(
+                event_type="delisting_notice",
+                date=f.filing_date,
+                description="8-K item 3.01 filed (notice of delisting or non-compliance with listing standards)"
+            ))
     filing_data_available = bool(
         evidence.sec_filings.metadata and evidence.sec_filings.metadata.status == "ok"
     )
 
     return Governance(
         shares_outstanding_change_12m=evidence.fundamental.shares_outstanding_change_12m,
-        auditor_changes=[],
-        restatements=[],
+        auditor_changes=auditor_changes,
+        restatements=restatements,
         material_litigation=[],
         unusual_filings=unusual_filings,
+        bankruptcy_notices=bankruptcy_notices,
+        delisting_notices=delisting_notices,
         filing_data_available=filing_data_available
     )
 

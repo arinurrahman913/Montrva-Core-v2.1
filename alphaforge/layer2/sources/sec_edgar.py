@@ -90,14 +90,19 @@ def fetch_sec_filings(ticker: str, max_filings: int = 10) -> SecFilings:
     dates = recent.get("filingDate", [])
     accessions = recent.get("accessionNumber", [])
     docs = recent.get("primaryDocument", [])
+    # Kode item 8-K resmi (mis. "4.01,9.01") -- sudah ada di response SEC,
+    # sebelumnya dibuang. Cuma terisi untuk form_type=="8-K", string kosong
+    # untuk form lain (10-K/10-Q/dll tidak punya konsep item number).
+    items_arr = recent.get("items", [])
 
     filings: list[SecFiling] = []
-    for form, date, accn, doc in zip(forms, dates, accessions, docs):
+    for i, (form, date, accn, doc) in enumerate(zip(forms, dates, accessions, docs)):
         if form not in _RELEVANT_FORMS:
             continue
         accn_nodash = accn.replace("-", "")
         url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accn_nodash}/{doc}"
-        filings.append(SecFiling(form_type=form, filing_date=date, url=url))
+        items = items_arr[i] if i < len(items_arr) and items_arr[i] else None
+        filings.append(SecFiling(form_type=form, filing_date=date, url=url, items=items))
         if len(filings) >= max_filings:
             break
 

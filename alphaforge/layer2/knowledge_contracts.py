@@ -179,6 +179,15 @@ class Governance:
     restatements: list[GovernanceEvent] = field(default_factory=list)
     material_litigation: list[GovernanceEvent] = field(default_factory=list)
     unusual_filings: list[GovernanceEvent] = field(default_factory=list)
+    # 2026-08-02: dari 8-K item code (SecFiling.items) yang sebelumnya
+    # kefetch tapi dibuang. Dipisah jadi 2 field beda -- bukan digabung ke
+    # unusual_filings -- karena severity risk-nya beda jauh (lihat risk.py):
+    # bankruptcy_notices = item 1.03, konfirmasi bangkrut/receivership.
+    # delisting_notices = item 3.01, BARU notice (banyak yang sembuh dalam
+    # masa tenggang, BUKAN konfirmasi delisting -- lihat AEP 2020 di
+    # risk.py, contoh nyata utility sehat yang pernah kena notice ini).
+    bankruptcy_notices: list[GovernanceEvent] = field(default_factory=list)
+    delisting_notices: list[GovernanceEvent] = field(default_factory=list)
     # True kalau SEC EDGAR filing list berhasil diambil untuk ticker ini
     # (evidence.sec_filings.metadata.status=="ok") -- SINYAL KELENGKAPAN yang
     # dipakai Confidence buat unusual_filings (lihat confidence.py

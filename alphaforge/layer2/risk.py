@@ -302,6 +302,19 @@ INSIDER_SELLING_THRESHOLD_USD = 1_000_000.0  # total nilai jual insider dalam 90
 AUDITOR_CHANGE_WINDOW_YEARS = 3
 AUDITOR_CHANGE_MIN_COUNT = 1  # > 1 kali dalam window = flag
 RESTATEMENT_WINDOW_YEARS = 2
+# 2026-08-02: item 1.03 (bangkrut) & 3.01 (notice delisting) dari 8-K —
+# lihat _check_fraud_or_delisting/_check_delisting_notice. Window beda dari
+# auditor/restatement: perusahaan yang bangkrut/kena notice bertahun-tahun
+# lalu tapi masih trading sehat sekarang kemungkinan besar sudah "sembuh"
+# (contoh nyata KODK bangkrut 2012, masih trading normal 2026) — window
+# lebih pendek dari AUDITOR_CHANGE_WINDOW_YEARS supaya tidak nge-flag
+# recovery lama sebagai risiko aktif.
+BANKRUPTCY_WINDOW_YEARS = 2
+# Delisting notice beda dari bankruptcy: bursa (NASDAQ/NYSE) biasanya kasih
+# masa tenggang ~180 hari buat perusahaan benerin kepatuhan sebelum beneran
+# delisting -- window 1 tahun cukup buat nangkep notice yang masih relevan
+# tanpa nge-flag yang sudah pasti sembuh/selesai lama.
+DELISTING_NOTICE_WINDOW_YEARS = 1
 
 
 def _parse_event_date(date_str: str | None) -> datetime | None:
@@ -429,25 +442,68 @@ def _check_insider_selling(profile: KnowledgeProfile) -> Flag | None:
 
 
 def _check_fraud_or_delisting(profile: KnowledgeProfile) -> Flag | None:
-    """Severity ekstrem — hard-gate. Knowledge saat ini tidak punya field
-    konfirmasi fraud atau status delisting/bankruptcy (SEC EDGAR fetcher
-    cuma menyimpan form_type + tanggal, bukan item number 8-K seperti 1.03
-    "Bankruptcy or Receivership", dan tidak menarik Form 15 deregistrasi) —
-    jadi status ini selalu undetermined sampai Evidence diperluas. Mekanisme
-    hard-gate (assess_risk di atas) tetap benar & siap dipakai begitu field-
-    nya ada."""
-    return Flag(
-        flag_id="confirmed_fraud_or_delisting", category="listing_status", severity="ekstrem", status="undetermined",
-        knowledge_refs=["governance.unusual_filings", "identity.instrument_status"],
-        evidence_note="Confirmed fraud / delisting / bankruptcy status not available — Evidence does not fetch 8-K item numbers or Form 15",
-        source="SEC EDGAR filings",
-    )
+    """Severity ekstrem — hard-gate. Sejak 2026-08-02: item 8-K 1.03
+    (Bankruptcy or Receivership) sekarang derivable, lihat knowledge.py
+    _build_governance. Fraud murni & Form 15 deregistrasi TETAP tidak
+    derivable (tidak ada kode item 8-K yang eksklusif buat "fraud", dan
+    Form 15 tidak ditarik sec_edgar.py) — flag_id "confirmed_fraud_or_
+    delisting" jadinya secara efektif cuma cek bankruptcy/receivership,
+    bukan fraud. Dibiarkan begitu (bukan rename flag_id) karena bangkrut/
+    receivership adalah subset paling konkret & paling berbahaya dari yang
+    flag_id ini maksudkan, dan spec sendiri menggabungkan ketiganya dalam
+    satu pemeriksaan.
+
+    Item 3.01 (notice delisting) SENGAJA TIDAK masuk sini — lihat
+    _check_delisting_notice di bawah, severity tinggi terpisah, bukan
+    ekstrem. Notice != konfirmasi delisting (banyak yang sembuh dalam masa
+    tenggang bursa), jadi tidak pantas hard-gate pipeline."""
+    if not profile.governance.filing_data_available:
+        return Flag(
+            flag_id="confirmed_fraud_or_delisting", category="listing_status", severity="ekstrem", status="undetermined",
+            knowledge_refs=["governance.bankruptcy_notices"],
+            evidence_note="SEC EDGAR filing fetch failed for this ticker — bankruptcy/receivership status not checked",
+            source="SEC EDGAR filings",
+        )
+    recent = _events_within(profile.governance.bankruptcy_notices, years=BANKRUPTCY_WINDOW_YEARS)
+    if recent:
+        return Flag(
+            flag_id="confirmed_fraud_or_delisting", category="listing_status", severity="ekstrem", status="triggered",
+            knowledge_refs=["governance.bankruptcy_notices"],
+            evidence_note=f"8-K item 1.03 (bankruptcy/receivership) filed within the last {BANKRUPTCY_WINDOW_YEARS} years ({len(recent)} filing(s))",
+            source="SEC EDGAR filings",
+        )
+    return None
+
+
+def _check_delisting_notice(profile: KnowledgeProfile) -> Flag | None:
+    """Severity tinggi (BUKAN ekstrem, tidak hard-gate) — 2026-08-02, item
+    8-K 3.01. Terpisah dari _check_fraud_or_delisting karena data nyata
+    (scan cache 2026-08-02) membuktikan 3.01 sering muncul di perusahaan
+    sehat yang tidak jadi delisting (contoh: AEP, utility besar, kena
+    notice 2020 dan masih trading normal 2026) — bursa biasanya kasih masa
+    tenggang, notice bukan keputusan final. Bukan salah satu dari 6
+    pemeriksaan asli 04_RISK_REDFLAG_CHECK.md, tambahan di luar spec karena
+    datanya sudah ada & sayang dibuang, tapi TIDAK dipetakan ke flag_id
+    "confirmed_fraud_or_delisting" biar tidak melebih-lebihkan kepastian."""
+    if not profile.governance.filing_data_available:
+        return None  # undetermined-nya sudah diwakili _check_fraud_or_delisting, tidak perlu duplikat
+    recent = _events_within(profile.governance.delisting_notices, years=DELISTING_NOTICE_WINDOW_YEARS)
+    if recent:
+        return Flag(
+            flag_id="delisting_notice_recent", category="listing_status", severity="tinggi", status="triggered",
+            knowledge_refs=["governance.delisting_notices"],
+            evidence_note=f"8-K item 3.01 (delisting/listing-standard notice) filed within the last {DELISTING_NOTICE_WINDOW_YEARS} year ({len(recent)} filing(s)) — a notice, not a confirmed delisting; issuers often cure within the exchange's compliance period",
+            source="SEC EDGAR filings",
+        )
+    return None
 
 
 def _check_spec_flags(profile: KnowledgeProfile) -> list[Flag]:
-    """6 pemeriksaan 04_RISK_REDFLAG_CHECK.md v2.0.0. Mengembalikan flag
-    kalau triggered ATAU undetermined — hanya diam (None) kalau field-nya
-    benar-benar ada isinya dan tidak melewati ambang (checked & clean)."""
+    """6 pemeriksaan 04_RISK_REDFLAG_CHECK.md v2.0.0, plus 1 tambahan di
+    luar spec (_check_delisting_notice, 2026-08-02 — lihat docstringnya).
+    Mengembalikan flag kalau triggered ATAU undetermined — hanya diam
+    (None) kalau field-nya benar-benar ada isinya dan tidak melewati
+    ambang (checked & clean)."""
     checks = [
         _check_dilution(profile),
         _check_auditor_change(profile),
@@ -455,6 +511,7 @@ def _check_spec_flags(profile: KnowledgeProfile) -> list[Flag]:
         _check_litigation(profile),
         _check_insider_selling(profile),
         _check_fraud_or_delisting(profile),
+        _check_delisting_notice(profile),
     ]
     return [f for f in checks if f is not None]
 
