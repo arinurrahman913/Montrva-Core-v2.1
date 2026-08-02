@@ -19,30 +19,15 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
 body{
+  /* Reset 2026-08-01 (Fase 1 rencana desain): starfield 12-lapis + nebula
+     4-gradient dibuang. Bidang datar + satu vignette sangat halus di sudut
+     kanan-atas -- cukup untuk memberi kedalaman tanpa jadi hiasan yang
+     menyaingi data. */
   background-color: var(--ink);
-  background-image:
-    /* nebula + planet-limb glow */
-    radial-gradient(1000px 720px at 10% -10%, rgba(129,140,248,.12), transparent 58%),
-    radial-gradient(760px 620px at 102% -4%, rgba(34,211,238,.08), transparent 55%),
-    radial-gradient(820px 820px at 96% 112%, rgba(232,184,75,.12), transparent 60%),
-    radial-gradient(520px 520px at 96% 112%, rgba(232,184,75,.10), transparent 46%),
-    /* starfield — one repeating 280px tile */
-    radial-gradient(1px 1px at 40px 60px, rgba(255,255,255,.75), transparent),
-    radial-gradient(1px 1px at 130px 22px, rgba(255,255,255,.5), transparent),
-    radial-gradient(1.6px 1.6px at 90px 140px, rgba(255,255,255,.85), transparent),
-    radial-gradient(1px 1px at 172px 102px, rgba(255,255,255,.42), transparent),
-    radial-gradient(1px 1px at 28px 178px, rgba(255,255,255,.6), transparent),
-    radial-gradient(2px 2px at 208px 52px, rgba(200,220,255,.6), transparent),
-    radial-gradient(1px 1px at 250px 168px, rgba(255,255,255,.5), transparent),
-    radial-gradient(1px 1px at 60px 250px, rgba(255,255,255,.45), transparent);
-  background-repeat:
-    no-repeat, no-repeat, no-repeat, no-repeat,
-    repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat;
-  background-size:
-    auto, auto, auto, auto,
-    280px 280px, 280px 280px, 280px 280px, 280px 280px,
-    280px 280px, 280px 280px, 280px 280px, 280px 280px;
-  color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased
+  background-image: radial-gradient(1200px 800px at 100% -12%, rgba(232,184,75,.05), transparent 60%);
+  background-repeat: no-repeat;
+  color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  font-variant-numeric: tabular-nums;
 }
 a{color:inherit}
 ::selection{background:var(--accent-glow);color:var(--text)}
@@ -141,38 +126,27 @@ a{color:inherit}
 .content{flex:1;overflow-y:auto;padding:24px 26px;animation:fadein .25s var(--ease)}
 @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 
-/* STAT CARDS — 3D tiles, gradasi per-makna via --c */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px;perspective:1400px}
+/* STAT CARDS — flat, gradasi per-makna tetap lewat --c (2026-08-01: tilt 3D
+   + glow hover dibuang, kartu tidak lagi "menyala" saat idle -- warna hanya
+   dipakai untuk membedakan makna, bukan dekorasi gerak) */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
 .stat{
   --c:var(--gold);position:relative;border-radius:16px;padding:16px 17px;isolation:isolate;
-  background:
-    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--c) 14%, transparent), transparent 60%),
-    linear-gradient(158deg,#1c2130 0%,#141824 55%,#0f131d 100%);
-  border:1px solid var(--rule);transform-style:preserve-3d;
-  box-shadow:0 16px 32px -18px rgba(0,0,0,.82),0 4px 10px -4px rgba(0,0,0,.55),
-    inset 0 1px 0 rgba(255,255,255,.08),inset 0 -14px 26px -18px rgba(0,0,0,.65);
-  transition:transform .28s var(--ease),box-shadow .28s var(--ease),border-color .28s var(--ease);
-  animation:cardSlideIn .45s var(--ease) both;animation-delay:calc(var(--i,0)*60ms)
+  background:var(--panel);
+  border:1px solid var(--rule);border-top:2px solid color-mix(in srgb,var(--c) 55%,var(--rule));
+  box-shadow:var(--shadow-sm);
+  transition:border-color .2s var(--ease),background .2s var(--ease);
+  animation:cardSlideIn .35s var(--ease) both;animation-delay:calc(var(--i,0)*50ms)
 }
-.stat::before{content:'';position:absolute;inset:0 0 auto 0;height:1px;border-radius:16px 16px 0 0;
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c) 75%,white),transparent);opacity:.5}
-.stat::after{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;z-index:2;
-  background:linear-gradient(155deg,rgba(255,255,255,.06),transparent 34%)}
-.stat:hover{transform:translateY(-5px) rotateX(7deg) rotateY(-3deg);
-  border-color:color-mix(in srgb,var(--c) 45%,var(--rule));
-  box-shadow:0 28px 48px -20px rgba(0,0,0,.9),0 8px 18px -6px color-mix(in srgb,var(--c) 28%,transparent),
-    inset 0 1px 0 rgba(255,255,255,.12)}
+.stat:hover{background:var(--panel2);border-color:color-mix(in srgb,var(--c) 35%,var(--rule))}
 .stat-ic{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:11px;
-  display:flex;align-items:center;justify-content:center;color:#0A0D14;transform:translateZ(30px);
-  background:linear-gradient(145deg,color-mix(in srgb,var(--c) 55%,white),var(--c));
-  box-shadow:0 6px 14px -4px color-mix(in srgb,var(--c) 55%,transparent),
-    inset 0 1px 1px rgba(255,255,255,.6),inset 0 -3px 6px rgba(0,0,0,.25)}
-.stat-label{font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;padding-right:42px;transform:translateZ(14px)}
-.stat-value{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--text);transform:translateZ(24px);
-  text-shadow:0 2px 10px color-mix(in srgb,var(--c) 28%,transparent)}
+  display:flex;align-items:center;justify-content:center;color:#0A0D14;
+  background:var(--c)}
+.stat-label{font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;padding-right:42px}
+.stat-value{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--text)}
 .stat-click{cursor:pointer}
 .stat-click:focus-visible{outline:none;border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 20%,transparent)}
-.stat-hint{font-family:var(--sans);font-size:9.5px;color:var(--faint);margin-top:10px;letter-spacing:.02em;transition:color .15s var(--ease);transform:translateZ(10px)}
+.stat-hint{font-family:var(--sans);font-size:9.5px;color:var(--faint);margin-top:10px;letter-spacing:.02em;transition:color .15s var(--ease)}
 .stat-click:hover .stat-hint{color:color-mix(in srgb,var(--c) 60%,white)}
 .stat-sub{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.02em;color:color-mix(in srgb,var(--c) 72%,white);margin-top:3px}
 .stat-value.warn{color:var(--warn)}
@@ -286,17 +260,19 @@ a{color:inherit}
 .search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .search::placeholder{color:var(--faint)}
 
-/* TABLE */
+/* TABLE (2026-08-01: baris dipadatkan -- 11px->7px vertical padding --
+   supaya lebih banyak ticker terlihat sekaligus tanpa scroll, sejalan
+   dengan tabel sebagai konten utama di 7 dari 13 view) */
 .table-wrap{background:var(--panel);border:1px solid var(--rule);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm)}
-table{width:100%;border-collapse:collapse;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{
   font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;text-align:left;
-  padding:12px 14px;color:var(--faint);border-bottom:1px solid var(--rule);white-space:nowrap;
+  padding:9px 14px;color:var(--faint);border-bottom:1px solid var(--rule);white-space:nowrap;
   position:sticky;top:0;background:var(--panel2);cursor:pointer;user-select:none;transition:color .15s var(--ease)
 }
 th:hover{color:var(--accent)}
 th .sort-arrow{margin-left:4px;color:var(--accent)}
-td{padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:7px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}
 tbody tr{cursor:pointer;transition:background .12s var(--ease)}
 tbody tr:hover{background:var(--panel2)}
 tbody tr:last-child td{border-bottom:none}
@@ -321,46 +297,24 @@ tr.expand-row td{white-space:normal}
 .bar-fill.good{background:var(--good)}
 .bar-num{font-family:var(--mono);font-size:11px;margin-left:8px;color:var(--dim)}
 
-/* LAYER1 CARDS */
+/* LAYER1 CARDS (2026-08-01: hover lift + glow-neon + animasi ambient tak
+   berhenti -- cardFloat/shimmerMove/pulseBorder -- dibuang. "Degraded" tetap
+   dibedakan lewat warna+border, bukan lewat kartu yang berkedip terus) */
 @keyframes cardSlideIn{
   from{opacity:0;transform:translateY(8px);filter:blur(4px)}
   to{opacity:1;transform:translateY(0);filter:blur(0)}
-}
-@keyframes cardFloat{
-  0%{transform:translateY(0px)}
-  50%{transform:translateY(-3px)}
-  100%{transform:translateY(0px)}
-}
-@keyframes shimmerMove{
-  0%{background-position:-1000px 0}
-  100%{background-position:1000px 0}
-}
-@keyframes pulseBorder{
-  0%,100%{border-color:rgba(251,191,122,.35);box-shadow:0 0 0 0 rgba(251,191,122,.2)}
-  50%{border-color:rgba(251,191,122,.55);box-shadow:0 0 12px -2px rgba(251,191,122,.3)}
 }
 
 .l1-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .l1-card{
   background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px;box-shadow:var(--shadow-sm);
-  transition:transform .15s var(--ease),box-shadow .15s var(--ease),border-color .15s var(--ease),background .4s var(--ease);
-  animation:cardSlideIn .4s var(--ease) both;
-  animation-delay:calc(var(--card-index, 0) * 40ms)
+  transition:border-color .15s var(--ease),background .15s var(--ease);
+  animation:cardSlideIn .35s var(--ease) both;
+  animation-delay:calc(var(--card-index, 0) * 35ms)
 }
-.l1-card:hover{
-  transform:translateY(-4px);
-  box-shadow:0 8px 24px -4px rgba(34,211,238,.25), 0 2px 6px rgba(0,0,0,.4);
-  border-color:var(--accent);
-  background:linear-gradient(135deg, var(--panel2) 0%, var(--panel) 100%);
-  animation:cardFloat 2s ease-in-out infinite
-}
-.l1-card.deg{
-  border-color:rgba(251,191,122,.35);
-  background-image:linear-gradient(90deg, transparent 0%, rgba(251,191,122,.04) 50%, transparent 100%);
-  background-size:200% 100%;
-  animation:pulseBorder 2s ease-in-out infinite, shimmerMove 3s linear infinite;
-}
-.l1-card.deg:hover{animation:pulseBorder 2s ease-in-out infinite, shimmerMove 3s linear infinite, cardFloat 2s ease-in-out infinite}
+.l1-card:hover{border-color:var(--accent);background:var(--panel2)}
+.l1-card.deg{border-color:rgba(251,191,122,.4);background:rgba(251,191,122,.04)}
+.l1-card.deg:hover{background:rgba(251,191,122,.07)}
 
 .l1-name{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
 .l1-narr{font-size:13px;color:var(--text);opacity:.92;line-height:1.55}
@@ -377,34 +331,25 @@ tr.expand-row td{white-space:normal}
   transform:translateY(-2px)
 }
 
-/* LAYER1 — AURUM STYLE CARDS (3D + gradasi via --c) */
-.l1a-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;perspective:1500px}
+/* LAYER1 — kartu ringkasan makro (2026-08-01: perspective/preserve-3d +
+   rotateX hover dibuang, jadi kartu datar; gradasi warna --c dipertahankan
+   sebagai satu-satunya pembeda makna: emas=ok, cyan=degraded) */
+.l1a-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .l1a-card{
-  --c:var(--gold);position:relative;border-radius:16px;padding:16px 17px 13px;cursor:pointer;isolation:isolate;
-  background:
-    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb,var(--c) 11%,transparent), transparent 62%),
-    linear-gradient(162deg,rgba(28,32,45,.84),rgba(15,18,27,.72));
-  -webkit-backdrop-filter:blur(11px);backdrop-filter:blur(11px);
-  border:1px solid rgba(255,255,255,.07);transform-style:preserve-3d;
-  box-shadow:0 20px 42px -22px rgba(0,0,0,.82),0 4px 12px -6px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.07);
-  animation:cardSlideIn .4s var(--ease) both;animation-delay:calc(var(--i,0) * 40ms);
-  transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .3s var(--ease)
+  --c:var(--gold);position:relative;border-radius:16px;padding:16px 17px 13px;cursor:pointer;
+  background:var(--panel);border:1px solid var(--rule);border-top:2px solid color-mix(in srgb,var(--c) 55%,var(--rule));
+  box-shadow:var(--shadow-sm);
+  animation:cardSlideIn .35s var(--ease) both;animation-delay:calc(var(--i,0) * 35ms);
+  transition:border-color .2s var(--ease),background .2s var(--ease)
 }
 .l1a-card.deg{--c:var(--cy)}
-.l1a-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;border-radius:16px 16px 0 0;
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c) 80%,white),transparent);opacity:.5}
-.l1a-card:hover{transform:translateY(-5px) rotateX(5deg);
-  border-color:color-mix(in srgb,var(--c) 45%,rgba(255,255,255,.07));
-  box-shadow:0 32px 54px -22px rgba(0,0,0,.9),0 10px 22px -8px color-mix(in srgb,var(--c) 30%,transparent),
-    inset 0 1px 0 rgba(255,255,255,.12)}
+.l1a-card:hover{background:var(--panel2);border-color:color-mix(in srgb,var(--c) 40%,var(--rule))}
 
 .l1a-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .l1a-idwrap{display:flex;gap:11px;align-items:flex-start;min-width:0}
-.l1a-ic{width:40px;height:40px;border-radius:12px;flex-shrink:0;margin-top:1px;transform:translateZ(24px);
+.l1a-ic{width:40px;height:40px;border-radius:12px;flex-shrink:0;margin-top:1px;
   display:flex;align-items:center;justify-content:center;color:#0A0D14;
-  background:linear-gradient(145deg,color-mix(in srgb,var(--c) 55%,white),var(--c));
-  box-shadow:0 7px 16px -4px color-mix(in srgb,var(--c) 55%,transparent),
-    inset 0 1px 1px rgba(255,255,255,.6),inset 0 -3px 6px rgba(0,0,0,.25)}
+  background:var(--c)}
 .l1a-label{font-family:var(--sans);font-size:10.5px;color:var(--dim);font-weight:600;
   text-transform:uppercase;letter-spacing:.09em;margin:0}
 .l1a-val{font-family:var(--sans);font-size:26px;font-weight:650;color:var(--text);
@@ -418,10 +363,7 @@ tr.expand-row td{white-space:normal}
 
 .l1a-pill{font-family:var(--sans);font-size:9px;font-weight:700;text-transform:uppercase;
   letter-spacing:.05em;padding:5px 10px;border-radius:20px;flex-shrink:0;white-space:nowrap;
-  color:#0A0D14;transform:translateZ(16px);
-  box-shadow:0 4px 10px -3px color-mix(in srgb,var(--c) 55%,transparent),inset 0 1px 1px rgba(255,255,255,.5)}
-.l1a-pill.ok{background:linear-gradient(140deg,var(--gold-hi),var(--gold))}
-.l1a-pill.dg{background:linear-gradient(140deg,var(--cy-hi,#7fe6f0),var(--cy))}
+  color:#0A0D14;background:var(--c)}
 
 .l1a-mini{display:flex;gap:18px;margin-top:11px;flex-wrap:wrap}
 .l1a-mini-l{font-family:var(--sans);font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin:0}
