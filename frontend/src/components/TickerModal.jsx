@@ -704,6 +704,13 @@ function ConfidenceDetail({ confidence }) {
 
   return (
     <div className="mcell">
+      <div className="conf-intro">
+        <span className="ic">i</span>
+        <span>
+          Seberapa kuat <b>data</b> yang menopang ticker ini — beda dari confidence tiap lensa Reasoning di bawah
+          (seberapa yakin modul itu pada kesimpulannya). Modul tidak pernah lebih yakin dari angka ini.
+        </span>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'var(--mono)' }}>{overall.score?.toFixed(1) ?? '—'}%</div>
@@ -833,8 +840,13 @@ function LensGrid({ reasoning }) {
                 ))}
               </div>
             )}
-            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--faint)' }}>
-              conf {o.confidence?.score?.toFixed(0) ?? '—'}/{o.confidence?.band ?? '—'}
+            <div className="mod-conf">
+              <span className="qi">i</span>
+              <span>keyakinan modul: {o.confidence?.score?.toFixed(0) ?? '—'} ({o.confidence?.band ?? '—'})</span>
+              <div className="tt">
+                <b>Bukan Confidence Report.</b> Ini seberapa yakin lensa {MODULE_LABELS[key]} pada kesimpulannya
+                sendiri — selalu ≤ Confidence Report (lihat bagian Confidence di modal ini).
+              </div>
             </div>
             {hasDetail && (
               <details className="lens-details">

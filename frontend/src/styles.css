@@ -486,6 +486,29 @@ tr.expand-row td{white-space:normal}
 .lens-card-metrics{border-top:1px solid var(--rule);padding-top:8px;display:flex;flex-direction:column;gap:4px}
 .lens-card-metric{display:flex;justify-content:space-between;font-family:var(--sans);font-size:11.5px;color:var(--dim)}
 .lens-card-metric b{color:var(--text);font-weight:600}
+
+/* Confidence: klarifikasi data-vs-modul (2026-08-02) — callout di panel
+   Confidence Report, tooltip di label confidence tiap kartu lensa. Bukan
+   dua metrik baru, cuma penjelasan untuk dua yang sudah ada supaya tidak
+   terbaca kembaran. */
+.conf-intro{display:flex;gap:8px;align-items:flex-start;background:rgba(232,184,75,.07);
+  border:1px solid rgba(232,184,75,.28);border-radius:8px;padding:9px 11px;margin-bottom:13px;
+  font-family:var(--sans);font-size:11.5px;line-height:1.5;color:var(--dim)}
+.conf-intro b{color:var(--gold-hi)}
+.conf-intro .ic{flex-shrink:0;width:15px;height:15px;border-radius:50%;background:var(--gold);color:#0A0D14;
+  font-family:var(--mono);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+
+.mod-conf{display:inline-flex;align-items:center;gap:5px;font-family:var(--sans);font-size:11px;color:var(--faint);
+  margin-top:8px;position:relative;cursor:help;width:fit-content}
+.mod-conf .qi{width:13px;height:13px;border-radius:50%;border:1px solid var(--faint);color:var(--faint);
+  font-family:var(--mono);font-size:8.5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mod-conf:hover .qi{border-color:var(--accent);color:var(--accent)}
+.mod-conf .tt{position:absolute;bottom:calc(100% + 7px);left:0;z-index:10;width:230px;padding:9px 11px;
+  background:var(--panel3);border:1px solid var(--rule-strong);border-radius:8px;box-shadow:var(--shadow-lg);
+  font-family:var(--sans);font-size:11px;line-height:1.5;color:var(--dim);opacity:0;pointer-events:none;
+  transition:opacity .14s var(--ease)}
+.mod-conf:hover .tt{opacity:1}
+.mod-conf .tt b{color:var(--text)}
 .lens-details{margin-top:9px;font-size:11.5px}
 .lens-details summary{cursor:pointer;color:var(--faint);font-family:var(--sans);font-size:11px;letter-spacing:.02em}
 .lens-details summary:hover{color:var(--dim)}
