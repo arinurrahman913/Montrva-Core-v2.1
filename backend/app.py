@@ -61,6 +61,7 @@ STAGE_FILES = {
     "evidence": "evidence.json",
     "knowledge": "knowledge.json",
     "catalyst": "catalysts.json",
+    "institutional_flow": "institutional_flow.json",
     "peer": "peer_results.json",
     "confidence": "confidence_scores.json",
     "risk": "risk_assessments.json",
@@ -660,13 +661,19 @@ def get_historical_summary():
     return jsonify({"tickers": rows, "total": len(rows)})
 
 
-# 9 dari 10 stage file yang dijaga gerbang all-or-nothing punya wrapper
+# Semua stage file yang dijaga gerbang all-or-nothing DAN punya wrapper
 # level-atas tempat "session_id" bisa disisipkan tanpa mencemari struktur
 # datanya (audit item C2/C9) -- historical_timeline.json sengaja dikecualikan
 # (bentuknya {ticker: {...}} tanpa wrapper).
+#
+# institutional_flow ikut di sini walau bisa juga dibangun di luar pipeline
+# lewat scripts/build_institutional_flow.py: script itu MENYALIN session_id
+# dari evidence.json yang dibacanya, jadi file hasilnya tetap mengaku berasal
+# dari run yang sama dengan datanya -- kalau ia mengarang session_id sendiri,
+# pemeriksaan ini akan melapor "tercampur" justru saat datanya konsisten.
 CONSISTENCY_CHECKED_STAGES = [
-    "screening", "evidence", "knowledge", "catalyst", "peer",
-    "confidence", "risk", "reasoning", "aggregator",
+    "screening", "evidence", "knowledge", "catalyst", "institutional_flow",
+    "peer", "confidence", "risk", "reasoning", "aggregator",
 ]
 
 

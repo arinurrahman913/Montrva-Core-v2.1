@@ -39,6 +39,7 @@ export const api = {
   knowledgeSectorSummary: () => getJSON('/api/knowledge/sector-summary'),
   peer: () => getJSON('/api/peer'),
   catalyst: () => getJSON('/api/catalyst'),
+  institutionalFlow: () => getJSON('/api/institutional_flow'),
   confidence: () => getJSON('/api/confidence'),
   risk: () => getJSON('/api/risk'),
   reasoning: () => getJSON('/api/reasoning'),

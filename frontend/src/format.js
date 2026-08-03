@@ -11,10 +11,96 @@ export function fmtNum(v, digits = 1) {
 export function fmtMoney(v) {
   if (v === null || v === undefined) return '—'
   const a = Math.abs(v)
+  // Tier triliun ditambah saat halaman Aliran Dana Institusi mulai
+  // menjumlahkan seluruh populasi ($1.459,80B terbaca sebagai angka acak).
+  // Kapitalisasi pasar raksasa (AAPL ~$3T) juga ikut kena dan jadi lebih
+  // terbaca, bukan berubah arti.
+  if (a >= 1e12) return `$${(v / 1e12).toFixed(2)}T`
   if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
   if (a >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
   return `$${v.toFixed(2)}`
 }
+
+// 13F wajib dilaporkan institusi (>$100M AUM) paling lambat 45 hari setelah
+// kuartal tutup — jadi data kuartal berjalan belum akan ADA di manapun (SEC,
+// Yahoo, siapapun) sampai deadline itu lewat, bukan soal cache basi di sisi
+// kita. dateReportedStr = tanggal akhir kuartal yang datanya kita punya (mis.
+// "2026-03-31"); fungsi ini hitung kapan kuartal BERIKUTNYA wajib dilaporkan.
+//
+// Tinggal di sini (bukan di dalam satu view) karena dipakai dua permukaan:
+// tabel pemegang per ticker di TickerModal dan halaman Aliran Dana Institusi.
+// Dua salinan akan diam-diam berbeda begitu salah satunya disentuh.
+export function nextFilingDeadline(dateReportedStr) {
+  const d = new Date(dateReportedStr + 'T00:00:00Z')
+  if (isNaN(d.getTime())) return null
+  // Date.UTC(year, month+4, 0) = hari terakhir bulan (month+3) — cara aman
+  // hitung "3 bulan lagi, akhir bulan" tanpa overflow kalau tanggal asal
+  // (mis. 31) tidak ada di bulan target (mis. Maret 31 -> Juni cuma 30 hari,
+  // setUTCMonth naif akan overflow diam-diam ke 1 Juli).
+  const nextQuarterEnd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 4, 0))
+  const deadline = new Date(nextQuarterEnd)
+  deadline.setUTCDate(deadline.getUTCDate() + 45)
+  return deadline
+}
+
+// 13F melaporkan POTRET kepemilikan di akhir kuartal, tanpa tanggal
+// transaksi — jadi "kapan institusi ini masuk" hanya bisa dijawab sebagai
+// JENDELA, bukan tanggal. Pemegang berlabel posisi baru di laporan
+// 31 Mar 2026 berarti ia belum ada di laporan sebelumnya, jadi masuknya di
+// suatu titik antara 1 Jan dan 31 Mar. Menampilkan satu tanggal tunggal di
+// sini akan mengarang presisi yang tidak ada di sumbernya.
+const QUARTER_MONTH_NAMES = [
+  ['Jan', 'Mar'], ['Apr', 'Jun'], ['Jul', 'Sep'], ['Okt', 'Des'],
+]
+
+function parseUtcDate(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr + 'T00:00:00Z')
+  return isNaN(d.getTime()) ? null : d
+}
+
+export function quarterOf(dateStr) {
+  const d = parseUtcDate(dateStr)
+  if (!d) return null
+  return { q: Math.floor(d.getUTCMonth() / 3) + 1, year: d.getUTCFullYear() }
+}
+
+export function quarterLabel(dateStr) {
+  const q = quarterOf(dateStr)
+  return q ? `Q${q.q} ${q.year}` : '—'
+}
+
+// "Jan–Mar 2026" — jendela masuk untuk pemegang baru.
+export function quarterWindow(dateStr) {
+  const q = quarterOf(dateStr)
+  if (!q) return '—'
+  const [from, to] = QUARTER_MONTH_NAMES[q.q - 1]
+  return `${from}–${to} ${q.year}`
+}
+
+// Satu saham bisa memuat dua kuartal sekaligus saat laporan kuartal baru
+// mulai berdatangan (1.090 saham per run 2026-08-01): sebagian institusinya
+// sudah lapor, sebagian belum. Tahun yang sama diringkas ("Q1 + Q2 2026")
+// supaya tidak mengulang tahun; tahun berbeda ditulis penuh.
+export function quarterLabelSet(dateStrs) {
+  const qs = (dateStrs || []).map(quarterOf).filter(Boolean)
+  if (qs.length === 0) return '—'
+  const seen = []
+  for (const q of qs) {
+    if (!seen.some((s) => s.q === q.q && s.year === q.year)) seen.push(q)
+  }
+  seen.sort((a, b) => a.year - b.year || a.q - b.q)
+  if (seen.length === 1) return `Q${seen[0].q} ${seen[0].year}`
+  const sameYear = seen.every((s) => s.year === seen[0].year)
+  if (sameYear) return `${seen.map((s) => `Q${s.q}`).join(' + ')} ${seen[0].year}`
+  return seen.map((s) => `Q${s.q} ${s.year}`).join(' + ')
+}
+
+// Yahoo pakai pct_change = 100.0 sebagai sentinel "posisi baru" (tidak bisa
+// hitung % dari basis 0 saham), bukan literal +100%. Ambang yang sama dipakai
+// backend di alphaforge/layer2/institutional_flow.py — kalau salah satu
+// berubah, keduanya harus berubah bersama.
+export const NEW_POSITION_SENTINEL = 99.5
 
 const OK_VALUES = new Set(['ok', 'high', 'low', 'passed', 'buy', 'strong_buy'])
 const WARN_VALUES = new Set(['medium', 'degraded', 'hold'])

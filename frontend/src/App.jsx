@@ -7,6 +7,7 @@ import ScreeningView from './views/ScreeningView'
 import EvidenceView from './views/EvidenceView'
 import KnowledgeView from './views/KnowledgeView'
 import CatalystView from './views/CatalystView'
+import InstitutionalFlowView from './views/InstitutionalFlowView'
 import PeerView from './views/PeerView'
 import ConfidenceView from './views/ConfidenceView'
 import RiskView from './views/RiskView'
@@ -23,6 +24,7 @@ const TITLES = {
   evidence: ['Evidence', 'Fakta terverifikasi per ticker (price, fundamental, ownership, news, SEC filings)'],
   knowledge: ['Knowledge', '7-section profile per ticker, hasil sintesis Evidence'],
   catalyst: ['Catalyst Tracking', 'Peristiwa mendatang per ticker (earnings, dll) — data/catalysts.json'],
+  institutional_flow: ['Aliran Dana Institusi', 'Arah kepemilikan ±10 pemegang institusi terbesar per saham — 13F via Yahoo, bukan net flow seluruh institusi'],
   peer: ['Peer Comparison', 'Posisi percentile terhadap peer group'],
   confidence: ['Confidence Report', 'Kekuatan data 0-100 per 7 section Knowledge + penalti peer/context'],
   risk: ['Risk / Red Flags', 'Deteksi anomali governance, financial, momentum, valuation'],
@@ -39,6 +41,7 @@ const VIEWS = {
   evidence: EvidenceView,
   knowledge: KnowledgeView,
   catalyst: CatalystView,
+  institutional_flow: InstitutionalFlowView,
   peer: PeerView,
   confidence: ConfidenceView,
   risk: RiskView,

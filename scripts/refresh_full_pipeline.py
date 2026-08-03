@@ -50,6 +50,7 @@ from alphaforge.layer2.price_target import sync_price_target_history, save_price
 from alphaforge.layer2.knowledge import run_knowledge  # noqa: E402
 from alphaforge.layer2.catalyst import run_catalyst  # noqa: E402
 from alphaforge.layer2.catalyst_history import sync_catalyst_history, save_catalyst_history_store  # noqa: E402
+from alphaforge.layer2.institutional_flow import run_institutional_flow  # noqa: E402
 from alphaforge.layer2.peer import run_peer_comparison  # noqa: E402
 from alphaforge.layer2.confidence import run_confidence  # noqa: E402
 from alphaforge.layer2.risk import run_risk_assessment  # noqa: E402
@@ -226,6 +227,17 @@ def _run() -> int:
         n_cat = sum(1 for c in catalysts if c.has_upcoming)
         log.info(f"Catalyst: {len(catalysts)} sets ({n_cat} with upcoming catalyst, {n_resolved} resolved in history)")
 
+        # Agregasi populasi atas top_holders yang sudah ada di evidence_packages
+        # -- nol panggilan jaringan, nol perhitungan ulang dari Knowledge.
+        # Dijalankan setelah Knowledge karena butuh peta ticker->sektor untuk
+        # roll-up sektornya (Evidence sendiri tidak menyimpan sektor seragam).
+        inst_flow = run_institutional_flow(evidence_packages, profiles)
+        log.info(
+            f"Institutional flow: {inst_flow.tickers_with_basis}/{inst_flow.tickers_with_holders} "
+            f"saham punya arah, net ${inst_flow.net_value_usd / 1e9:,.1f}B "
+            f"di {len(inst_flow.sectors)} sektor"
+        )
+
         comparisons = run_peer_comparison(profiles, screening_result.passed)
         log.info(f"Peer: {len(comparisons)} comparisons")
 
@@ -369,6 +381,8 @@ def _run() -> int:
         "session_id": session_id,
         "catalyst_sets": [c.to_dict() for c in catalysts],
     }
+    institutional_flow_data = inst_flow.to_dict()
+    institutional_flow_data["session_id"] = session_id
     peer_data = {
         "knowledge_count": len(profiles),
         "peer_comparisons_generated": len(comparisons),
@@ -414,6 +428,7 @@ def _run() -> int:
     _atomic_write(DATA_DIR / "evidence.json", evidence_data)
     _atomic_write(DATA_DIR / "knowledge.json", knowledge_data)
     _atomic_write(DATA_DIR / "catalysts.json", catalyst_data)
+    _atomic_write(DATA_DIR / "institutional_flow.json", institutional_flow_data)
     _atomic_write(DATA_DIR / "peer_results.json", peer_data)
     _atomic_write(DATA_DIR / "confidence_scores.json", confidence_data)
     _atomic_write(DATA_DIR / "risk_assessments.json", risk_data)

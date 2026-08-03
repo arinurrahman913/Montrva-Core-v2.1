@@ -14,6 +14,10 @@ const NAV_GROUPS = [
   {
     title: 'Fase B — Populasi',
     items: [
+      // Data publik (13F lewat Yahoo), nol data pribadi — karena itu ia duduk
+      // di grup publik ini, bukan di grup "Pribadi" yang hilang total saat
+      // personal_enabled false (§9 pemisahan lapisan pribadi).
+      { id: 'institutional_flow', label: 'Aliran Dana Institusi' },
       { id: 'peer', label: 'Peer Comparison' },
       { id: 'confidence', label: 'Confidence' },
       { id: 'risk', label: 'Risk / Red Flags' },

@@ -8,6 +8,7 @@ import {
   personalActionClass, prettyAction, horizonLabel, prettyHorizon, horizonStatusInfo, isEntryDueForReview,
   outcomeClass, prettyOutcome,
   factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
+  nextFilingDeadline, NEW_POSITION_SENTINEL, quarterWindow,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -1934,31 +1935,18 @@ function fmtIdDate(d) {
   return `${d.getUTCDate()} ${ID_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
-// 13F wajib dilaporkan institusi (>$100M AUM) paling lambat 45 hari setelah
-// kuartal tutup — jadi data kuartal berjalan belum akan ADA di manapun
-// (SEC, Yahoo, siapapun) sampai deadline itu lewat, bukan soal cache basi
-// di sisi kita. dateReportedStr = tanggal akhir kuartal yang datanya kita
-// punya (mis. "2026-03-31"); fungsi ini hitung kapan kuartal BERIKUTNYA
-// wajib dilaporkan.
-function nextFilingDeadline(dateReportedStr) {
-  const d = new Date(dateReportedStr + 'T00:00:00Z')
-  if (isNaN(d.getTime())) return null
-  // Date.UTC(year, month+4, 0) = hari terakhir bulan (month+3) — cara aman
-  // hitung "3 bulan lagi, akhir bulan" tanpa overflow kalau tanggal asal
-  // (mis. 31) tidak ada di bulan target (mis. Maret 31 -> Juni cuma 30 hari,
-  // setUTCMonth naif akan overflow diam-diam ke 1 Juli).
-  const nextQuarterEnd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 4, 0))
-  const deadline = new Date(nextQuarterEnd)
-  deadline.setUTCDate(deadline.getUTCDate() + 45)
-  return deadline
-}
+// nextFilingDeadline + NEW_POSITION_SENTINEL pindah ke format.js (dipakai
+// juga oleh halaman Aliran Dana Institusi) — lihat import di atas file ini.
 
-// Yahoo pakai pct_change=100.0 sebagai sentinel "posisi baru" (nggak bisa
-// hitung % kenaikan dari basis 0 saham sebelumnya) — bukan literal "naik
-// 100%" dari posisi lama.
-function holderSignal(pctChange) {
+// dateReported ikut dipakai untuk pemegang BARU saja: 13F tidak punya tanggal
+// transaksi, tapi "belum ada di laporan sebelumnya, ada di laporan ini" berarti
+// masuknya di suatu titik SEPANJANG kuartal itu — jendela, bukan tanggal.
+function holderSignal(pctChange, dateReported) {
   if (pctChange === null || pctChange === undefined) return { label: '—', tone: 'neutral' }
-  if (pctChange >= 99.5) return { label: '🆕 Baru Masuk', tone: 'good' }
+  if (pctChange >= NEW_POSITION_SENTINEL) {
+    const window = dateReported ? quarterWindow(dateReported) : null
+    return { label: window ? `🆕 Baru · ${window}` : '🆕 Baru Masuk', tone: 'good' }
+  }
   if (pctChange > 0) return { label: `▲ +${pctChange.toFixed(1)}%`, tone: 'good' }
   if (pctChange < 0) return { label: `▼ ${pctChange.toFixed(1)}%`, tone: 'bad' }
   return { label: '— Tetap', tone: 'neutral' }
@@ -2040,7 +2028,7 @@ function InstitutionalHoldersSection({ ownership }) {
             </thead>
             <tbody>
               {sorted.map((h, i) => {
-                const signal = holderSignal(h.pct_change)
+                const signal = holderSignal(h.pct_change, h.date_reported)
                 const toneColor = signal.tone === 'good' ? 'var(--good)' : signal.tone === 'bad' ? 'var(--bad)' : 'var(--dim)'
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid var(--rule)' }}>
