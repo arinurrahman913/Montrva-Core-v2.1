@@ -45,6 +45,101 @@ function latestOutcomeFor(timeline, module) {
   return found
 }
 
+const fmtPrice = (v) => (v == null ? '—' : `$${Number(v).toFixed(2)}`)
+const fmtDay = (iso) => {
+  if (!iso) return null
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`)
+  return Number.isNaN(d.getTime())
+    ? String(iso).slice(0, 10)
+    : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+}
+
+// Kartu tesis yang SUDAH divonis. Anatominya sengaja sama dengan ThesisProof
+// (kartu tesis yang masih hidup): tiga kolom entry/harga sekarang/target,
+// supaya dua keadaan itu dibaca dengan cara yang sama. Sebelum 2026-08-03
+// bagian ini cuma badge + persen -- angka 9,37% tanpa harga entry, target,
+// harga penutup yang dipakai, atau tanggal, jadi tidak bisa diperiksa sendiri.
+//
+// Semua field harga bisa null untuk outcome yang dievaluasi SEBELUM
+// personal_evaluation.py mulai menyimpannya (749 record); kartu tetap tampil,
+// blok harganya diganti satu baris keterangan. Sengaja tidak direkonstruksi:
+// harga "saat evaluasi" waktu itu tidak sama dengan harga sekarang, dan
+// menebaknya berarti mengarang bukti.
+function OutcomeCard({ outcome }) {
+  const hasPrices = outcome.entry_price != null || outcome.exit_price != null
+  const ret = outcome.return_pct
+  const tone = outcome.classification === 'terbukti' ? 'var(--good)' : outcome.classification === 'meleset' ? 'var(--bad)' : 'var(--dim)'
+  const meta = []
+  if (outcome.due_at) meta.push(`jatuh tempo ${fmtDay(outcome.due_at)}`)
+  if (outcome.horizon_days != null) meta.push(`horizon ${outcome.horizon_days} hari`)
+  if (outcome.evaluated_at) meta.push(`dievaluasi ${fmtDay(outcome.evaluated_at)}`)
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className={`pill ${outcomeClass(outcome.classification)}`}>{prettyOutcome(outcome.classification)}</span>
+        {ret != null && (
+          <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: tone }}>{ret >= 0 ? '+' : ''}{ret}%</span>
+        )}
+        {outcome.threshold_pct != null && (
+          <span style={{ fontSize: 10, color: 'var(--faint)' }}>target +{outcome.threshold_pct}%</span>
+        )}
+      </div>
+
+      {hasPrices ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 8, padding: 10, background: 'var(--panel)', borderRadius: 6 }}>
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)' }}>entry</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{fmtPrice(outcome.entry_price)}</div>
+            {outcome.entry_date && <div style={{ fontSize: 9.5, color: 'var(--faint)' }}>{fmtDay(outcome.entry_date)}</div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)' }}>tutup dipakai</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: tone }}>{fmtPrice(outcome.exit_price)}</div>
+            {/* Tanggalnya sering BUKAN due_at (mis. jatuh tempo Minggu -> yang
+                dipakai tutupan Jumat) -- ditulis apa adanya, tidak disamakan. */}
+            {outcome.exit_date && <div style={{ fontSize: 9.5, color: 'var(--faint)' }}>{fmtDay(outcome.exit_date)}</div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 9, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)' }}>target</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{fmtPrice(outcome.target_price)}</div>
+            {outcome.threshold_pct != null && outcome.target_price != null && (
+              <div style={{ fontSize: 9.5, color: 'var(--faint)' }}>+{outcome.threshold_pct}%</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 6, fontSize: 10, color: 'var(--faint)' }}>
+          Rincian harga tidak tersimpan untuk evaluasi ini (dijalankan sebelum field harga ada).
+        </div>
+      )}
+
+      {outcome.excess_return_pct != null && (
+        <div
+          style={{ marginTop: 6, fontSize: 10, color: outcome.excess_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}
+          title="Return dikurangi return S&P 500 pada jendela waktu yang sama -- naik 3% saat indeks naik 8% itu tertinggal, bukan berhasil"
+        >
+          {outcome.excess_return_pct >= 0 ? '+' : ''}{outcome.excess_return_pct}% vs S&amp;P 500
+        </div>
+      )}
+
+      {meta.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.6 }}>{meta.join(' · ')}</div>
+      )}
+      {outcome.evaluation_lag_days > 0 && (
+        <div style={{ fontSize: 9.5, color: 'var(--faint)' }}>
+          harga diambil {outcome.evaluation_lag_days} hari setelah jatuh tempo (run berikutnya)
+        </div>
+      )}
+      {outcome.baseline === 'price_history' && (
+        <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="price_at_call tidak tersimpan untuk entry ini (dibuat sebelum field ini ada) -- direkonstruksi dari price_history">
+          ⓘ harga entry direkonstruksi (bukan harga asli saat call)
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ExpandedTimeline({ ticker, timeline }) {
   const entries = timeline?.entries || []
   const lastCallSet = entries.length ? (entries[entries.length - 1].personal_call_set || {}) : {}
@@ -81,27 +176,7 @@ function ExpandedTimeline({ ticker, timeline }) {
               </div>
               <RiskBadge call={call} />
               {moduleOutcome ? (
-                <div>
-                  <span className={`pill ${outcomeClass(moduleOutcome.classification)}`}>{prettyOutcome(moduleOutcome.classification)}</span>
-                  {moduleOutcome.return_pct != null && (
-                    <span style={{ marginLeft: 8, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--dim)' }}>
-                      {moduleOutcome.return_pct >= 0 ? '+' : ''}{moduleOutcome.return_pct}%
-                    </span>
-                  )}
-                  {moduleOutcome.excess_return_pct != null && (
-                    <div
-                      style={{ marginTop: 4, fontSize: 10, color: moduleOutcome.excess_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}
-                      title="Return dikurangi return S&P 500 pada jendela waktu yang sama -- naik 3% saat indeks naik 8% itu tertinggal, bukan berhasil"
-                    >
-                      {moduleOutcome.excess_return_pct >= 0 ? '+' : ''}{moduleOutcome.excess_return_pct}% vs S&amp;P 500
-                    </div>
-                  )}
-                  {moduleOutcome.baseline === 'price_history' && (
-                    <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="price_at_call tidak tersimpan untuk entry ini (dibuat sebelum field ini ada) -- direkonstruksi dari price_history, yang cuma menyimpan ~1 tahun">
-                      ⓘ harga entry direkonstruksi (bukan harga asli saat call)
-                    </div>
-                  )}
-                </div>
+                <OutcomeCard outcome={moduleOutcome} />
               ) : (
                 <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} />
               )}

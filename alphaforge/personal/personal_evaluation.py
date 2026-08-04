@@ -129,6 +129,16 @@ def _reconstruct_start_price(price_history: list[dict] | None, since_date: str) 
     return best_close
 
 
+def _last_bar_date(price_history: list[dict] | None) -> str | None:
+    """Tanggal bar terakhir yang tersedia -- dipakai sebagai tanggal harga
+    penutup yang benar-benar dipakai evaluasi. price_history sudah dinormalkan
+    ke dict oleh pemanggil."""
+    if not price_history:
+        return None
+    dates = [b.get("date") for b in price_history if b.get("date")]
+    return max(dates)[:10] if dates else None
+
+
 def _classify(action: str, horizon: str, return_pct: float | None) -> str | None:
     if action not in ACTION_CATEGORY_ENTRY and action not in ACTION_CATEGORY_EXIT:
         return "tidak_berlaku"  # action tanpa klaim arah -- tidak dievaluasi
@@ -242,14 +252,47 @@ def evaluate_due_entries(
                 if classification is None:
                     continue  # harga belum bisa dibaca — biarkan pending, coba lagi run berikutnya
 
+                threshold_pct = HORIZON_OUTCOME_THRESHOLD_PCT.get(start_call["horizon"])
                 outcome_record = {
                     "classification": classification,
                     "return_pct": round(return_pct, 2) if return_pct is not None else None,
                     "benchmark_return_pct": round(bench_return, 2) if bench_return is not None else None,
                     "excess_return_pct": round(excess, 2) if excess is not None else None,
-                    "threshold_pct": HORIZON_OUTCOME_THRESHOLD_PCT.get(start_call["horizon"]),
+                    "threshold_pct": threshold_pct,
                     "baseline": baseline,
                     "due_at": due.isoformat(),
+                    # Angka-angka DI BAWAH INI sudah dipegang fungsi ini sejak
+                    # awal untuk menghitung return_pct, cuma tidak pernah
+                    # disimpan -- akibatnya Riwayat Pribadi cuma bisa
+                    # menampilkan "+9.37%" tanpa harga entry, target, harga
+                    # penutup yang dipakai, atau tanggalnya (temuan pengguna
+                    # 2026-08-03). Menyimpannya nol biaya: tidak ada fetch
+                    # baru, tidak ada perhitungan ulang.
+                    "entry_price": round(start_price, 4) if start_price is not None else None,
+                    "entry_date": since[:10],
+                    "exit_price": round(current_price, 4) if current_price is not None else None,
+                    # Tanggal bar terakhir yang tersedia saat evaluasi -- BUKAN
+                    # due_at. Keduanya sering beda dan itu bukan bug: BE jatuh
+                    # tempo Minggu 2 Agu, harga yang dipakai tutupan Jumat 31
+                    # Jul. Menulisnya sebagai "close 2 Agu" akan jadi klaim
+                    # palsu, jadi tanggalnya dibawa apa adanya.
+                    "exit_date": _last_bar_date(price_history),
+                    # Target harga cuma bermakna untuk action berklaim NAIK.
+                    # Untuk action keluar, threshold justru batas "tidak boleh
+                    # naik lebih dari" -- beda arti, jadi sengaja None daripada
+                    # dipaksa jadi angka yang menyesatkan.
+                    "target_price": (
+                        round(start_price * (1 + threshold_pct / 100.0), 4)
+                        if start_price is not None and threshold_pct is not None
+                        and start_call["action"] in ACTION_CATEGORY_ENTRY
+                        else None
+                    ),
+                    "horizon_days": (due - date.fromisoformat(since[:10])).days,
+                    # Berapa hari evaluasi tertinggal dari jatuh tempo (0 kalau
+                    # tepat hari itu). Bukan hiasan: makin besar, makin jauh
+                    # harga yang dipakai dari harga saat tesis benar-benar
+                    # jatuh tempo.
+                    "evaluation_lag_days": (today - due).days,
                     # Satu tesis = satu (modul, tanggal mulai streak). SATU
                     # evaluasi ini ditulis ke SETIAP entry harian dalam streak
                     # yang sama (bukan cuma entry terakhir) supaya baris mana
