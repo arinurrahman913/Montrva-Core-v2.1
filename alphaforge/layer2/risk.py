@@ -4,6 +4,7 @@ Mendeteksi governance anomalies, financial extremes, momentum reversals.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -36,7 +37,7 @@ def assess_risk(knowledge_profile: KnowledgeProfile) -> RiskAssessment:
     red_flags.extend(fin_flags)
 
     # Deteksi momentum reversals
-    mom_flags, mom_score = _detect_momentum_issues(knowledge_profile, red_flags)
+    mom_flags, mom_score, mom_evaluable = _detect_momentum_issues(knowledge_profile, red_flags)
     red_flags.extend(mom_flags)
 
     # Deteksi valuation extremes
@@ -58,11 +59,21 @@ def assess_risk(knowledge_profile: KnowledgeProfile) -> RiskAssessment:
         "valuation": 0.20,
     }
 
+    # Rata-rata tertimbang HANYA atas komponen yang bisa dinilai. Sampai
+    # 2026-08-03 momentum selalu 0 (cek streak-nya mati, lihat
+    # _parse_beat_streak) tapi bobotnya tetap 0,20 ikut dibagi — artinya skor
+    # risiko SETIAP ticker dipotong 20% secara sistematis (maksimum teramati
+    # cuma 42 dari 100). Renormalisasi ini pola yang sama dengan Layer 1, yang
+    # sudah membagi layer_score atas komponen ok saja.
+    components = [
+        (gov_score, weights["governance"], True),
+        (fin_score, weights["financial"], True),
+        (mom_score, weights["momentum"], mom_evaluable),
+        (val_score, weights["valuation"], True),
+    ]
+    active_weight = sum(w for _, w, ok in components if ok)
     overall_risk = (
-        gov_score * weights["governance"]
-        + fin_score * weights["financial"]
-        + mom_score * weights["momentum"]
-        + val_score * weights["valuation"]
+        sum(s * w for s, w, ok in components if ok) / active_weight if active_weight else 0.0
     )
 
     # Rating
@@ -95,6 +106,10 @@ def assess_risk(knowledge_profile: KnowledgeProfile) -> RiskAssessment:
         notes_parts.append(f"{medium_count} medium-risk flag(s)")
     if len(red_flags) == 0:
         notes_parts.append("No significant red flags detected")
+    if not mom_evaluable:
+        # Supaya kolom Momentum yang bernilai 0 di dashboard tidak terbaca
+        # sebagai "momentumnya aman" padahal artinya "tidak ada datanya".
+        notes_parts.append("Momentum not evaluated (no EPS surprise history) — excluded from risk score")
 
     risk_notes = " | ".join(notes_parts)
 
@@ -224,24 +239,72 @@ def _detect_financial_extremes(profile: KnowledgeProfile, existing_flags: list[R
     return flags, min(risk_score, 100.0)
 
 
-def _detect_momentum_issues(profile: KnowledgeProfile, existing_flags: list[RedFlag]) -> tuple[list[RedFlag], float]:
-    """Deteksi momentum reversals (earnings streak breaks, guidance misses)."""
+_BEAT_STREAK_RE = re.compile(r"^\s*(\d+)\s*/\s*(\d+)\s+beat\s*$", re.IGNORECASE)
+
+
+def _parse_beat_streak(text: str | None) -> tuple[int, int] | None:
+    """Baca "N/M beat" -> (beats, total). Format ini ditulis
+    knowledge.py::_compute_earnings_beat_streak; penyebutnya cuma kuartal yang
+    punya surprise_pct, jadi M bisa < 4.
+
+    Sampai 2026-08-03 risk.py mencari substring "miss" di teks ini — kata yang
+    TIDAK PERNAH diproduksi (0 dari 4.057 ticker), sehingga cek ini mati total
+    padahal datanya ada di 3.431 ticker. Kelas bug yang sama dengan
+    reasoning.py mencari "positive" saat Knowledge menulis "accelerating".
+    """
+    if not text:
+        return None
+    m = _BEAT_STREAK_RE.match(str(text))
+    if not m:
+        return None
+    beats, total = int(m.group(1)), int(m.group(2))
+    return (beats, total) if total > 0 and beats <= total else None
+
+
+def _detect_momentum_issues(profile: KnowledgeProfile, existing_flags: list[RedFlag]) -> tuple[list[RedFlag], float, bool]:
+    """Deteksi momentum reversals (earnings streak breaks, guidance misses).
+
+    Mengembalikan (flags, score, evaluable). `evaluable` False berarti tidak
+    ada satu pun input momentum yang tersedia untuk ticker ini — assess_risk
+    lalu MENGELUARKAN bobot momentum dari rata-rata tertimbang, bukan
+    memasukkan 0 (yang membuat skor risiko ticker itu 20% lebih rendah
+    daripada ticker yang momentumnya benar-benar bersih).
+    """
     ht = profile.historical_trend
     cm = profile.competitive_momentum
     flags = []
     risk_score = 0.0
 
     # Earnings streak breaks
-    if ht.earnings_beat_miss_streak and "miss" in str(ht.earnings_beat_miss_streak).lower():
-        flags.append(RedFlag(
-            flag_type="earnings_streak_break",
-            severity="medium",
-            description="Recent earnings miss(es) detected",
-            affected_metrics=["earnings_quality", "guidance_accuracy"]
-        ))
-        risk_score += 15
+    streak = _parse_beat_streak(ht.earnings_beat_miss_streak)
+    if streak:
+        beats, total = streak
+        misses = total - beats
+        # Ambang kalibrasi awal: >=2 kuartal meleset dari 4 = separuh, cukup
+        # jadi sinyal; "high" disimpan untuk yang TIDAK pernah beat sama
+        # sekali dalam >=3 kuartal, supaya severity high tetap langka.
+        if beats == 0 and total >= 3:
+            flags.append(RedFlag(
+                flag_type="earnings_streak_break",
+                severity="high",
+                description=f"Missed analyst EPS estimates in all {total} reported quarters",
+                affected_metrics=["earnings_quality", "guidance_accuracy"]
+            ))
+            risk_score += 25
+        elif misses >= 2:
+            flags.append(RedFlag(
+                flag_type="earnings_streak_break",
+                severity="medium",
+                description=f"Missed analyst EPS estimates in {misses} of {total} quarters",
+                affected_metrics=["earnings_quality", "guidance_accuracy"]
+            ))
+            risk_score += 15
 
-    # Guidance misses
+    # Guidance misses — INERT: competitive_momentum.guidance_trend kosong di
+    # 4057/4057 (tidak ada sumber di Evidence). Cabang dipertahankan karena
+    # kriterianya sah dan akan langsung hidup begitu sumbernya ada; ia TIDAK
+    # ikut menentukan `evaluable` supaya ketiadaannya tidak dihitung sebagai
+    # "momentum tidak terbaca" untuk seluruh universe.
     if cm.guidance_trend and "down" in str(cm.guidance_trend).lower():
         flags.append(RedFlag(
             flag_type="guidance_miss",
@@ -251,7 +314,8 @@ def _detect_momentum_issues(profile: KnowledgeProfile, existing_flags: list[RedF
         ))
         risk_score += 15
 
-    return flags, min(risk_score, 100.0)
+    evaluable = streak is not None or bool(cm.guidance_trend)
+    return flags, min(risk_score, 100.0), evaluable
 
 
 def _detect_valuation_extremes(profile: KnowledgeProfile, existing_flags: list[RedFlag]) -> tuple[list[RedFlag], float]:
@@ -341,6 +405,39 @@ def _events_within(events: list, years: float | None = None, days: float | None 
     return result
 
 
+def _coverage_gap(profile: KnowledgeProfile, years: float) -> str | None:
+    """Alasan kenapa jendela `years` tahun TIDAK tertutup data, atau None
+    kalau tertutup.
+
+    Dipakai pemeriksaan yang berbasis kode item 8-K. Tanpa ini, "tidak ada
+    event" ambigu antara 'diperiksa & bersih' dan 'tidak terlihat'. Dua hal
+    berbeda yang keduanya bikin tak terlihat:
+      1. fetch SEC gagal sama sekali (filing_data_available False), dan
+      2. fetch berhasil tapi riwayatnya lebih pendek dari jendela — payload
+         `filings.recent` SEC memuat maksimal ~1.000 filing, jadi issuer yang
+         sangat rajin filing bisa cuma punya riwayat 1-2 tahun.
+    """
+    gov = profile.governance
+    if not gov.filing_data_available:
+        return "SEC EDGAR filing fetch failed for this ticker"
+    start = gov.filing_history_start
+    if not start:
+        # Profil lama (ditulis sebelum field ini ada) -- jangan mengarang
+        # kepastian atas data yang tidak menyimpan jangkauannya.
+        return "filing history range unknown (profile predates coverage tracking)"
+    try:
+        start_date = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return f"filing history start unparseable ({start})"
+    needed = datetime.now(timezone.utc) - timedelta(days=365 * years)
+    if start_date > needed:
+        return (
+            f"SEC filing history only reaches back to {start}, short of the "
+            f"{years:g}-year window"
+        )
+    return None
+
+
 def _check_dilution(profile: KnowledgeProfile) -> Flag | None:
     change = profile.governance.shares_outstanding_change_12m
     if change is None:
@@ -349,6 +446,9 @@ def _check_dilution(profile: KnowledgeProfile) -> Flag | None:
             knowledge_refs=["governance.shares_outstanding_change_12m"],
             evidence_note="Shares outstanding 12-month baseline not available from current Evidence sources",
             source="Yahoo Finance fundamentals",
+            # Sumbernya ADA (SEC XBRL) dan berhasil untuk ~2/3 universe —
+            # yang tidak punya baseline itu spesifik per ticker (mis. baru IPO).
+            availability="ticker_specific",
         )
     if change > DILUTION_THRESHOLD_PCT:
         return Flag(
@@ -363,12 +463,20 @@ def _check_dilution(profile: KnowledgeProfile) -> Flag | None:
 def _check_auditor_change(profile: KnowledgeProfile) -> Flag | None:
     changes = profile.governance.auditor_changes
     if not changes:
-        return Flag(
-            flag_id="auditor_change_3y", category="governance", severity="tinggi", status="undetermined",
-            knowledge_refs=["governance.auditor_changes"],
-            evidence_note="Auditor change history not available — Evidence tracks filing form_type/date only, not item-level content",
-            source="SEC EDGAR filings",
-        )
+        gap = _coverage_gap(profile, AUDITOR_CHANGE_WINDOW_YEARS)
+        if gap:
+            return Flag(
+                flag_id="auditor_change_3y", category="governance", severity="tinggi", status="undetermined",
+                knowledge_refs=["governance.auditor_changes", "governance.filing_history_start"],
+                evidence_note=f"Auditor change history not verifiable — {gap}",
+                source="SEC EDGAR filings",
+                availability="ticker_specific",
+            )
+        # Filing 3 tahun terbaca penuh dan tidak ada satu pun 8-K item 4.01 =
+        # diperiksa & bersih, bukan "belum bisa dipastikan" (lihat docstring
+        # _check_spec_flags). Sebelum 2026-08-03 cabang ini mustahil dicapai
+        # karena Evidence cuma menyimpan ~200 hari filing.
+        return None
     recent = _events_within(changes, years=AUDITOR_CHANGE_WINDOW_YEARS)
     if len(recent) > AUDITOR_CHANGE_MIN_COUNT:
         return Flag(
@@ -383,12 +491,16 @@ def _check_auditor_change(profile: KnowledgeProfile) -> Flag | None:
 def _check_restatement(profile: KnowledgeProfile) -> Flag | None:
     restatements = profile.governance.restatements
     if not restatements:
-        return Flag(
-            flag_id="restatement_2y", category="accounting", severity="tinggi", status="undetermined",
-            knowledge_refs=["governance.restatements"],
-            evidence_note="Restatement history not available — Evidence tracks filing form_type/date only, not item-level content",
-            source="SEC EDGAR filings",
-        )
+        gap = _coverage_gap(profile, RESTATEMENT_WINDOW_YEARS)
+        if gap:
+            return Flag(
+                flag_id="restatement_2y", category="accounting", severity="tinggi", status="undetermined",
+                knowledge_refs=["governance.restatements", "governance.filing_history_start"],
+                evidence_note=f"Restatement history not verifiable — {gap}",
+                source="SEC EDGAR filings",
+                availability="ticker_specific",
+            )
+        return None
     recent = _events_within(restatements, years=RESTATEMENT_WINDOW_YEARS)
     if recent:
         return Flag(
@@ -406,8 +518,10 @@ def _check_litigation(profile: KnowledgeProfile) -> Flag | None:
         return Flag(
             flag_id="litigation_material", category="litigation", severity="tinggi", status="undetermined",
             knowledge_refs=["governance.material_litigation"],
-            evidence_note="Material litigation status not available — Evidence tracks filing form_type/date only, not item-level content",
+            evidence_note="Material litigation status not available for any ticker — no 8-K item code marks litigation; it lives in 10-K/10-Q 'Legal Proceedings' text, which Evidence does not parse",
             source="SEC EDGAR filings",
+            # 4057/4057 undetermined: batasan sumber, bukan sifat ticker ini.
+            availability="no_source",
         )
     return Flag(
         flag_id="litigation_material", category="litigation", severity="tinggi", status="triggered",
@@ -423,8 +537,9 @@ def _check_insider_selling(profile: KnowledgeProfile) -> Flag | None:
         return Flag(
             flag_id="insider_selling_90d", category="insider", severity="tinggi", status="undetermined",
             knowledge_refs=["ownership.insider_transactions"],
-            evidence_note="Insider transaction data not available — SEC EDGAR fetcher excludes Form 3/4/144",
+            evidence_note="Insider transaction data not available for any ticker — SEC EDGAR fetcher excludes Form 3/4/144",
             source="SEC EDGAR filings",
+            availability="no_source",
         )
     recent_sells = [
         t for t in _events_within(transactions, days=90)
@@ -463,6 +578,7 @@ def _check_fraud_or_delisting(profile: KnowledgeProfile) -> Flag | None:
             knowledge_refs=["governance.bankruptcy_notices"],
             evidence_note="SEC EDGAR filing fetch failed for this ticker — bankruptcy/receivership status not checked",
             source="SEC EDGAR filings",
+            availability="ticker_specific",
         )
     recent = _events_within(profile.governance.bankruptcy_notices, years=BANKRUPTCY_WINDOW_YEARS)
     if recent:

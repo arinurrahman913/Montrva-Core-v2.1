@@ -262,7 +262,8 @@ def main() -> None:
             sec_dict = pkg_dict["sec_filings"]
             sec_filings = SecFilings(
                 filings=[SecFiling(**f) for f in sec_dict.get("items", [])],
-                metadata=SourceMetadata(**sec_dict.get("metadata")) if sec_dict.get("metadata") else None
+                metadata=SourceMetadata(**sec_dict.get("metadata")) if sec_dict.get("metadata") else None,
+                history_start=sec_dict.get("history_start"),
             )
 
             pkg = EvidencePackage(

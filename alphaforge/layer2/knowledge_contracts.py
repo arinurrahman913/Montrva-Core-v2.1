@@ -198,6 +198,13 @@ class Governance:
     # (kejadian langka), bukan dari BERHASIL-TIDAKNYA fetch, jadi ticker
     # sehat kena skor rendah cuma karena datanya bagus (gak ada amandemen).
     filing_data_available: bool = False
+    # Tanggal filing tertua yang ada di payload SEC (SecFilings.history_start).
+    # Beda peran dari filing_data_available: yang itu jawab "fetch-nya
+    # berhasil?", yang ini jawab "berhasilnya menjangkau sejauh apa ke
+    # belakang?". risk.py memakainya untuk memutuskan apakah "tidak ada event"
+    # boleh dibaca sebagai BERSIH (jendela pemeriksaan tertutup data) atau
+    # tetap BELUM PASTI (riwayat lebih pendek dari jendela).
+    filing_history_start: str | None = None
 
 
 @dataclass

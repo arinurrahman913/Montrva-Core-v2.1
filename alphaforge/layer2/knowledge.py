@@ -11,7 +11,32 @@ Lihat 03_LAYER2_SPECS/03_KNOWLEDGE.md.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+
+# Jendela amandemen filing. Evidence sekarang menyimpan 3 tahun filing (lihat
+# sec_edgar.FILINGS_WINDOW_YEARS), tapi unusual_filings SENGAJA tetap sempit:
+# sebelum perubahan itu jendelanya de facto ~200 hari (10 filing terakhir),
+# dan melebarkannya ke 3 tahun akan melipatgandakan RedFlag "unusual_filing"
+# (risk.py, +15 governance) di seluruh universe -- pergeseran skor risiko yang
+# tidak diminta dan tidak ada hubungannya dengan perbaikan cakupan item 8-K.
+# Sisa derivasi (4.01/4.02/1.03/3.01) tidak difilter di sini: jendela
+# masing-masing sudah ditegakkan risk.py lewat _events_within, jadi konstanta
+# itu tidak perlu hidup di dua file.
+UNUSUAL_FILING_WINDOW_YEARS = 1.0
+
+
+def _filing_age_days(filing_date: str | None) -> int | None:
+    try:
+        return (date.today() - date.fromisoformat(filing_date)).days if filing_date else None
+    except ValueError:
+        return None
+
+
+def _within(age_days: int | None, years: float) -> bool:
+    # Tanggal tak terbaca -> ikut disertakan, sama seperti perilaku sebelum
+    # ada jendela: lebih baik satu amandemen kelebihan daripada diam-diam
+    # membuang filing gara-gara format tanggal aneh.
+    return age_days is None or age_days <= 365 * years
 from .contracts import EvidencePackage, ScreeningCandidate
 from .knowledge_contracts import (
     KnowledgeProfile, KnowledgeMetadata, FinancialHealth, Ownership,
@@ -479,13 +504,15 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
         form_type + tanggal + URL + item code, bukan isi dokumen) — butuh
         scope terpisah (text parsing), bukan kode item.
 
-    Catatan cakupan: fetch_sec_filings() dibatasi max_filings=10 filing
-    RELEVAN terbaru (10-K/10-Q/8-K/DEF 14A) — kalau ticker rajin filing 8-K
-    rutin (mis. earnings tiap kuartal), event lama di luar window bisa
-    kepotong dari 10 filing ini sebelum window waktu di risk.py sempat
-    dievaluasi. Batasan yang sudah ada dari awal (bukan baru diperkenalkan
-    perubahan ini), cuma baru kelihatan dampaknya sekarang karena field ini
-    baru pernah keisi data nyata.
+    Catatan cakupan (2026-08-03): batas 10-filing-terbaru itu sudah diganti
+    jendela 3 tahun di fetch_sec_filings() — dulu jendelanya de facto cuma
+    median 201 hari, jadi event lama kepotong sebelum window waktu risk.py
+    sempat dievaluasi (item 4.01 kelewat di 52 dari 80 ticker yang punya).
+    Yang TERSISA sebagai batas: payload `filings.recent` SEC sendiri memuat
+    maksimal ~1.000 filing terakhir, jadi issuer yang sangat rajin filing bisa
+    punya riwayat lebih pendek dari 3 tahun — itulah yang dicatat
+    filing_history_start, dan risk.py memakainya supaya "tidak ada event"
+    pada riwayat pendek tidak salah dibaca sebagai "bersih".
     """
     unusual_filings: list[GovernanceEvent] = []
     auditor_changes: list[GovernanceEvent] = []
@@ -493,7 +520,8 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
     bankruptcy_notices: list[GovernanceEvent] = []
     delisting_notices: list[GovernanceEvent] = []
     for f in evidence.sec_filings.filings or []:
-        if f.form_type and f.form_type.endswith("/A"):
+        age = _filing_age_days(f.filing_date)
+        if f.form_type and f.form_type.endswith("/A") and _within(age, UNUSUAL_FILING_WINDOW_YEARS):
             unusual_filings.append(GovernanceEvent(
                 event_type="filing_amendment",
                 date=f.filing_date,
@@ -536,7 +564,8 @@ def _build_governance(evidence: EvidencePackage) -> Governance:
         unusual_filings=unusual_filings,
         bankruptcy_notices=bankruptcy_notices,
         delisting_notices=delisting_notices,
-        filing_data_available=filing_data_available
+        filing_data_available=filing_data_available,
+        filing_history_start=evidence.sec_filings.history_start,
     )
 
 

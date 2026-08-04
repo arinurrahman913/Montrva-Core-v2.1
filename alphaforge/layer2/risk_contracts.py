@@ -29,6 +29,16 @@ class RedFlag:
 FlagCategory = Literal["accounting", "governance", "litigation", "dilution", "insider", "listing_status"]
 FlagSeverity = Literal["tinggi", "ekstrem"]
 FlagStatus = Literal["triggered", "undetermined"]
+# Kenapa sebuah status "undetermined" terjadi — dipakai reasoning.py untuk
+# memutuskan apakah ia layak menurunkan confidence modul:
+#   no_source       — pemeriksaannya tidak punya sumber data untuk ticker MANA
+#                     PUN (litigasi, insider). Menghukumnya = penalti konstan
+#                     ke seluruh universe, yang tidak membedakan apa pun.
+#   ticker_specific — data ada untuk ticker lain, tapi tidak untuk yang ini
+#                     (fetch gagal, riwayat filing lebih pendek dari jendela,
+#                     baseline shares tidak tersedia). Ini informatif.
+#   available       — pemeriksaannya berjalan penuh (status "triggered").
+FlagAvailability = Literal["no_source", "ticker_specific", "available"]
 
 
 @dataclass
@@ -50,6 +60,7 @@ class Flag:
     knowledge_refs: list[str]  # field Knowledge yang memicunya
     evidence_note: str  # fakta pemicunya, bukan penilaian
     source: str = ""  # sumber data mentah yang memicu (mis. "SEC EDGAR filings") — untuk transparansi, beda dari knowledge_refs yang nunjuk field internal
+    availability: FlagAvailability = "available"
     method_version: str = "1.0"
 
 

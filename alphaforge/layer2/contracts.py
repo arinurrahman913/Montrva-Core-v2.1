@@ -273,9 +273,15 @@ class SecFiling:
 
 @dataclass
 class SecFilings:
-    """Daftar SEC filings terkini."""
+    """Daftar SEC filings dalam jendela waktu (lihat sec_edgar.fetch_sec_filings)."""
     filings: list[SecFiling] = field(default_factory=list)
     metadata: SourceMetadata | None = None
+    # Tanggal filing TERTUA yang ada di payload submissions SEC (semua form,
+    # bukan cuma yang relevan) -- BUKAN tanggal tertua di `filings` di atas.
+    # Dipakai downstream buat tahu apakah jendela pemeriksaan (mis. auditor 3
+    # tahun) benar-benar tertutup data: kalau history_start lebih baru dari
+    # batas jendela, "tidak ada event" berarti "tidak terlihat", bukan "bersih".
+    history_start: str | None = None
 
 
 @dataclass
@@ -365,6 +371,7 @@ class EvidencePackage:
                 "count": len(self.sec_filings.filings),
                 "items": [asdict(f) for f in self.sec_filings.filings],
                 "metadata": asdict(self.sec_filings.metadata) if self.sec_filings.metadata else None,
+                "history_start": self.sec_filings.history_start,
             },
             "generated_at": self.generated_at,
         }

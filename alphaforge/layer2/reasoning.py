@@ -102,9 +102,56 @@ def _knowledge_gaps(profile: KnowledgeProfile, module: str) -> list[str]:
     return [f for f in (profile.metadata.missing_fields or []) if f in allowed]
 
 
+# Penalti flag terhadap confidence MODUL (bukan ConfidenceReport, yang
+# mengukur kekuatan data). Kalibrasi awal — 07/08/09_MODULE_*.md masih
+# menandai bobot "didiskusikan terpisah", jadi angka ini titik ukur, bukan
+# kebenaran. Cap menjaga flag tidak menenggelamkan sinyal kualitas data.
+FLAG_TRIGGERED_PENALTY = 5.0
+FLAG_UNDETERMINED_PENALTY = 3.0
+FLAG_PENALTY_CAP = 15.0
+
+
+def _flag_penalty(risk: RiskAssessment | None) -> tuple[float, list[str]]:
+    """Penalti confidence dari Risk flags + limiter yang menjelaskannya.
+
+    Hanya menghukum yang MEMBEDAKAN antar-ticker:
+      - triggered (kecuali kategori dilution, yang sudah bekerja lewat stance
+        — menghukumnya di sini berarti menghitung sinyal yang sama dua kali),
+      - undetermined dengan availability "ticker_specific".
+    "no_source" (litigasi & insider, undetermined di 4057/4057) sengaja TIDAK
+    dihukum: penalti yang sama besar untuk semua ticker tidak memindahkan
+    peringkat apa pun, cuma menggeser seluruh pita band ke bawah — pola yang
+    sudah dua kali dibuang di proyek ini (pe_ratio_forward & governance di
+    confidence.py).
+    """
+    if risk is None:
+        return 0.0, []
+    penalty = 0.0
+    triggered: list[str] = []
+    unverifiable: list[str] = []
+    for flag in risk.flags:
+        if flag.severity != "tinggi":
+            continue
+        if flag.status == "triggered":
+            if flag.category == "dilution":
+                continue
+            penalty += FLAG_TRIGGERED_PENALTY
+            triggered.append(flag.flag_id)
+        elif getattr(flag, "availability", "no_source") == "ticker_specific":
+            penalty += FLAG_UNDETERMINED_PENALTY
+            unverifiable.append(flag.flag_id)
+    limiters = []
+    if triggered:
+        limiters.append(f"risk flag terkonfirmasi: {', '.join(triggered)}")
+    if unverifiable:
+        limiters.append(f"pemeriksaan risiko tak terverifikasi untuk ticker ini: {', '.join(unverifiable)}")
+    return min(penalty, FLAG_PENALTY_CAP), limiters
+
+
 def _module_confidence(
     confidence_report: ConfidenceReport | None,
     knowledge_gaps: list[str],
+    risk: RiskAssessment | None = None,
 ) -> ModuleConfidence:
     """confidence.score modul ini <= ConfidenceReport.overall.score (V6) —
     dijamin karena selalu MULAI dari angka itu lalu cuma dikurangi."""
@@ -115,9 +162,11 @@ def _module_confidence(
         base = confidence_report.overall.score
         limiters = list(confidence_report.overall.limiters)
 
-    score = max(0.0, base - 5.0 * len(knowledge_gaps))
+    flag_penalty, flag_limiters = _flag_penalty(risk)
+    score = max(0.0, base - 5.0 * len(knowledge_gaps) - flag_penalty)
     if knowledge_gaps:
         limiters.append(f"{len(knowledge_gaps)} field missing dalam scope modul ini")
+    limiters.extend(flag_limiters)
 
     if score >= BAND_HIGH_THRESHOLD:
         band = "high"
@@ -146,8 +195,16 @@ def _build_flag_responses(risk: RiskAssessment | None) -> list[FlagResponse]:
         if flag.severity != "tinggi":
             continue
         if flag.status == "undetermined":
-            impact = "lowers_confidence"
-            rationale = f"{flag.flag_id}: belum bisa dipastikan ({flag.evidence_note}) — confidence diturunkan, bukan diabaikan"
+            # Dua jenis "belum pasti" yang konsekuensinya beda — lihat
+            # _flag_penalty. Yang no_source TIDAK boleh mengaku menurunkan
+            # confidence, karena memang tidak (dan tidak seharusnya:
+            # penalti seragam ke 4057 ticker tidak membedakan apa pun).
+            if getattr(flag, "availability", "no_source") == "ticker_specific":
+                impact = "lowers_confidence"
+                rationale = f"{flag.flag_id}: belum bisa dipastikan untuk ticker ini ({flag.evidence_note}) — confidence diturunkan, bukan diabaikan"
+            else:
+                impact = "none"
+                rationale = f"{flag.flag_id}: tidak ada sumber datanya untuk ticker mana pun ({flag.evidence_note}) — dicatat, tidak menurunkan confidence"
         else:
             impact = "changes_stance" if flag.category == "dilution" else "lowers_confidence"
             rationale = f"{flag.flag_id} terkonfirmasi: {flag.evidence_note}"
@@ -517,7 +574,7 @@ def run_quality_lens(
         method_version=METHOD_VERSION,
         stance=stance,
         stance_rationale=f"Quality score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Mixed signals")),
-        confidence=_module_confidence(confidence, gaps),
+        confidence=_module_confidence(confidence, gaps, risk),
         flag_responses=_build_flag_responses(risk),
         context_used=_build_context_used(layer1, "quality_compound"),
         knowledge_gaps=gaps,
@@ -659,7 +716,7 @@ def run_speculative_lens(
         method_version=METHOD_VERSION,
         stance=stance,
         stance_rationale=f"Speculative score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Neutral momentum")),
-        confidence=_module_confidence(confidence, gaps),
+        confidence=_module_confidence(confidence, gaps, risk),
         flag_responses=_build_flag_responses(risk),
         context_used=_build_context_used(layer1, "speculative"),
         knowledge_gaps=gaps,
@@ -883,7 +940,7 @@ def run_multibagger_lens(
         method_version=METHOD_VERSION,
         stance=stance,
         stance_rationale=f"Multibagger score {score:.0f}: " + (positive[0] if positive else (negative[0] if negative else "Modest growth profile")),
-        confidence=_module_confidence(confidence, gaps),
+        confidence=_module_confidence(confidence, gaps, risk),
         flag_responses=_build_flag_responses(risk),
         context_used=_build_context_used(layer1, "multibagger"),
         knowledge_gaps=gaps,
