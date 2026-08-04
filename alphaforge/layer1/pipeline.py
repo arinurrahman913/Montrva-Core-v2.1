@@ -424,12 +424,24 @@ def _get_spx_validation_history() -> list[dict] | None:
         import math
         history = []
         for idx, (dt, row) in enumerate(df_window.iterrows()):
-            norm_price = (row["Close"] - min_52w) / price_range * 100.0
+            close_val = float(row["Close"])
+            # Bar tanpa harga tutup dilewati SAMA SEKALI. Yahoo mengembalikan
+            # baris untuk hari yang belum diperdagangkan kalau fetch berjalan
+            # setelah tengah malam waktu setempat (run 2026-08-04 selesai
+            # 00:06); seluruh nilainya NaN, dan json_safe menulisnya sebagai
+            # null. Bar seperti itu tidak membawa informasi apa pun, tapi
+            # sempat mengosongkan seluruh dashboard lewat `null.toFixed()`
+            # di Layer1PerformanceChart.
+            if math.isnan(close_val):
+                continue
+            norm_price = (close_val - min_52w) / price_range * 100.0
+            if math.isnan(norm_price):
+                continue
             ma50_val = float(ma50_window.iloc[idx]) if not math.isnan(float(ma50_window.iloc[idx])) else None
             ma200_val = float(ma200_window.iloc[idx]) if not math.isnan(float(ma200_window.iloc[idx])) else None
             history.append({
                 "date": dt.strftime("%Y-%m-%d"),
-                "price": float(row["Close"]),
+                "price": close_val,
                 "ma50": ma50_val,
                 "ma200": ma200_val,
                 "norm_score": round(norm_price, 1),

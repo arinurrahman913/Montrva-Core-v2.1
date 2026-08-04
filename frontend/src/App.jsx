@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import TickerModal from './components/TickerModal'
 import GenerateButton from './components/GenerateButton'
+import ViewErrorBoundary from './components/ViewErrorBoundary'
 import Layer1View from './views/Layer1View'
 import ScreeningView from './views/ScreeningView'
 import EvidenceView from './views/EvidenceView'
@@ -111,7 +112,9 @@ export default function App() {
         )}
 
         <div className="content">
-          <ActiveView onSelectTicker={setModalTicker} />
+          <ViewErrorBoundary viewKey={activeView}>
+            <ActiveView onSelectTicker={setModalTicker} />
+          </ViewErrorBoundary>
         </div>
       </div>
 

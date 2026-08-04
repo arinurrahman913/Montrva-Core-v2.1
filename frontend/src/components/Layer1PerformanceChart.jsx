@@ -16,8 +16,19 @@ export default function Layer1PerformanceChart({ spxHistory, layerHistory }) {
   const PAD_Y = 12
 
   // Align dates: spx banyak data (90 hari), layer sedikit (mungkin cuma 1-10). Ambil overlap.
+  //
+  // Bar dengan norm_score null DIBUANG lebih dulu. 2026-08-04: run selesai
+  // 00:06 sehingga Yahoo mengembalikan bar untuk hari yang belum
+  // diperdagangkan -- seluruh nilainya NaN, dan json_safe menulisnya sebagai
+  // null. `null.toFixed()` di bawah melempar TypeError, dan karena tidak ada
+  // error boundary, SATU angka kosong ini mengosongkan seluruh dashboard
+  // (bukan cuma chart ini). Backend juga sudah dibuat tidak menulis bar
+  // seperti itu; filter di sini tetap dipertahankan karena data lama sudah
+  // terlanjur ada di disk dan komponen tidak boleh percaya begitu saja.
   const layerDates = new Set(layerHistory.map((e) => e.date))
-  const spxFiltered = spxHistory.filter((s) => layerDates.has(s.date))
+  const spxFiltered = spxHistory.filter(
+    (s) => layerDates.has(s.date) && typeof s.norm_score === 'number' && Number.isFinite(s.norm_score),
+  )
 
   if (spxFiltered.length < 2) {
     return (
@@ -30,7 +41,21 @@ export default function Layer1PerformanceChart({ spxHistory, layerHistory }) {
 
   // Normalkan keduanya ke 0-100 dalam window overlap (untuk fair comparison)
   const spxScores = spxFiltered.map((s) => s.norm_score)
-  const layerScores = layerHistory.map((l) => l.final_score)
+  // Sisi Layer dijaga dengan alasan yang sama: satu final_score kosong (mis.
+  // entri history dari run yang gagal di tengah) tidak boleh menjatuhkan
+  // seluruh halaman.
+  const layerScores = layerHistory
+    .map((l) => l.final_score)
+    .filter((v) => typeof v === 'number' && Number.isFinite(v))
+
+  if (spxScores.length < 2 || layerScores.length === 0) {
+    return (
+      <div className="chart-card" style={{ padding: '20px' }}>
+        <div className="chart-title">S&P 500 vs Layer Score</div>
+        <p className="l1-trend-empty">Data harga belum lengkap untuk periode ini</p>
+      </div>
+    )
+  }
 
   const y = (v) => PAD_Y + (H - 2 * PAD_Y) * (1 - v / 100)
   const n = spxFiltered.length
