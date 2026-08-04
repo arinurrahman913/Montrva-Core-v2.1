@@ -236,6 +236,7 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
             low=cached.get("low"),
             close=cached.get("close"),
             volume=cached.get("volume"),
+            ohlc_date=cached.get("ohlc_date"),
             market_cap=cached.get("market_cap"),
             shares_outstanding=cached.get("shares_outstanding"),
             beta=cached.get("beta"),
@@ -298,12 +299,32 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
             print(f"[yahoo_price:{ticker}] gagal ambil beta dari .info, lanjut tanpa: {exc}", file=sys.stderr)
             beta = None
 
-        # OHLCV dari bar terakhir
-        open_price = float(hist["Open"].iloc[-1]) if not hist.empty else None
-        high = float(hist["High"].iloc[-1]) if not hist.empty else None
-        low = float(hist["Low"].iloc[-1]) if not hist.empty else None
-        close = float(hist["Close"].iloc[-1]) if not hist.empty else None
-        volume = int(hist["Volume"].iloc[-1]) if not hist.empty else None
+        # OHLCV dari bar TERAKHIR YANG LENGKAP, bukan sekadar baris terakhir.
+        #
+        # Yahoo menambahkan baris untuk sesi yang sedang/belum berjalan: Volume
+        # terisi tapi Open/High/Low/Close NaN. Karena keempatnya dulu diambil
+        # dari `.iloc[-1]` tanpa dicek, json_safe menulisnya sebagai null dan
+        # kolom "OPEN / HIGH / LOW" di modal kosong untuk **4.044 dari 4.207
+        # ticker (96,1%)** pada data 2026-08-04 — dan `volume` di sebelahnya
+        # justru terisi, dari baris kosong yang sama, sehingga tidak
+        # kelihatan bahwa ada yang salah. Kelas bug yang sama dengan bar SPX
+        # null yang mengosongkan dashboard (layer1/pipeline.py, 2026-08-04).
+        #
+        # Diambil satu baris utuh (bukan per-kolom) supaya kelima angkanya
+        # pasti berasal dari HARI yang sama.
+        valid_rows = hist[hist["Close"].notna()] if not hist.empty else hist
+        if not valid_rows.empty:
+            last_row = valid_rows.iloc[-1]
+            open_price = float(last_row["Open"])
+            high = float(last_row["High"])
+            low = float(last_row["Low"])
+            close = float(last_row["Close"])
+            volume = int(last_row["Volume"]) if last_row["Volume"] == last_row["Volume"] else None
+            last_idx = valid_rows.index[-1]
+            ohlc_date = last_idx.strftime("%Y-%m-%d") if hasattr(last_idx, "strftime") else str(last_idx)[:10]
+        else:
+            open_price = high = low = close = volume = None
+            ohlc_date = None
 
         # 52-week high/low -- HARUS diambil dari 1 tahun terakhir saja
         # (~252 hari trading), bukan seluruh `hist` yang sekarang 5 tahun
@@ -314,9 +335,15 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
         high_52w = float(hist_1y["High"].max()) if not hist_1y.empty else None
         low_52w = float(hist_1y["Low"].min()) if not hist_1y.empty else None
 
-        # Convert historical data ke PriceBar list
+        # Convert historical data ke PriceBar list. Baris tanpa Close (sesi
+        # yang belum selesai, lihat catatan OHLCV di atas) dibuang: bar kosong
+        # ikut mengalir ke evaluasi outcome, chart, dan rekonstruksi harga
+        # entry, dan di sanalah `null.toFixed()` sempat mengosongkan seluruh
+        # dashboard.
         price_history = []
         for idx, row in hist.iterrows():
+            if row["Close"] != row["Close"]:  # NaN
+                continue
             date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)
             price_history.append(PriceBar(
                 date=date_str,
@@ -324,7 +351,7 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
                 high=float(row["High"]),
                 low=float(row["Low"]),
                 close=float(row["Close"]),
-                volume=int(row["Volume"])
+                volume=int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
             ))
 
         metadata = SourceMetadata(
@@ -341,6 +368,7 @@ def fetch_price_market_data(ticker: str) -> PriceMarketData:
             low=low,
             close=close,
             volume=volume,
+            ohlc_date=ohlc_date,
             market_cap=market_cap,
             shares_outstanding=shares_outstanding,
             beta=beta,

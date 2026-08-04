@@ -97,6 +97,12 @@ class PriceMarketData:
     low: float | None = None
     close: float | None = None
     volume: int | None = None
+    # Tanggal bar sumber open/high/low/close/volume di atas. Bukan hiasan:
+    # `last_price` adalah kuotasi terakhir (bisa hari ini), sedangkan OHLC
+    # diambil dari sesi TERAKHIR YANG LENGKAP -- kalau Yahoo baru memberi
+    # baris volume-saja untuk sesi terbaru, keduanya beda hari. Tanpa tanggal
+    # ini, dua angka dari dua hari berbeda tampil bersebelahan seolah satu.
+    ohlc_date: str | None = None
     market_cap: float | None = None
     shares_outstanding: int | None = None
     beta: float | None = None

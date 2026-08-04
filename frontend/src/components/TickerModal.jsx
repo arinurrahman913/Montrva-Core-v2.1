@@ -1513,7 +1513,13 @@ function PriceSnapshotBlock({ priceMarket }) {
         <div className="mcell-val">${fmtNum(close, 2)}</div>
       </div>
       <div className="mcell">
-        <div className="mcell-label">Open / High / Low</div>
+        {/* Tanggalnya ikut ditulis karena OHLC berasal dari sesi LENGKAP
+            terakhir, yang bisa lebih tua dari `last_price` di kartu Close
+            sebelah kiri (Yahoo kadang baru memberi baris volume-saja untuk
+            sesi terbaru). Tanpa tanggal, dua hari berbeda tampak satu. */}
+        <div className="mcell-label">
+          Open / High / Low{priceMarket.ohlc_date ? ` · ${priceMarket.ohlc_date}` : ''}
+        </div>
         <div className="mcell-val" style={{ fontSize: 13 }}>
           ${fmtNum(priceMarket.open, 2)} / ${fmtNum(priceMarket.high, 2)} / ${fmtNum(priceMarket.low, 2)}
         </div>
