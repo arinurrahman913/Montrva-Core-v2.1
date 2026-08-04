@@ -13,16 +13,43 @@ const MODULES = ['multibagger', 'quality_compound', 'speculative']
 // Agregator Pribadi -- grafik live + progress bar "hari ke-berapa dari
 // horizon" -- supaya tesis yang masih aktif kelihatan "live" di sini juga,
 // bukan cuma pas masih jadi top pick baru.
-function ExpandedTimeline({ ticker, entry }) {
-  const callSet = entry?.personal_call_set || {}
-  const outcome = entry?.outcome || null
-  // Cuma lensa yang BENERAN jadi alasan ticker ini kesimpen di sini (action
-  // top-pick, no_holding) -- lensa lain punya action juga (pantau/cicil_
-  // bertahap/dll) tapi itu bukan kenapa ticker ini ada di Riwayat, jadi cuma
-  // bikin bising kalau ikut ditampilkan.
-  const lenses = MODULES
-    .map((m) => ({ module: m, call: callSet[m] }))
-    .filter((l) => l.call && l.call.position_status === 'no_holding' && l.call.action === BEST_ACTION[l.module])
+// Per lensa, ambil snapshot TERBARU di mana lensa itu benar-benar jadi top
+// pick -- itulah tesis yang sedang dilacak baris ini. Sebelum 2026-08-03
+// panel ini membaca snapshot TERAKHIR saja, padahal baris bertahan selamanya
+// begitu pernah masuk top-3: 950 dari 2.475 ticker (38%) aksinya sudah
+// berubah hari ini (mis. FLYW yang 27-31 Jul top pick Spekulatif, sekarang
+// tunggu_katalis), jadi filternya kosong dan panelnya cuma bilang "tidak ada
+// data lens" -- persis untuk ticker yang riwayatnya justru paling menarik.
+function lensThreads(timeline) {
+  const entries = timeline?.entries || []
+  const threads = []
+  for (const m of MODULES) {
+    let chosen = null
+    for (const e of entries) {
+      const call = (e.personal_call_set || {})[m]
+      if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) chosen = e
+    }
+    if (chosen) threads.push({ module: m, entry: chosen, call: chosen.personal_call_set[m] })
+  }
+  return threads
+}
+
+// Outcome ditulis backend ke snapshot yang jatuh tempo, yang belum tentu
+// snapshot tempat tesis ini pertama muncul -- jadi dicari ke seluruh timeline,
+// bukan cuma di entry yang dipilih di atas.
+function latestOutcomeFor(timeline, module) {
+  let found = null
+  for (const e of timeline?.entries || []) {
+    if (e.outcome?.[module]) found = e.outcome[module]
+  }
+  return found
+}
+
+function ExpandedTimeline({ ticker, timeline }) {
+  const entries = timeline?.entries || []
+  const lastCallSet = entries.length ? (entries[entries.length - 1].personal_call_set || {}) : {}
+  const lastDate = entries.length ? (entries[entries.length - 1].analyzed_at || '').slice(0, 10) : null
+  const lenses = lensThreads(timeline)
 
   if (lenses.length === 0) {
     return <div style={{ padding: '12px 14px 14px 30px', fontSize: 11, color: 'var(--faint)' }}>Tidak ada data lens untuk snapshot ini.</div>
@@ -31,12 +58,26 @@ function ExpandedTimeline({ ticker, entry }) {
   return (
     <div style={{ padding: '12px 14px 14px 30px', background: 'var(--panel2)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-        {lenses.map(({ module, call }) => {
-          const moduleOutcome = outcome?.[module]
+        {lenses.map(({ module, call, entry }) => {
+          const moduleOutcome = latestOutcomeFor(timeline, module)
+          const threadDate = (entry.analyzed_at || '').slice(0, 10)
+          const nowAction = (lastCallSet[module] || {}).action
+          const stillTopPick = nowAction === call.action
           return (
             <div key={module}>
               <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>
                 {MODULE_LABELS[module]} — {prettyAction(call.action)}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>
+                {stillTopPick ? (
+                  <>masih berlaku · snapshot {threadDate}</>
+                ) : (
+                  <>
+                    dari snapshot {threadDate} · sekarang{' '}
+                    <span style={{ color: 'var(--dim)' }}>{nowAction ? prettyAction(nowAction) : '—'}</span>
+                    {lastDate ? ` (${lastDate})` : ''}
+                  </>
+                )}
               </div>
               <RiskBadge call={call} />
               {moduleOutcome ? (
@@ -168,6 +209,11 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   const dueSet = new Set((dueData?.due_for_review || []).filter((t) => trackedTickers.has(t)))
 
   const lastEntry = (t) => (t.entries && t.entries.length ? t.entries[t.entries.length - 1] : null)
+  const lastEvaluatedEntry = (t) => {
+    const es = t.entries || []
+    for (let i = es.length - 1; i >= 0; i--) if (es[i].outcome) return es[i]
+    return null
+  }
 
   // Skor track-record -- dihitung per TESIS (thesis_key), bukan per entry
   // harian. Backend (personal_evaluation.py) menulis outcome yang SAMA ke
@@ -255,9 +301,14 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
     },
     {
       key: 'outcome',
-      label: 'Outcome (snapshot terakhir)',
+      label: 'Outcome (evaluasi terakhir)',
       render: (r) => {
-        const e = lastEntry(r)
+        // Snapshot TERAKHIR selalu snapshot run hari ini, yang menurut
+        // definisinya belum jatuh tempo -- membacanya membuat kolom ini
+        // hampir selalu "menunggu evaluasi" walau outcome-nya ada di
+        // snapshot lebih lama (live 2026-08-03: cuma 67 dari 243 ticker
+        // ber-outcome yang outcome-nya kebetulan ada di entry terakhir).
+        const e = lastEvaluatedEntry(r) || lastEntry(r)
         const summary = outcomeSummary(e)
         if (!summary) return <span style={{ color: 'var(--faint)' }}>menunggu evaluasi</span>
         const parts = []
@@ -277,13 +328,14 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
         pick sekali, dia tetap kesimpen walau kemudian keluar dari daftar top pick (holding, atau action-nya melemah).
         Outcome dievaluasi otomatis begitu call jatuh tempo (umur snapshot &gt; batas atas horizon-nya), dibandingkan
         pergerakan harga sejak action itu pertama muncul terhadap threshold per horizon — hasilnya (terbukti/meleset)
-        jadi referensi track-record ke depan. Klik baris untuk lihat rincian live snapshot terakhir, klik nama ticker
+        jadi referensi track-record ke depan. Klik baris untuk lihat rincian tiap lensa pada snapshot terakhir dia
+        benar-benar jadi top pick (kalau action-nya sudah berubah, action sekarang ikut ditulis), klik nama ticker
         untuk buka detail lengkap.
       </p>
       <DataTable
         columns={columns}
         rows={timelines}
-        renderExpanded={(r) => <ExpandedTimeline ticker={r.ticker} entry={lastEntry(r)} />}
+        renderExpanded={(r) => <ExpandedTimeline ticker={r.ticker} timeline={r} />}
       />
     </>
   )
