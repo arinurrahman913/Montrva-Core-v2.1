@@ -136,6 +136,15 @@ function OutcomeCard({ outcome }) {
           ⓘ harga entry direkonstruksi (bukan harga asli saat call)
         </div>
       )}
+      {/* Angka hasil scripts/backfill_outcome_prices.py: turunan eksak dari
+          return_pct yang sudah tersimpan, tapi dipulihkan SETELAH evaluasi --
+          bukan dicatat saat vonis dibuat. Bedanya kecil tapi nyata (exit_date
+          ditemukan dengan mencocokkan harga, bisa kosong), jadi disebutkan. */}
+      {outcome.prices_backfilled && (
+        <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="Evaluasi ini berjalan sebelum harga ikut disimpan; angkanya dipulihkan dari return_pct + harga entry, bukan dicatat saat evaluasi">
+          ⓘ rincian harga dipulihkan setelah evaluasi
+        </div>
+      )}
     </div>
   )
 }
