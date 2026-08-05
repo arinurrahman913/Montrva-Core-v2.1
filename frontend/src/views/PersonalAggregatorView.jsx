@@ -160,7 +160,7 @@ function ScoreDrivers({ breakdown, thesisScore }) {
   )
 }
 
-function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
+function PickCard({ ticker, module, call, isNew, onSelectTicker, calibration }) {
   const meta = useTickerMeta(ticker, module)
   const thesisScore = call.thesis_score ?? 50
   const scoreColor = thesisScore >= 65 ? 'var(--good)' : thesisScore >= 50 ? 'var(--gold)' : 'var(--faint)'
@@ -199,7 +199,7 @@ function PickCard({ ticker, module, call, isNew, onSelectTicker }) {
       {call.horizon_basis && (
         <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.4 }}>{call.horizon_basis}</div>
       )}
-      <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} />
+      <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} calibration={calibration} thesisScore={thesisScore} />
     </div>
   )
 }
@@ -288,7 +288,7 @@ function TieNote({ tie }) {
   )
 }
 
-function TopPicksSection({ callSets, historyData, onSelectTicker }) {
+function TopPicksSection({ callSets, historyData, onSelectTicker, calibration }) {
   const picksByLens = LENSES.map((m) => {
     const all = allQualifying(callSets, m)
     return { module: m, picks: all.slice(0, 3), tie: tieAtCutoff(all, 3) }
@@ -334,6 +334,7 @@ function TopPicksSection({ callSets, historyData, onSelectTicker }) {
                 <PickCard
                   key={ticker} ticker={ticker} module={module} call={call} onSelectTicker={onSelectTicker}
                   isNew={newTickersByLens[module]?.has(ticker) ?? false}
+                  calibration={calibration}
                 />
               ))
             )}
@@ -354,11 +355,14 @@ export default function PersonalAggregatorView({ onSelectTicker }) {
   // historyData opsional (badge "BARU" cuma bonus) -- gagal/lum termuat TIDAK
   // boleh memblokir render Top Pick, jadi tidak dicek error-nya di sini.
   const { data: historyData } = useStageData(api.personalHistory)
+  // ~10 KB — base rate tesis sejenis di tiap kartu (BaseRateNote). Sama seperti
+  // historyData: opsional, kegagalannya tidak boleh memblokir render Top Pick.
+  const { data: calibration } = useStageData(api.personalCalibration)
 
   if (error) return <div className="empty">Gagal memuat data/personal/personal_calls.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
 
   const callSets = data.call_sets || []
 
-  return <TopPicksSection callSets={callSets} historyData={historyData} onSelectTicker={onSelectTicker} />
+  return <TopPicksSection callSets={callSets} historyData={historyData} onSelectTicker={onSelectTicker} calibration={calibration} />
 }

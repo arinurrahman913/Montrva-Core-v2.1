@@ -121,6 +121,62 @@ function NotYetEvaluable({ items }) {
   )
 }
 
+// Batas antara "menandai" dan "mengubah", plus daftar yang sengaja TIDAK
+// dikerjakan. Ditaruh di halaman ini, bukan di dokumen terpisah, karena di
+// sinilah godaannya muncul: begitu satu irisan kelihatan meyakinkan, dorongan
+// untuk langsung menyetel threshold datang di layar yang sama.
+//
+// Syaratnya dihitung backend (personal_calibration._mechanical_tuning), jadi
+// yang tampil di sini status yang benar-benar diperiksa, bukan salinan janji.
+const DELIBERATELY_NOT_DONE = [
+  ['Tidak ada mesin skor kedua', 'action tetap murni dari ACTION_TABLE (stance + tingkat skor tesis). Halaman ini tidak pernah jadi input ke sana.'],
+  ['Tidak ada auto-tuning threshold', 'HORIZON_OUTCOME_THRESHOLD_PCT dan gerbang _thesis_score_tier tidak disetel dari hasil, sampai tiga syarat di atas terpenuhi.'],
+  ['Tidak ada pembobotan ulang risk flag', 'high_debt terlihat 16% vs 32% tanpa flag, tapi dari 1 tanggal masuk — itu belum bukti, baru petunjuk.'],
+  ['Tidak ada angka yang tidak bisa ditelusuri', 'setiap persen di halaman ini bisa dilacak balik ke outcome tersimpan; tidak ada model yang "belajar" di luar itu.'],
+]
+
+function MechanicalTuning({ mt }) {
+  return (
+    <div style={{ padding: '12px 14px', margin: '18px 0 12px', background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
+      <div style={{ fontSize: 12, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 8 }}>
+        Kapan angka ini boleh mengubah sistem
+      </div>
+      <div style={{ fontSize: 12, marginBottom: 10 }}>
+        Status sekarang:{' '}
+        <strong style={{ color: mt.allowed ? 'var(--good)' : 'var(--warn)' }}>
+          {mt.allowed ? 'ketiga syarat terpenuhi' : 'belum boleh — masih menandai saja'}
+        </strong>
+      </div>
+      <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+        {mt.conditions.map((c) => (
+          <div key={c.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11 }}>
+            <span style={{ color: c.met ? 'var(--good)' : 'var(--faint)', fontFamily: 'var(--mono)' }}>
+              {c.met ? '✓' : '○'}
+            </span>
+            <span style={{ color: c.met ? 'var(--text)' : 'var(--dim)' }}>
+              {c.label}
+              <span style={{ color: 'var(--faint)' }}> — {c.detail}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ paddingTop: 10, borderTop: '1px solid var(--rule)' }}>
+        <div style={{ fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>
+          Yang sengaja tidak dikerjakan
+        </div>
+        <div style={{ display: 'grid', gap: 5 }}>
+          {DELIBERATELY_NOT_DONE.map(([title, why]) => (
+            <div key={title} style={{ fontSize: 10.5, lineHeight: 1.55 }}>
+              <strong style={{ color: 'var(--dim)' }}>{title}</strong>
+              <span style={{ color: 'var(--faint)' }}> — {why}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PersonalCalibrationView() {
   const { data, error } = useStageData(api.personalCalibration)
 
@@ -221,6 +277,8 @@ export default function PersonalCalibrationView() {
       {dims.map((d) => (
         <SliceTable key={d.dimension} dimension={d.dimension} rows={d.rows} />
       ))}
+
+      {data.mechanical_tuning && <MechanicalTuning mt={data.mechanical_tuning} />}
 
       <p className="narrative" style={{ margin: '4px 0 0', color: 'var(--faint)', fontSize: 11, lineHeight: 1.7 }}>
         Halaman ini tidak mengubah keputusan apa pun — tidak ada threshold, gerbang skor, atau bobot yang disetel dari

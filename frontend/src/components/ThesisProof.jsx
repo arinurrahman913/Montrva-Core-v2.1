@@ -53,6 +53,78 @@ export function RiskBadge({ call }) {
 
 const fmtPrice = (v) => v == null ? '—' : `$${v.toFixed(2)}`
 
+// Sama persis dengan _score_tier di personal_calibration.py DAN gerbang
+// _thesis_score_tier di personal_reasoning.py. Kalau salah satu berubah,
+// ketiganya harus ikut -- sengaja disebut di sini karena tidak ada yang
+// menghubungkan mereka secara struktural.
+function scoreTierKey(score) {
+  if (score == null) return 'skor tidak tersimpan'
+  if (score >= 70) return 'high (skor >=70)'
+  if (score >= 50) return 'medium (skor 50-69)'
+  return 'low (skor <50)'
+}
+
+// Base rate tesis sejenis, ditempel di kartu tesis yang MASIH HIDUP.
+//
+// Ini penanda, BUKAN gerbang: tidak ada action yang berubah karenanya. Alasan
+// tegasnya ada di personal_calibration.py — 167 tesis yang lahir cuma di 2
+// tanggal masuk tidak boleh menyetel threshold atau gerbang skor. Yang bisa
+// dilakukan dengan jujur adalah menaruh angkanya di tempat keputusan dibaca,
+// lalu membiarkan orangnya yang menimbang.
+//
+// Untuk Multibagger & Quality/Compound, isi yang benar justru KEKOSONGANNYA:
+// nol tesis pernah jatuh tempo dan yang pertama baru mungkin 2027/2028.
+// Tanpa kalimat itu, kartu 5 tahunan terlihat sama meyakinkannya dengan
+// kartu spekulatif yang sudah punya 167 vonis.
+export function BaseRateNote({ calibration, module, thesisScore }) {
+  const base = calibration?.base_rates?.[module]
+  if (!base) return null
+
+  const wrap = (children, dim) => (
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--rule)', fontSize: 9.5, color: dim ? 'var(--faint)' : 'var(--dim)', lineHeight: 1.55 }}>
+      {children}
+    </div>
+  )
+
+  if (!base.n) {
+    return wrap(
+      <>
+        Belum ada tesis lensa ini yang pernah jatuh tempo
+        {base.earliest_possible_verdict && <> — vonis paling cepat <strong>{base.earliest_possible_verdict}</strong></>}.
+      </>,
+      true,
+    )
+  }
+
+  // Pakai irisan paling spesifik yang benar-benar punya isi, lalu jatuh ke
+  // level modul. Tidak pernah mengarang bucket kosong jadi "0%".
+  const tierKey = scoreTierKey(thesisScore)
+  const tier = base.by_score_tier?.[tierKey]
+  const use = tier && tier.n ? tier : base
+  const scoped = use === tier
+
+  return wrap(
+    <>
+      Tesis sejenis{scoped ? ` (${tierKey})` : ''}:{' '}
+      <strong style={{ color: 'var(--good)' }}>{use.terbukti} terbukti</strong> ·{' '}
+      <strong style={{ color: 'var(--bad)' }}>{use.meleset} meleset</strong>
+      {use.hit_rate_pct != null && (
+        <span style={{ opacity: use.evaluable ? 1 : 0.5 }}> — {use.hit_rate_pct.toFixed(0)}%</span>
+      )}
+      <span style={{ color: 'var(--faint)' }}> dari {use.n} tesis, {use.entry_dates} tanggal masuk</span>
+      {!use.evaluable && (
+        <span
+          style={{ color: 'var(--warn)' }}
+          title={`${use.limiters.join(' · ')} — angka ini belum layak dipakai menyetel apa pun, cuma penanda`}
+        >
+          {' '}· belum cukup bukti
+        </span>
+      )}
+    </>,
+    false,
+  )
+}
+
 // Hari kalender dari tanggal entry -- dipakai jadi koordinat-X chart (satu
 // sumbu waktu tunggal dari entry sampai deadline, bukan indeks bar).
 function _dayOffset(dateStr, entryMs) {
@@ -192,7 +264,7 @@ function ThesisChart({ bars, liveClose, entryPrice, targetPrice, upperDays }) {
 // "sisa waktu" kelihatan literal tanpa menyaru sebagai ramalan sistem
 // (konsisten dengan disclaimer §12 di bawah). Plus quote live buat titik
 // terakhir dan progress bar "hari ke-berapa dari horizon".
-export default function ThesisProof({ ticker, module, action, horizon, horizonAnchor, historyEntries: historyEntriesProp }) {
+export default function ThesisProof({ ticker, module, action, horizon, horizonAnchor, historyEntries: historyEntriesProp, calibration, thesisScore }) {
   const [priceHistory, setPriceHistory] = useState(null)
   const [historyEntries, setHistoryEntries] = useState(historyEntriesProp || null)
   const [live, setLive] = useState(null)
@@ -299,6 +371,8 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
           </div>
         </div>
       )}
+
+      <BaseRateNote calibration={calibration} module={module} thesisScore={thesisScore} />
     </div>
   )
 }

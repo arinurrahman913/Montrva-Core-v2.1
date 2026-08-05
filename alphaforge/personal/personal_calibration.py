@@ -206,6 +206,74 @@ def _not_yet_evaluable(timelines: dict[str, dict], evaluated: list[dict], today:
     ]
 
 
+def _base_rates(rows: list[dict], not_yet: list[dict]) -> dict:
+    """Angka yang ditempel ke KARTU TESIS HIDUP, bukan ke halaman rapor.
+
+    Irisan silang modul x tingkat skor — sengaja tidak diambil dari `slices`
+    (yang tiap dimensinya berdiri sendiri): kartu tesis punya modul DAN skor
+    sekaligus, dan "Spekulatif 29,9%" jauh kurang berguna daripada
+    "Spekulatif berskor >=70: 25%". Frontend memakai yang paling spesifik
+    yang punya isi, lalu jatuh ke modul.
+
+    Modul tanpa satu pun tesis terevaluasi tetap dapat entri berisi
+    `earliest_possible_verdict` — untuk Multibagger & Quality/Compound itu
+    justru pesan yang paling berguna di kartu ("belum ada yang pernah jatuh
+    tempo, paling cepat 2027-07-27"), bukan kekosongan yang dibiarkan
+    terbaca seolah tidak ada informasi.
+    """
+    earliest = {n["module"]: n.get("earliest_possible_verdict") for n in not_yet}
+    out: dict[str, dict] = {}
+    for module in MODULES:
+        mrows = [r for r in rows if r["module"] == module]
+        by_tier: dict[str, dict] = {}
+        for tier in {r["score_tier"] for r in mrows}:
+            by_tier[tier] = _summarize([r for r in mrows if r["score_tier"] == tier])
+        out[module] = {
+            **_summarize(mrows),
+            "earliest_possible_verdict": earliest.get(module),
+            "by_score_tier": by_tier,
+        }
+    return out
+
+
+def _mechanical_tuning(rows: list[dict], slices: list[dict], overall: dict) -> dict:
+    """Kapan angka di rapor ini boleh MENGUBAH sistem, bukan cuma menandai.
+
+    Ditulis sebagai kode yang memeriksa dirinya sendiri, bukan sebagai janji
+    di dokumen. Alasannya praktis: syarat yang cuma hidup di kepala akan
+    dilanggar diam-diam saat angkanya kebetulan terlihat meyakinkan, dan
+    proyek ini sudah beberapa kali kena kelas kesalahan itu (penalti konstan
+    yang tidak membedakan ticker; arah mean dibaca sebagai arah hitungan
+    gerbang). Kalau `allowed` masih False, tidak ada threshold/bobot/gerbang
+    yang boleh disetel dari sini — dan alasannya bisa dibaca per syarat.
+
+    Syarat ketiga sengaja menuntut lensa NON-spekulatif: seluruh bukti yang
+    ada hari ini berasal dari satu lensa berhorizon 7 hari. Menyetel gerbang
+    skor yang dipakai bertiga dari bukti satu lensa berarti memindahkan
+    pelajaran jangka pendek ke keputusan 5 tahunan.
+    """
+    non_spec = [r for r in rows if r["module"] != "speculative"]
+    evaluable_slices = [s for s in slices if s["evaluable"]]
+    conditions = [
+        {
+            "label": f"minimal satu irisan lolos gerbang bukti (n>={MIN_THESES} & >={MIN_ENTRY_DATES} tanggal masuk)",
+            "met": bool(evaluable_slices),
+            "detail": f"{len(evaluable_slices)} dari {len(slices)} irisan lolos",
+        },
+        {
+            "label": f"minimal {MIN_ENTRY_DATES} tanggal masuk berbeda di seluruh riwayat",
+            "met": overall["entry_dates"] >= MIN_ENTRY_DATES,
+            "detail": f"{overall['entry_dates']} tanggal masuk",
+        },
+        {
+            "label": "minimal satu lensa non-spekulatif sudah punya tesis yang jatuh tempo",
+            "met": bool(non_spec),
+            "detail": f"{len(non_spec)} tesis dari Multibagger + Quality/Compound",
+        },
+    ]
+    return {"allowed": all(c["met"] for c in conditions), "conditions": conditions}
+
+
 def build_calibration(timelines: dict[str, dict], today: date | None = None) -> dict:
     today = today or datetime.now(timezone.utc).date()
     all_rows = collect_theses(timelines)
@@ -230,13 +298,19 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
         + _slice_by(rows, "tipe risk flag", lambda r: r["risk_flag_types"] or ["(tanpa flag)"])
     )
 
+    not_yet = _not_yet_evaluable(timelines, all_rows, today)
+    overall = _summarize(rows)
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "evidence_gate": {"min_theses": MIN_THESES, "min_entry_dates": MIN_ENTRY_DATES},
         "theses_total": len(all_rows),
         "theses_directional": len(rows),
-        "overall": _summarize(rows),
+        "overall": overall,
         "miss_reasons": dict(sorted(miss_reasons.items(), key=lambda kv: -kv[1])),
         "slices": slices,
-        "not_yet_evaluable": _not_yet_evaluable(timelines, all_rows, today),
+        "not_yet_evaluable": not_yet,
+        # Dipakai kartu tesis hidup (ThesisProof), bukan halaman rapor.
+        "base_rates": _base_rates(rows, not_yet),
+        "mechanical_tuning": _mechanical_tuning(rows, slices, overall),
     }

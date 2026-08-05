@@ -303,7 +303,7 @@ function OutcomeCard({ outcome }) {
   )
 }
 
-function ExpandedTimeline({ ticker, timeline }) {
+function ExpandedTimeline({ ticker, timeline, calibration }) {
   const entries = timeline?.entries || []
   const lastCallSet = entries.length ? (entries[entries.length - 1].personal_call_set || {}) : {}
   const lastDate = entries.length ? (entries[entries.length - 1].analyzed_at || '').slice(0, 10) : null
@@ -341,7 +341,7 @@ function ExpandedTimeline({ ticker, timeline }) {
               {moduleOutcome ? (
                 <OutcomeCard outcome={moduleOutcome} />
               ) : (
-                <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} />
+                <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} calibration={calibration} thesisScore={call.thesis_score} />
               )}
             </div>
           )
@@ -432,6 +432,10 @@ function wasEverTopThree(timeline, topSetByDayModule) {
 export default function PersonalHistoricalView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalHistory)
   const { data: dueData } = useStageData(api.personalDueForReview)
+  // ~10 KB — dipakai BaseRateNote di tiap kartu tesis hidup. Diambil sekali di
+  // sini lalu dioper turun; satu halaman bisa merender puluhan kartu, jadi
+  // fetch di dalam kartu akan jadi puluhan request untuk data yang sama.
+  const { data: calibration } = useStageData(api.personalCalibration)
 
   if (error) return <div className="empty">Gagal memuat data/personal/personal_history.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
@@ -592,7 +596,7 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
       <DataTable
         columns={columns}
         rows={timelines}
-        renderExpanded={(r) => <ExpandedTimeline ticker={r.ticker} timeline={r} />}
+        renderExpanded={(r) => <ExpandedTimeline ticker={r.ticker} timeline={r} calibration={calibration} />}
       />
     </>
   )
