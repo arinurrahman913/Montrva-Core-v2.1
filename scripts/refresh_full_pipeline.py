@@ -71,6 +71,10 @@ try:
         load_personal_history, update_personal_timeline, save_personal_history,
         evaluate_due_entries,
     )
+    # Diimpor dari modulnya langsung (bukan lewat alphaforge.personal.__init__)
+    # supaya perbedaan import di sini ketahuan sebagai ImportError di tempat
+    # ini juga -- ikut gerbang try/except yang sama dengan sisa lapisan pribadi.
+    from alphaforge.personal.personal_calibration import build_calibration  # noqa: E402
     PERSONAL_ENABLED = True
 except ImportError:
     PERSONAL_ENABLED = False
