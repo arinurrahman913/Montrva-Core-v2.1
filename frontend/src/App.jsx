@@ -17,6 +17,7 @@ import AggregatorView from './views/AggregatorView'
 import HistoricalView from './views/HistoricalView'
 import PersonalAggregatorView from './views/PersonalAggregatorView'
 import PersonalHistoricalView from './views/PersonalHistoricalView'
+import PersonalCalibrationView from './views/PersonalCalibrationView'
 import { api } from './api'
 
 const TITLES = {
@@ -34,6 +35,7 @@ const TITLES = {
   historical: ['Historical Tracking', 'Snapshot analisa utuh per hari (evaluasi outcome menyusul v2.1)'],
   personal_aggregator: ['Agregator Pribadi', 'Action + horizon per lens, dibaca dari stance Reasoning — tidak pernah dipublikasikan'],
   personal_historical: ['Riwayat Pribadi', 'Snapshot rekomendasi pribadi per hari — outcome dievaluasi otomatis begitu call jatuh tempo'],
+  personal_calibration: ['Rapor Kalibrasi', 'Hit rate per irisan keputusan, dengan gerbang bukti — melaporkan juga apa yang belum bisa dinilai'],
 }
 
 const VIEWS = {
@@ -51,6 +53,7 @@ const VIEWS = {
   historical: HistoricalView,
   personal_aggregator: PersonalAggregatorView,
   personal_historical: PersonalHistoricalView,
+  personal_calibration: PersonalCalibrationView,
 }
 
 export default function App() {

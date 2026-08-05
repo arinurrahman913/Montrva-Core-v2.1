@@ -37,6 +37,7 @@ const PERSONAL_NAV_GROUP = {
   items: [
     { id: 'personal_aggregator', label: 'Agregator Pribadi' },
     { id: 'personal_historical', label: 'Riwayat Pribadi' },
+    { id: 'personal_calibration', label: 'Rapor Kalibrasi' },
   ],
 }
 

@@ -44,6 +44,7 @@ from alphaforge import runlock  # noqa: E402
 from alphaforge.json_safe import dump_safe  # noqa: E402
 from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
 from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
+from alphaforge.layer1.benchmark_history import sync_benchmark_history  # noqa: E402
 from alphaforge.layer2.screening import run_screening  # noqa: E402
 from alphaforge.layer2.evidence import run_evidence  # noqa: E402
 from alphaforge.layer2.price_target import sync_price_target_history, save_price_target_store  # noqa: E402
@@ -201,6 +202,19 @@ def _run() -> int:
             name for name, c in layer1_pkg.components.items() if c.status != "ok"
         ]
 
+        # Deret penutupan indeks yang menumpuk lintas run. DI LUAR gerbang
+        # PERSONAL_ENABLED dengan sengaja: isinya data publik (^GSPC) dan
+        # gunanya justru menumpuk jangka panjang, jadi rilis publik pun harus
+        # tetap mengumpulkannya. Nol fetch baru — bar-nya dari spx_history
+        # yang sudah dihitung build_market_context_package di atas.
+        benchmark_series = sync_benchmark_history(
+            getattr(layer1_pkg, "spx_history", None), DATA_DIR / "benchmark_history.json",
+        )
+        log.info(
+            f"Benchmark: deret indeks {len(benchmark_series)} bar"
+            + (f" ({min(benchmark_series)} s/d {max(benchmark_series)})" if benchmark_series else " — KOSONG")
+        )
+
         evidence_packages = run_evidence(screening_result)
         log.info(f"Evidence: {len(evidence_packages)} packages")
 
@@ -291,6 +305,17 @@ def _run() -> int:
                 # uangnya ditaruh di indeks saja" pada jendela yang sama.
                 spx_hist = getattr(layer1_pkg, "spx_history", None) or []
                 benchmark_price = spx_hist[-1].get("price") if spx_hist else None
+                if benchmark_price is None:
+                    # Kegagalan ini pernah DIAM selama berminggu-minggu:
+                    # benchmark_at_call kosong di 4.050/4.050 call (audit
+                    # 2026-08-04) karena spx_history kebetulan kosong saat run
+                    # itu, dan tidak ada satu baris log pun yang menyebutnya.
+                    # Akibatnya excess_return_pct null di SELURUH riwayat.
+                    log.warning(
+                        "Personal: spx_history kosong -> benchmark_at_call tidak terisi run ini; "
+                        "excess return tesis yang lahir hari ini akan bergantung pada "
+                        "benchmark_history.json saat dievaluasi nanti"
+                    )
                 personal_call_sets = build_personal_call_sets(
                     reasonings, holdings, catalyst_map, evidence_by_ticker,
                     risk_map=risk_map, benchmark_price=benchmark_price,
@@ -332,7 +357,11 @@ def _run() -> int:
                 # disetujui pengguna 2026-07-27, BEDA dari Historical publik
                 # yang outcome-nya sengaja None selamanya (v2.1). Pakai
                 # evidence_by_ticker yang SUDAH dihitung di atas, bukan fetch baru.
-                n_evaluated = evaluate_due_entries(personal_timelines, evidence_by_ticker)
+                n_evaluated = evaluate_due_entries(
+                    personal_timelines, evidence_by_ticker,
+                    benchmark_price_now=benchmark_price,
+                    benchmark_series=benchmark_series,
+                )
                 if n_evaluated:
                     log.info(f"Personal: {n_evaluated} entry lama dievaluasi outcome-nya")
             except Exception:
@@ -459,6 +488,24 @@ def _run() -> int:
         _atomic_write(personal_dir / "personal_calls.json", personal_data)
         save_personal_history(personal_timelines, personal_dir / "personal_history.json")
         log.info(f"Personal: wrote {len(personal_call_sets)} call sets + history for {len(personal_timelines)} tickers")
+
+        # Rapor kalibrasi — agregat kecil (beberapa KB) atas riwayat yang
+        # sudah di memori, jadi nol biaya baca ulang. Dipisah dari
+        # personal_history.json dengan sengaja: halaman kalibrasi tidak boleh
+        # ikut menunggu unduhan 127 MB seperti halaman Riwayat.
+        # Best-effort seperti sisa blok pribadi ini: gagal di sini tidak boleh
+        # membuang riwayat & call sets yang sudah ditulis di atas.
+        try:
+            calibration = build_calibration(personal_timelines)
+            _atomic_write(personal_dir / "calibration.json", calibration)
+            _cal = calibration["overall"]
+            log.info(
+                f"Personal: kalibrasi {calibration['theses_directional']} tesis berarah, "
+                f"hit {_cal['hit_rate_pct']}%, {_cal['entry_dates']} tanggal masuk, "
+                f"evaluable={_cal['evaluable']}"
+            )
+        except Exception:
+            log.exception("Personal: gagal membangun rapor kalibrasi -- sisa lapisan pribadi tetap tertulis")
     _atomic_write(DATA_DIR / "layer1_context.json", layer1_data)
     layer1_historical.append_entry(DATA_DIR / "layer1_history.json", layer1_pkg)
     source_health.append_entry(DATA_DIR / "source_health_history.json", evidence_packages)

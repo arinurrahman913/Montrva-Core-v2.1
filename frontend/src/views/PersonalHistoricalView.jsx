@@ -65,6 +65,166 @@ const fmtDay = (iso) => {
 // blok harganya diganti satu baris keterangan. Sengaja tidak direkonstruksi:
 // harga "saat evaluasi" waktu itu tidak sama dengan harga sekarang, dan
 // menebaknya berarti mengarang bukti.
+// Sebab meleset (backend: personal_evaluation.diagnose_miss). Kosakata
+// tertutup, jadi dipetakan eksplisit — bukan mem-format ulang string mentah,
+// supaya nilai tak dikenal ketahuan alih-alih tampil sebagai snake_case.
+//
+// `hint` bukan hiasan: tiap sebab menuntut perbaikan yang BERBEDA, dan itu
+// seluruh alasan field ini ada. Target ketinggian menuntut peninjauan
+// threshold; arah salah menuntut peninjauan seleksi.
+const MISS_REASON = {
+  target_ketinggian: {
+    label: 'target ketinggian',
+    tone: 'warn',
+    hint: 'Arah tesisnya benar — harga naik, cuma tidak sampai threshold horizon ini. Yang layak ditinjau: targetnya, bukan pemilihan sahamnya.',
+  },
+  turun_bareng_pasar: {
+    label: 'turun bareng pasar',
+    tone: 'warn',
+    hint: 'Harga turun, tapi turunnya lebih sedikit dari indeks pada jendela yang sama. Yang layak ditinjau: keputusan masuk pasar saat itu, bukan pilihan sahamnya.',
+  },
+  arah_salah: {
+    label: 'arah salah',
+    tone: 'bad',
+    hint: 'Harga turun DAN tertinggal dari indeks. Ini kegagalan seleksi — satu-satunya kategori yang benar-benar menuduh tesisnya.',
+  },
+  harga_justru_naik: {
+    label: 'harga justru naik',
+    tone: 'bad',
+    hint: 'Action keluar mengklaim harga tidak akan naik; harga naik melewati threshold.',
+  },
+}
+
+// Rekap sebab lintas SEMUA tesis terevaluasi — inilah yang membuat riwayat
+// bisa dipakai belajar, bukan cuma dibaca satu-satu. "Hit 29,9%" tidak
+// memberi tahu apa yang harus diperbaiki; "89 arah salah vs 28 target
+// ketinggian" memberi tahu.
+//
+// Baris tanggal masuk di bawahnya adalah pagar kejujurannya, dan sengaja
+// tidak bisa dilewatkan: selama tanggal masuknya cuma segelintir, angka-angka
+// di atas mengukur beberapa hari pasar, bukan mutu metodenya.
+function MissBreakdown({ tally, terbukti, entryDates }) {
+  const order = ['target_ketinggian', 'turun_bareng_pasar', 'arah_salah', 'harga_justru_naik']
+  const rows = order.filter((k) => tally[k]).map((k) => ({ k, n: tally[k], ...MISS_REASON[k] }))
+  const totalMiss = rows.reduce((s, r) => s + r.n, 0)
+  if (!totalMiss) return null
+  const total = totalMiss + terbukti
+  const nDates = entryDates.size
+
+  return (
+    <div style={{ padding: '12px 14px', marginBottom: 12, background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
+      <div style={{ fontSize: 11, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
+        Sebab {totalMiss} tesis meleset
+      </div>
+      <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ width: `${(terbukti / total) * 100}%`, background: 'var(--good)' }} title={`${terbukti} terbukti`} />
+        {rows.map((r) => (
+          <div
+            key={r.k}
+            style={{ width: `${(r.n / total) * 100}%`, background: r.tone === 'bad' ? 'var(--bad)' : 'var(--warn)', opacity: r.tone === 'bad' ? 1 : 0.55 }}
+            title={`${r.n} ${r.label}`}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {rows.map((r) => (
+          <div key={r.k} style={{ minWidth: 150 }} title={r.hint}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 16, color: r.tone === 'bad' ? 'var(--bad)' : 'var(--warn)' }}>
+              {r.n}
+              <span style={{ fontSize: 10, color: 'var(--faint)', marginLeft: 5 }}>
+                {((r.n / totalMiss) * 100).toFixed(0)}% dari yang meleset
+              </span>
+            </div>
+            <div style={{ fontSize: 11 }}>{r.label}</div>
+            <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.45, marginTop: 2 }}>{r.hint}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--rule)', fontSize: 10, color: 'var(--faint)', lineHeight: 1.55 }}>
+        {total} tesis ini lahir di <strong style={{ color: nDates < 5 ? 'var(--warn)' : 'inherit' }}>{nDates} tanggal masuk</strong> yang berbeda
+        {nDates < 5 && (
+          <> — jadi ini bukan {total} taruhan independen, melainkan {nDates} taruhan yang disebar ke banyak ticker.
+          Satu jendela pasar yang buruk membuat semuanya meleset bersamaan. Persentase di atas belum layak dipakai
+          menyetel threshold atau gerbang skor; yang menambah bukti di sini bukan menunggu, tapi menyebar tanggal masuk.</>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MissReason({ reason }) {
+  if (!reason) return null
+  const r = MISS_REASON[reason]
+  if (!r) return <span className="pill" style={{ fontSize: 10 }}>{reason}</span>
+  return (
+    <span className={`pill ${r.tone}`} style={{ fontSize: 10 }} title={r.hint}>
+      {r.label}
+    </span>
+  )
+}
+
+// Pembanding indeks. Sebelum 2026-08-04 blok ini cuma satu baris kecil
+// "+x% vs S&P 500" yang praktis TIDAK PERNAH tampil: excess_return_pct null
+// di 167 dari 167 tesis berarah, karena benchmark_at_call tidak pernah terisi
+// dan evaluate_due_entries() dipanggil tanpa harga indeks sama sekali.
+// Akibatnya vonis "MELESET -8,54%" berdiri telanjang — tidak ada cara
+// membedakan tesis yang salah dari pasar yang turun, padahal itu satu-satunya
+// pertanyaan yang bikin riwayat ini berguna sebagai pelajaran.
+//
+// Sekarang: kalimatnya menyebut arah (unggul/tertinggal) lebih dulu, angka
+// mentah indeksnya ikut ditampilkan supaya bisa diperiksa sendiri (anatomi
+// yang sama dengan entry/tutup/target di atas), dan sumber pembandingnya
+// diungkap kalau bukan dari harga yang tercatat saat call dibuat.
+function BenchmarkRow({ outcome }) {
+  const ex = outcome.excess_return_pct
+  const br = outcome.benchmark_return_pct
+  if (ex == null && br == null) return null
+
+  const ahead = ex != null && ex >= 0
+  const levels = []
+  if (outcome.benchmark_at_entry != null) levels.push(Number(outcome.benchmark_at_entry).toFixed(0))
+  if (outcome.benchmark_at_exit != null) levels.push(Number(outcome.benchmark_at_exit).toFixed(0))
+
+  return (
+    <div style={{ marginTop: 8, padding: '7px 10px', background: 'var(--panel)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+          S&amp;P 500 jendela sama
+        </span>
+        {br != null && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{br >= 0 ? '+' : ''}{br}%</span>
+        )}
+        {levels.length === 2 && (
+          <span style={{ fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--mono)' }}>
+            {levels[0]} → {levels[1]}
+          </span>
+        )}
+      </div>
+      {ex != null && (
+        <div
+          style={{ marginTop: 2, fontSize: 11.5, color: ahead ? 'var(--good)' : 'var(--bad)' }}
+          title="Return tesis dikurangi return S&P 500 pada jendela waktu yang sama — naik 3% saat indeks naik 8% itu tertinggal, bukan berhasil"
+        >
+          {ahead ? 'unggul' : 'tertinggal'} {Math.abs(ex)}% dari indeks
+        </div>
+      )}
+      {/* Cadangan terakhir di resolve_benchmark_pair: harga indeks HARI INI,
+          bukan pada exit_date. Dipakai daripada tidak ada pembanding sama
+          sekali, tapi tidak boleh terlihat setara dengan yang tanggalnya cocok. */}
+      {String(outcome.benchmark_source || '').includes('harga_hari_ini') && (
+        <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="Penutupan indeks pada exit_date tidak ada di deret, jadi dipakai harga indeks saat evaluasi berjalan — jendelanya sedikit lebih panjang dari jendela tesis">
+          ⓘ indeks sisi keluar dibaca saat evaluasi, bukan pada tanggal tutup
+        </div>
+      )}
+      {outcome.benchmark_backfilled && (
+        <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="Evaluasi ini berjalan tanpa pembanding indeks; angkanya dipulihkan dari penutupan ^GSPC pada entry_date & exit_date yang tersimpan — fakta publik yang tetap, bukan rekonstruksi dari keadaan sekarang">
+          ⓘ pembanding indeks dipulihkan setelah evaluasi
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OutcomeCard({ outcome }) {
   const hasPrices = outcome.entry_price != null || outcome.exit_price != null
   const ret = outcome.return_pct
@@ -84,6 +244,7 @@ function OutcomeCard({ outcome }) {
         {outcome.threshold_pct != null && (
           <span style={{ fontSize: 10, color: 'var(--faint)' }}>target +{outcome.threshold_pct}%</span>
         )}
+        <MissReason reason={outcome.miss_reason} />
       </div>
 
       {hasPrices ? (
@@ -114,14 +275,7 @@ function OutcomeCard({ outcome }) {
         </div>
       )}
 
-      {outcome.excess_return_pct != null && (
-        <div
-          style={{ marginTop: 6, fontSize: 10, color: outcome.excess_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}
-          title="Return dikurangi return S&P 500 pada jendela waktu yang sama -- naik 3% saat indeks naik 8% itu tertinggal, bukan berhasil"
-        >
-          {outcome.excess_return_pct >= 0 ? '+' : ''}{outcome.excess_return_pct}% vs S&amp;P 500
-        </div>
-      )}
+      <BenchmarkRow outcome={outcome} />
 
       {meta.length > 0 && (
         <div style={{ marginTop: 6, fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.6 }}>{meta.join(' · ')}</div>
@@ -309,19 +463,37 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   const seenThesisKeys = new Set()
   let terbukti = 0, meleset = 0, ambigu = 0
   let excessSum = 0, excessCount = 0
+  const missTally = {}
+  // Tanggal masuk yang BERBEDA di antara tesis terevaluasi. Angka ini jauh
+  // lebih penting daripada kelihatannya: 167 tesis berarah di riwayat live
+  // ternyata cuma lahir di 2 tanggal (27 & 29 Jul), jadi itu bukan 167
+  // taruhan independen melainkan 2 taruhan yang disebar ke ~85 ticker. Tanpa
+  // menampilkannya, "hit 29,9% dari 167 tesis" terbaca jauh lebih meyakinkan
+  // daripada bukti yang sebenarnya ada.
+  const entryDates = new Set()
   for (const t of timelines) {
     for (const e of t.entries || []) {
       if (!e.outcome) continue
       for (const m of MODULES) {
         const o = e.outcome[m]
         if (!o) continue
-        const key = o.thesis_key || `${t.ticker}:${m}:${e.analyzed_at}`
+        // HARUS diawali ticker. `thesis_key` yang ditulis backend berbentuk
+        // "{module}:{tanggal mulai streak}" (personal_evaluation.py) — unik di
+        // dalam SATU timeline ticker, tapi TIDAK unik lintas ticker. Sebelum
+        // 2026-08-04 kunci di sini memakai thesis_key mentah, jadi seluruh
+        // tesis Spekulatif yang mulai 27 Jul di 4.166 ticker runtuh jadi SATU
+        // kunci: dedupe menyisakan 2 tesis, dan kartu "Track Record" + "vs
+        // S&P 500" di atas dihitung dari 2 sampel, bukan 167. Kebetulan
+        // ketahuan karena rekap sebab meleset di bawah selalu kosong.
+        const key = `${t.ticker}:${o.thesis_key || `${m}:${e.analyzed_at}`}`
         if (seenThesisKeys.has(key)) continue
         seenThesisKeys.add(key)
         if (o.classification === 'terbukti') terbukti++
         else if (o.classification === 'meleset') meleset++
         else if (o.classification === 'ambigu') ambigu++
         if (o.excess_return_pct != null) { excessSum += o.excess_return_pct; excessCount += 1 }
+        if (o.miss_reason) missTally[o.miss_reason] = (missTally[o.miss_reason] || 0) + 1
+        if (o.classification && o.classification !== 'tidak_berlaku' && o.entry_date) entryDates.add(o.entry_date)
       }
     }
   }
@@ -407,6 +579,7 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   return (
     <>
       <StatCards stats={stats} />
+      <MissBreakdown tally={missTally} terbukti={terbukti} entryDates={entryDates} />
       <p className="narrative" style={{ margin: '0 0 12px', color: 'var(--dim)', fontSize: 13 }}>
         Cuma ticker yang PERNAH jadi Top Pick (lihat Agregator Pribadi) yang tercatat di sini — begitu lolos jadi top
         pick sekali, dia tetap kesimpen walau kemudian keluar dari daftar top pick (holding, atau action-nya melemah).

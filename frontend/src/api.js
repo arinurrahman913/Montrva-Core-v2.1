@@ -60,6 +60,8 @@ export const api = {
   personalTicker: (ticker) => getJSON(`/api/personal/ticker/${encodeURIComponent(ticker)}`),
   personalHistory: () => getJSON('/api/personal/history'),
   personalDueForReview: () => getJSON('/api/personal/due-for-review'),
+  // ~10 KB (sudah teragregasi backend), BUKAN personalHistory yang 127 MB.
+  personalCalibration: () => getJSON('/api/personal/calibration'),
   // Trigger refresh pipeline dari dashboard. Tidak throw pada 409 (sudah jalan).
   // `sector` opsional — filter Screening ke satu sektor GICS (butuh sector_map,
   // lihat scripts/build_sector_map.py) supaya run jauh lebih cepat dari full-market.

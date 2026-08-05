@@ -37,6 +37,28 @@ Lima keputusan penting di modul ini (hasil audit 2026-07-27):
    tetap memakai threshold absolut (itu yang dijanjikan ke pengguna), tapi
    `excess_return_pct` disimpan berdampingan supaya bisa dibaca jujur.
 
+   REVISI 2026-08-04: keputusan ini selama ini cuma ada di dokumen. Diukur
+   atas riwayat live: `excess_return_pct` null di **167 dari 167** tesis
+   berarah, dan `benchmark_at_call` kosong di **4.050 dari 4.050** call di run
+   terakhir — jadi pertanyaan "tesisnya yang salah atau pasarnya yang turun"
+   (satu-satunya pertanyaan yang bikin riwayat ini berguna sebagai pelajaran)
+   secara struktural tidak bisa dijawab. Dua penyebabnya diperbaiki di sini:
+
+   (a) `benchmark_at_call` bergantung sepenuhnya pada `layer1_pkg.spx_history`
+       yang kebetulan terisi saat call dibuat. Sekarang ada jalur kedua:
+       deret penutupan indeks yang menumpuk lintas run (layer1/
+       benchmark_history.py), dipakai untuk MENCARI harga indeks pada tanggal
+       masuk kalau call-nya sendiri tidak menyimpannya. Ini juga yang membuat
+       backfill outcome lama mungkin.
+
+   (b) sisi keluarnya dulu memakai `benchmark_price_now` — harga indeks pada
+       HARI EVALUASI, dibandingkan dengan harga saham pada `exit_date` (bar
+       lengkap terakhir, sering beberapa hari lebih awal). Dua tanggal
+       berbeda, jadi selisihnya bukan excess return, melainkan excess return
+       plus gerak indeks di sela itu. Sekarang keduanya dibaca pada
+       `exit_date` yang sama; `benchmark_price_now` cuma cadangan terakhir
+       dan ditandai lewat `benchmark_source`.
+
 5. ADA `thesis_key`. Sama untuk semua entry dalam satu streak — dipakai
    frontend untuk menghitung "berapa tesis yang terbukti/meleset" (bukan
    "berapa baris"), supaya tesis yang lama dipegang tidak mendominasi
@@ -47,6 +69,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
+from ..layer1.benchmark_history import benchmark_close_on_or_before
 from .personal_contracts import ACTION_CATEGORY_EXIT
 from .personal_historical import call_due_date
 
@@ -156,6 +179,55 @@ def _classify(action: str, horizon: str, return_pct: float | None) -> str | None
     return "meleset" if return_pct >= threshold else "ambigu"
 
 
+# Sebab meleset — kosakata tertutup, diturunkan MEKANIS dari angka yang sudah
+# tersimpan (return, threshold, excess). Nol data baru, nol fetch, nol
+# penilaian bebas.
+#
+# Kenapa perlu: "MELESET" saja menyatukan tiga kegagalan yang tuntutan
+# perbaikannya berlawanan. Tesis yang naik 2,4% terhadap target 3% (arah
+# benar, target ketinggian) menuntut peninjauan THRESHOLD; tesis yang jatuh
+# 8% sementara indeks naik menuntut peninjauan SELEKSI. Digabung jadi satu
+# angka "hit 29,9%", keduanya tidak bisa dibedakan — dan itu persis yang
+# bikin riwayat ini tidak bisa dipakai belajar.
+#
+# Urutan pemeriksaan penting dan sengaja begini: arah dulu (r >= 0), BARU
+# pembanding indeks. Kalau dibalik, tesis yang naik 2% saat indeks naik 1%
+# akan dilabeli "unggul indeks" padahal yang gagal di situ jelas targetnya,
+# bukan pemilihan sahamnya.
+MISS_REASONS = ("target_ketinggian", "turun_bareng_pasar", "arah_salah", "harga_justru_naik")
+
+
+def diagnose_miss(
+    action: str, classification: str | None, return_pct: float | None,
+    threshold_pct: float | None, excess_pct: float | None,
+) -> str | None:
+    """Sebab satu tesis meleset. None untuk yang tidak meleset (terbukti/
+    ambigu/tidak_berlaku) — field ini bukan label untuk semua outcome, cuma
+    untuk yang gagal."""
+    if classification != "meleset" or return_pct is None:
+        return None
+    if action in ACTION_CATEGORY_EXIT:
+        # Klaim "harga tidak akan naik" yang dilanggar. Tidak dipecah lebih
+        # jauh: naik melewati threshold sudah satu-satunya cara action keluar
+        # bisa meleset (lihat _classify), jadi memecahnya cuma akan bikin
+        # kategori yang tidak pernah terisi.
+        return "harga_justru_naik"
+    if return_pct >= 0:
+        # Untuk action masuk, "meleset" dengan return POSITIF cuma punya satu
+        # arti: naik, tapi tidak sampai threshold (lihat _classify). Sengaja
+        # tidak ikut menuntut `threshold_pct is not None` — kalau threshold-nya
+        # hilang dari record lama, tesis yang jelas-jelas naik akan jatuh ke
+        # cabang terakhir dan dilabeli "arah salah", yang justru berlawanan
+        # dengan angkanya sendiri.
+        return "target_ketinggian"
+    if excess_pct is not None and excess_pct >= 0:
+        # Turun, tapi tetap kalah lebih sedikit dari indeks. Bukan pembelaan
+        # otomatis — cuma pemisahan antara "salah pilih saham" dan "salah ada
+        # di pasar itu sama sekali".
+        return "turun_bareng_pasar"
+    return "arah_salah"
+
+
 def _sorted_entries(entries: list[dict]) -> list[dict]:
     return sorted(entries, key=lambda e: e.get("analyzed_at", ""))
 
@@ -194,11 +266,50 @@ def _find_streaks(entries: list[dict], module: str) -> list[list[dict]]:
     return streaks
 
 
+def resolve_benchmark_pair(
+    benchmark_series: dict[str, float] | None,
+    stored_at_call: float | None,
+    entry_date: str | None,
+    exit_date: str | None,
+    benchmark_price_now: float | None,
+) -> tuple[float | None, float | None, str]:
+    """(indeks_saat_masuk, indeks_saat_keluar, sumber).
+
+    Dipisah jadi fungsi sendiri supaya bisa diuji langsung DAN dipakai ulang
+    apa adanya oleh scripts/backfill_benchmark.py — backfill yang memakai
+    aritmetika sendiri gampang menyimpang dari jalur produksi tanpa ketahuan.
+
+    `sumber` menyebut dari mana tiap sisi datang, bukan sekadar "ada/tidak":
+    tanpa itu, deret hasil backfill dan hasil evaluasi langsung terlihat
+    identik di JSON padahal ketelitiannya beda.
+    """
+    series = benchmark_series or {}
+    start = stored_at_call
+    start_src = "call" if start is not None else None
+    if start is None:
+        start, used = benchmark_close_on_or_before(series, entry_date)
+        start_src = f"deret@{used}" if used else None
+
+    end, used_end = benchmark_close_on_or_before(series, exit_date)
+    end_src = f"deret@{used_end}" if used_end else None
+    if end is None and benchmark_price_now is not None:
+        # Cadangan terakhir: harga indeks HARI INI, bukan pada exit_date.
+        # Sengaja tetap dipakai (lebih baik ada pembanding kasar daripada
+        # tidak sama sekali) tapi ditandai eksplisit -- inilah persis
+        # ketidakcocokan tanggal yang jadi alasan revisi 2026-08-04.
+        end, end_src = benchmark_price_now, "harga_hari_ini"
+
+    if start is None or end is None:
+        return start, end, "tidak_tersedia"
+    return start, end, f"{start_src} -> {end_src}"
+
+
 def evaluate_due_entries(
     timelines: dict[str, dict],
     evidence_by_ticker: dict[str, "EvidencePackage"],
     today: date | None = None,
     benchmark_price_now: float | None = None,
+    benchmark_series: dict[str, float] | None = None,
 ) -> int:
     """Isi entry["outcome"][module] untuk tiap LENS yang sudah jatuh tempo dan
     belum dievaluasi. Mengubah `timelines` in-place (dict plain, sama konvensi
@@ -242,8 +353,18 @@ def evaluate_due_entries(
                     baseline = "price_history"
 
                 return_pct = _price_return_pct(start_price, current_price)
-                bench_start = start_call.get("benchmark_at_call")
-                bench_return = _price_return_pct(bench_start, benchmark_price_now)
+
+                # Harga saham keluar dibaca pada bar lengkap terakhir; harga
+                # indeks harus dibaca pada TANGGAL YANG SAMA, bukan hari ini.
+                exit_date = _last_bar_date(price_history)
+                bench_start, bench_end, bench_source = resolve_benchmark_pair(
+                    benchmark_series,
+                    start_call.get("benchmark_at_call"),
+                    since[:10],
+                    exit_date,
+                    benchmark_price_now,
+                )
+                bench_return = _price_return_pct(bench_start, bench_end)
                 excess = None
                 if return_pct is not None and bench_return is not None:
                     excess = return_pct - bench_return
@@ -255,9 +376,22 @@ def evaluate_due_entries(
                 threshold_pct = HORIZON_OUTCOME_THRESHOLD_PCT.get(start_call["horizon"])
                 outcome_record = {
                     "classification": classification,
+                    # Sebab, bukan cuma vonis (lihat diagnose_miss). None untuk
+                    # yang tidak meleset.
+                    "miss_reason": diagnose_miss(
+                        start_call["action"], classification, return_pct,
+                        threshold_pct, round(excess, 2) if excess is not None else None,
+                    ),
                     "return_pct": round(return_pct, 2) if return_pct is not None else None,
                     "benchmark_return_pct": round(bench_return, 2) if bench_return is not None else None,
                     "excess_return_pct": round(excess, 2) if excess is not None else None,
+                    # Kedua sisi indeks disimpan mentah, bukan cuma persennya:
+                    # tanpa ini pengguna tidak bisa memeriksa sendiri apakah
+                    # pembandingnya masuk akal, persis keluhan yang bikin
+                    # entry_price/exit_price ditambahkan (2026-08-03).
+                    "benchmark_at_entry": round(bench_start, 4) if bench_start is not None else None,
+                    "benchmark_at_exit": round(bench_end, 4) if bench_end is not None else None,
+                    "benchmark_source": bench_source,
                     "threshold_pct": threshold_pct,
                     "baseline": baseline,
                     "due_at": due.isoformat(),
@@ -275,8 +409,9 @@ def evaluate_due_entries(
                     # due_at. Keduanya sering beda dan itu bukan bug: BE jatuh
                     # tempo Minggu 2 Agu, harga yang dipakai tutupan Jumat 31
                     # Jul. Menulisnya sebagai "close 2 Agu" akan jadi klaim
-                    # palsu, jadi tanggalnya dibawa apa adanya.
-                    "exit_date": _last_bar_date(price_history),
+                    # palsu, jadi tanggalnya dibawa apa adanya. Tanggal INI
+                    # juga yang dipakai membaca harga indeks di atas.
+                    "exit_date": exit_date,
                     # Target harga cuma bermakna untuk action berklaim NAIK.
                     # Untuk action keluar, threshold justru batas "tidak boleh
                     # naik lebih dari" -- beda arti, jadi sengaja None daripada

@@ -64,6 +64,14 @@ def register(app, data_dir: Path) -> None:
     def get_personal_history():
         return jsonify(_load_json(personal_dir / "personal_history.json"))
 
+    @app.get("/api/personal/calibration")
+    def get_personal_calibration():
+        """Rapor kalibrasi — sudah teragregasi jadi beberapa KB oleh
+        personal_calibration.py, jadi endpoint ini sengaja TIDAK menghitung
+        apa pun dari personal_history.json (127 MB; /api/personal/history
+        mengirimkannya utuh dan halaman itu butuh ~1 menit memuat)."""
+        return jsonify(_load_json(personal_dir / "calibration.json"))
+
     @app.get("/api/personal/due-for-review")
     def get_personal_due_for_review():
         """Ticker mana yang punya minimal satu snapshot historis layak
