@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 venv/
 *_output.json
 dashboard/data/*.json
