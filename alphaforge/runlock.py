@@ -40,6 +40,10 @@ LOCK_PATH = Path(__file__).resolve().parent.parent / ".cache" / "pipeline.lock"
 # ulang oleh proses lain setelah crash.
 DEFAULT_MAX_AGE_S = 5 * 3600
 
+# Kunci yang isinya belum bisa diparse TAPI baru saja disentuh dianggap sedang
+# ditulis, bukan rusak -- lihat penjelasan di read_lock().
+CORRUPT_LOCK_GRACE_S = 5.0
+
 
 class AlreadyRunning(RuntimeError):
     """Proses lain sedang memegang kunci."""
@@ -98,6 +102,28 @@ def read_lock(max_age_s: float = DEFAULT_MAX_AGE_S) -> dict | None:
     except ValueError:
         # Kunci rusak (mis. tertulis separuh saat crash) -- perlakukan sebagai
         # basi, jangan biarkan file tak terbaca mengunci sistem selamanya.
+        #
+        # KECUALI kalau berkasnya baru saja disentuh: `acquire()` membuat kunci
+        # dengan O_CREAT|O_EXCL lalu menulis payload sebagai langkah KEDUA,
+        # jadi ada jendela mikrodetik saat kunci yang sah ADA tapi isinya masih
+        # kosong (audit 2026-08-06, D8). Tanpa pengecualian ini, proses kedua
+        # yang membaca tepat di sela itu menyimpulkan "rusak -> basi", menghapus
+        # kunci yang baru saja sah dibuat lewat release(check_owner=False), dan
+        # mengambilnya sendiri -- persis tabrakan dua run penuh yang modul ini
+        # ada untuk mencegah.
+        #
+        # Ambang beberapa detik cukup jauh di atas jarak antara dua langkah itu
+        # (satu open + satu write), dan tetap jauh di bawah umur kunci sungguhan
+        # mana pun, jadi kunci yang benar-benar rusak sejak lama tetap dibuang.
+        try:
+            age = time.time() - LOCK_PATH.stat().st_mtime
+        except OSError:
+            return None
+        if age < CORRUPT_LOCK_GRACE_S:
+            return {
+                "script": "?", "pid": None, "started_at": None,
+                "age_seconds": age, "note": "kunci sedang ditulis proses lain",
+            }
         return None
 
     started = info.get("started_epoch")

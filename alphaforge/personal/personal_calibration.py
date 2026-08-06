@@ -38,7 +38,7 @@ import statistics
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
-from .personal_evaluation import MODULES
+from .personal_evaluation import MODULES, claim_type as claim_type_of
 from .personal_historical import call_due_date
 
 # Gerbang bukti. Angkanya sengaja tidak dipakai untuk MENYARING apa pun,
@@ -47,7 +47,56 @@ from .personal_historical import call_due_date
 MIN_THESES = 30
 MIN_ENTRY_DATES = 5
 
-DIRECTIONAL = ("terbukti", "meleset", "ambigu")
+# Vonis yang benar-benar menjawab klaim sebuah tesis. Namanya dulu DIRECTIONAL
+# karena cuma ada satu jenis klaim; sejak `siaga_gerakan` ada, kosakatanya sama
+# tapi aturan yang menghasilkannya berbeda per jenis klaim (lihat
+# `operative_verdict`). Alias lama dipertahankan di bawah supaya pemanggil luar
+# tidak putus.
+VERDICTS = ("terbukti", "meleset", "ambigu")
+DIRECTIONAL = VERDICTS
+
+CLAIM_TYPES = ("arah", "amplitudo")
+
+# Label yang dipakai saat sebuah irisan tidak menyebut jenis klaimnya.
+CLAIM_LABEL = {
+    "arah": "klaim arah (vonis v1, target absolut)",
+    "amplitudo": "klaim amplitudo (vonis v2, |z| >= 1)",
+}
+
+
+def operative_verdict(rec: dict, action: str | None) -> tuple[str | None, str]:
+    """(vonis yang berlaku, jenis klaim) untuk satu record outcome.
+
+    INI PERBAIKAN INTI AUDIT 2026-08-06 (D1). Modul ini dulu membaca
+    `classification` (vonis v1) untuk SEMUA tesis. Sejak `0f3f337` lensa
+    Spekulatif mengeluarkan `siaga_gerakan`, yang mengklaim AMPLITUDO, dan v1
+    dengan benar memberinya "tidak_berlaku" — v1 menilai arah terhadap target
+    absolut, pertanyaan yang action ini tidak pernah jawab. Tapi
+    "tidak_berlaku" tidak ada di VERDICTS, jadi seluruh tesis Spekulatif baru
+    terbuang sebelum diiris apa pun, sementara vonis yang sebenarnya
+    (`classification_v2`) tidak dibaca satu baris pun di seluruh repo.
+
+    Akibatnya rapor ini membeku: Spekulatif adalah satu-satunya lensa yang bisa
+    jatuh tempo tahun ini (Multibagger 730 hari, Quality 1825 hari), jadi
+    bukti berhenti bertambah sama sekali — sambil rapornya tetap terlihat
+    terisi karena angka lamanya masih ada.
+
+    Yang dikembalikan di sini adalah vonis yang menjawab klaim tesis ITU:
+    klaim arah dinilai v1 (itu yang dijanjikan sistem saat call dibuat), klaim
+    amplitudo dinilai v2. Keduanya TIDAK PERNAH dijumlahkan jadi satu angka —
+    `claim_type` ikut dikembalikan supaya pemanggil wajib memisahkannya, persis
+    peringatan di docstring `personal_evaluation.claim_type`.
+
+    `claim_type` dibaca dari record kalau ada, dan diturunkan dari action kalau
+    tidak — record hasil backfill dan record yang ditulis sebelum field itu ada
+    tidak menyimpannya.
+    """
+    kind = rec.get("claim_type") or (claim_type_of(action) if action else "arah")
+    if kind == "amplitudo":
+        return rec.get("classification_v2"), kind
+    if kind == "tanpa_klaim":
+        return rec.get("classification"), kind
+    return rec.get("classification"), "arah"
 
 
 def _score_tier(score: float | None) -> str:
@@ -93,10 +142,18 @@ def collect_theses(timelines: dict[str, dict]) -> list[dict]:
                 score = call.get("thesis_score")
                 if isinstance(score, dict):  # bentuk lama/berbreakdown
                     score = score.get("score")
+                verdict, kind = operative_verdict(rec, call.get("action"))
                 out.append({
                     "ticker": ticker,
                     "module": module,
+                    # `verdict` yang dipakai seluruh agregasi di bawah;
+                    # `classification`/`classification_v2` dibawa apa adanya
+                    # supaya vonis mentah tetap bisa diperiksa.
+                    "verdict": verdict,
+                    "claim_type": kind,
                     "classification": rec.get("classification"),
+                    "classification_v2": rec.get("classification_v2"),
+                    "z_excess": rec.get("z_excess"),
                     "miss_reason": rec.get("miss_reason"),
                     "return_pct": rec.get("return_pct"),
                     "excess_pct": rec.get("excess_return_pct"),
@@ -113,10 +170,16 @@ def collect_theses(timelines: dict[str, dict]) -> list[dict]:
 def _summarize(rows: list[dict]) -> dict:
     """Ringkasan satu irisan. `hit_rate_pct` sengaja dihitung atas
     terbukti+meleset saja (ambigu dikeluarkan dari penyebut, bukan dihitung
-    setengah benar) dan bernilai None kalau penyebutnya nol — bukan 0."""
-    terbukti = sum(1 for r in rows if r["classification"] == "terbukti")
-    meleset = sum(1 for r in rows if r["classification"] == "meleset")
-    ambigu = sum(1 for r in rows if r["classification"] == "ambigu")
+    setengah benar) dan bernilai None kalau penyebutnya nol — bukan 0.
+
+    Membaca `verdict` (vonis yang menjawab klaim tesis itu), bukan
+    `classification` mentah — lihat `operative_verdict`. `claim_types` ikut
+    dilaporkan supaya irisan yang tanpa sengaja mencampur dua jenis klaim
+    KETAHUAN dari datanya sendiri, bukan cuma dilarang lewat komentar.
+    """
+    terbukti = sum(1 for r in rows if r["verdict"] == "terbukti")
+    meleset = sum(1 for r in rows if r["verdict"] == "meleset")
+    ambigu = sum(1 for r in rows if r["verdict"] == "ambigu")
     base = terbukti + meleset
     dates = {r["entry_date"] for r in rows if r["entry_date"]}
     returns = [r["return_pct"] for r in rows if r["return_pct"] is not None]
@@ -130,11 +193,19 @@ def _summarize(rows: list[dict]) -> dict:
     if n_dates < MIN_ENTRY_DATES:
         limiters.append(f"cuma {n_dates} tanggal masuk (butuh {MIN_ENTRY_DATES})")
 
+    claim_types = sorted({r["claim_type"] for r in rows if r.get("claim_type")})
+    if len(claim_types) > 1:
+        limiters.append(
+            "mencampur " + " + ".join(CLAIM_LABEL.get(c, c) for c in claim_types)
+            + " — hit rate gabungannya tidak berarti"
+        )
+
     return {
         "n": n,
         "terbukti": terbukti,
         "meleset": meleset,
         "ambigu": ambigu,
+        "claim_types": claim_types,
         "hit_rate_pct": round(terbukti / base * 100, 1) if base else None,
         "entry_dates": n_dates,
         "entry_date_list": sorted(dates)[:10],
@@ -144,7 +215,7 @@ def _summarize(rows: list[dict]) -> dict:
         "with_excess": len(excess),
         # Dua gerbang, dua alasan terpisah — supaya yang membaca tahu MANA
         # yang kurang, bukan sekadar "belum cukup".
-        "evaluable": n >= MIN_THESES and n_dates >= MIN_ENTRY_DATES,
+        "evaluable": n >= MIN_THESES and n_dates >= MIN_ENTRY_DATES and len(claim_types) <= 1,
         "limiters": limiters,
     }
 
@@ -176,7 +247,7 @@ def _not_yet_evaluable(timelines: dict[str, dict], evaluated: list[dict], today:
     """
     done = defaultdict(int)
     for r in evaluated:
-        if r["classification"] in DIRECTIONAL:
+        if r["verdict"] in VERDICTS:
             done[r["module"]] += 1
 
     active = defaultdict(int)
@@ -220,18 +291,39 @@ def _base_rates(rows: list[dict], not_yet: list[dict]) -> dict:
     justru pesan yang paling berguna di kartu ("belum ada yang pernah jatuh
     tempo, paling cepat 2027-07-27"), bukan kekosongan yang dibiarkan
     terbaca seolah tidak ada informasi.
+
+    DIPECAH PER JENIS KLAIM (audit 2026-08-06, D2). Kartu tesis menempelkan
+    angka ini tepat di bawah action-nya, dan sejak `siaga_gerakan` ada, action
+    di kartu bisa mengklaim AMPLITUDO sementara seluruh base rate yang tersedia
+    berasal dari tesis ARAH lama (`masuk_spekulatif`, target absolut 3%). Dua
+    pertanyaan berbeda, dan yang lama kebetulan berangka jauh lebih besar
+    (~30% vs base rate |z| >= 1 sekitar 16%) — jadi kartu yang tidak pernah
+    menjanjikan arah tetap memamerkan hit rate tesis berarah. Frontend
+    sekarang WAJIB memilih lewat `by_claim_type`, dan kalau jenis klaim kartu
+    itu belum punya tesis jatuh tempo, yang benar adalah mengatakannya, bukan
+    jatuh ke angka jenis klaim lain.
     """
     earliest = {n["module"]: n.get("earliest_possible_verdict") for n in not_yet}
     out: dict[str, dict] = {}
+
+    def _with_tiers(subset: list[dict]) -> dict:
+        return {
+            **_summarize(subset),
+            "by_score_tier": {
+                tier: _summarize([r for r in subset if r["score_tier"] == tier])
+                for tier in {r["score_tier"] for r in subset}
+            },
+        }
+
     for module in MODULES:
         mrows = [r for r in rows if r["module"] == module]
-        by_tier: dict[str, dict] = {}
-        for tier in {r["score_tier"] for r in mrows}:
-            by_tier[tier] = _summarize([r for r in mrows if r["score_tier"] == tier])
         out[module] = {
-            **_summarize(mrows),
+            **_with_tiers(mrows),
             "earliest_possible_verdict": earliest.get(module),
-            "by_score_tier": by_tier,
+            "by_claim_type": {
+                kind: _with_tiers([r for r in mrows if r["claim_type"] == kind])
+                for kind in CLAIM_TYPES
+            },
         }
     return out
 
@@ -277,7 +369,7 @@ def _mechanical_tuning(rows: list[dict], slices: list[dict], overall: dict) -> d
 def build_calibration(timelines: dict[str, dict], today: date | None = None) -> dict:
     today = today or datetime.now(timezone.utc).date()
     all_rows = collect_theses(timelines)
-    rows = [r for r in all_rows if r["classification"] in DIRECTIONAL]
+    rows = [r for r in all_rows if r["verdict"] in VERDICTS]
 
     miss_reasons: dict[str, int] = defaultdict(int)
     for r in rows:
@@ -285,7 +377,11 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
             miss_reasons[r["miss_reason"]] += 1
 
     slices = (
-        _slice_by(rows, "modul", lambda r: r["module"])
+        # Jenis klaim didahulukan: ini satu-satunya dimensi yang irisannya
+        # TIDAK boleh dijumlahkan dengan irisan lain di dimensi yang sama
+        # (lihat operative_verdict), jadi ia harus terbaca lebih dulu.
+        _slice_by(rows, "jenis klaim", lambda r: CLAIM_LABEL.get(r["claim_type"], r["claim_type"]))
+        + _slice_by(rows, "modul", lambda r: r["module"])
         + _slice_by(rows, "horizon", lambda r: r["horizon"])
         + _slice_by(rows, "action", lambda r: r["action"])
         + _slice_by(rows, "stance", lambda r: r["stance"])
@@ -307,6 +403,13 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
         "theses_total": len(all_rows),
         "theses_directional": len(rows),
         "overall": overall,
+        # `overall` di atas menjumlahkan dua jenis klaim, jadi hit rate-nya
+        # sengaja ditandai tidak layak pakai lewat `limiters`/`evaluable`
+        # (lihat _summarize). Angka yang boleh dibaca ada di sini, terpisah.
+        "overall_by_claim_type": {
+            kind: _summarize([r for r in rows if r["claim_type"] == kind])
+            for kind in CLAIM_TYPES
+        },
         "miss_reasons": dict(sorted(miss_reasons.items(), key=lambda kv: -kv[1])),
         "slices": slices,
         "not_yet_evaluable": not_yet,

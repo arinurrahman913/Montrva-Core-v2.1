@@ -14,6 +14,7 @@ import { MODULE_LABELS, prettyStance } from '../format'
 // menyetel threshold dari dua hari pasar.
 
 const DIM_HELP = {
+  'jenis klaim': 'Aturan mana yang memvonis. Klaim ARAH dinilai terhadap target absolut per horizon (vonis v1); klaim AMPLITUDO dinilai |z| >= 1, yaitu excess terhadap indeks dibagi deru saham itu sendiri (vonis v2). Dua pertanyaan berbeda — hit rate-nya tidak boleh dijumlahkan, dan irisan mana pun yang mencampur keduanya ditandai belum layak pakai.',
   modul: 'Lensa mana yang sudah bisa dinilai sama sekali.',
   horizon: 'Threshold per horizon (mingguan 3%, bulanan 5%, dst) — kalau satu horizon selalu meleset tipis, yang salah bisa jadi thresholdnya.',
   action: 'Action mana yang benar-benar menghasilkan, bukan cuma sering muncul.',
@@ -32,6 +33,49 @@ function GateBadge({ row }) {
     <span className="pill" style={{ fontSize: 9.5, color: 'var(--faint)' }} title={row.limiters.join(' · ')}>
       belum cukup bukti
     </span>
+  )
+}
+
+// Pecahan per jenis klaim, ditaruh SEBELUM irisan lain.
+//
+// Sejak lensa Spekulatif berhenti mengklaim arah (`siaga_gerakan`, 5 Agu
+// 2026), riwayat memuat dua jenis vonis yang dihasilkan aturan berbeda.
+// Angka "overall" di atas menjumlahkan keduanya, jadi ia sengaja ditandai
+// tidak layak pakai lewat `limiters` — pecahan yang boleh dibaca ada di sini.
+// Tanpa blok ini, satu-satunya angka besar di halaman ini adalah yang tidak
+// berarti apa-apa.
+function ClaimTypeSplit({ split }) {
+  const rows = Object.entries(split || {}).filter(([, v]) => v && v.n > 0)
+  if (rows.length === 0) return null
+  return (
+    <div style={{ padding: '12px 14px', marginBottom: 18, background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
+      <div style={{ fontSize: 12, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 8 }}>
+        Pecahan per jenis klaim
+      </div>
+      <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+        {rows.map(([kind, s]) => (
+          <div key={kind}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 18, opacity: s.evaluable ? 1 : 0.55 }}>{pct(s.hit_rate_pct)}</div>
+            <div style={{ fontSize: 11, color: 'var(--dim)' }}>
+              klaim {kind} — {s.terbukti} terbukti · {s.meleset} meleset
+              {s.ambigu ? ` · ${s.ambigu} ambigu` : ''} dari {s.n} tesis
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--faint)' }}>
+              {kind === 'amplitudo'
+                ? 'dinilai |z| ≥ 1: excess terhadap indeks, dibagi deru saham itu sendiri'
+                : 'dinilai terhadap target absolut per horizon'}
+            </div>
+          </div>
+        ))}
+      </div>
+      {rows.length > 1 && (
+        <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)', lineHeight: 1.6 }}>
+          Kedua angka di atas menjawab pertanyaan yang berbeda dan sengaja tidak dijumlahkan. Hit rate klaim arah
+          menghitung seberapa sering harga naik melewati target; hit rate klaim amplitudo menghitung seberapa sering
+          gerakannya melewati deru saham itu sendiri, ke arah mana pun.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -255,6 +299,8 @@ export default function PersonalCalibrationView() {
           </div>
         )}
       </div>
+
+      <ClaimTypeSplit split={data.overall_by_claim_type} />
 
       {data.not_yet_evaluable?.length > 0 && <NotYetEvaluable items={data.not_yet_evaluable} />}
 

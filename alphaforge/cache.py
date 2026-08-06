@@ -54,17 +54,41 @@ def _path(namespace: str, key: str) -> Path:
     return d / f"{safe_key}.json"
 
 
+def _read_payload(p: Path) -> tuple[float, object] | None:
+    """(cached_at, data) dari satu berkas cache, atau None kalau berkasnya
+    tidak bisa dipakai.
+
+    `cached_at` sengaja dibaca DI DALAM penjagaan yang sama dengan parsing --
+    audit 2026-08-06 (D9). Sebelumnya `payload["cached_at"]` ada di luar
+    try, jadi berkas yang JSON-nya sah tapi bentuknya tidak terduga (list, atau
+    dict tanpa kunci itu -- sisa format lama, atau hasil tulis yang terpotong
+    tepat di batas yang kebetulan masih valid) melempar KeyError/TypeError ke
+    PEMANGGIL alih-alih diperlakukan sebagai cache-miss. Cache adalah optimasi;
+    berkasnya tidak boleh pernah bisa menggagalkan perhitungan yang datanya
+    sudah ada -- prinsip yang sama yang sudah dipakai `set()` untuk kegagalan
+    tulis.
+    """
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        cached_at = payload["cached_at"]
+        if not isinstance(cached_at, (int, float)):
+            return None
+        return float(cached_at), payload["data"]
+    except Exception:
+        return None
+
+
 def get(namespace: str, key: str, ttl_seconds: float):
     p = _path(namespace, key)
     if not p.exists():
         return None
-    try:
-        payload = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    payload = _read_payload(p)
+    if payload is None:
         return None
-    if time.time() - payload["cached_at"] > ttl_seconds:
+    cached_at, data = payload
+    if time.time() - cached_at > ttl_seconds:
         return None
-    return payload["data"]
+    return data
 
 
 def set(namespace: str, key: str, data) -> None:
@@ -142,9 +166,8 @@ def get_stale(namespace: str, key: str):
     p = _path(namespace, key)
     if not p.exists():
         return None
-    try:
-        payload = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    payload = _read_payload(p)
+    if payload is None:
         return None
-    age = time.time() - payload["cached_at"]
-    return payload["data"], age
+    cached_at, data = payload
+    return data, time.time() - cached_at

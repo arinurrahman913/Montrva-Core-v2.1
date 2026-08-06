@@ -36,9 +36,28 @@ action diperbaiki, bar tak lengkap dibuang — tapi konsumen di frontend,
 rapor kalibrasi, dan penulis record tetap membaca bentuk yang lama. Tidak
 satu pun dari ini akan memunculkan error; semuanya gagal dengan diam.
 
-### TERBUKA — kritis
+**Status: 8 dari 9 SELESAI di commit yang sama dengan catatan ini.** Yang
+tersisa cuma D4, dan bukan karena sulit: sisanya adalah keputusan kalibrasi
+(rem apa yang pantas untuk pita atas), bukan cacat yang bisa diperbaiki
+sepihak — sekelas A7/A8. Penjaganya sudah ada
+(`scripts/check_action_table.py`) supaya bagian yang BERBAHAYA dari kelas bug
+itu tidak bisa kambuh diam-diam.
 
-#### D1. Vonis lensa Spekulatif berhenti terbaca di seluruh sistem — TERBUKA
+Verifikasi tiap perbaikan dijalankan, bukan cuma dibaca:
+
+| Temuan | Bukti |
+|---|---|
+| D1 | `build_calibration` atas riwayat sintetis: `theses_directional` 0 -> 6 |
+| D2 | `base_rates.speculative.by_claim_type.amplitudo` terisi terpisah dari `arah` |
+| D3 | evaluasi ujung-ke-ujung: `exit_price` 130.0 (kuotasi hidup) -> 110.0 (penutupan pada `exit_date`) |
+| D5 | jendela campuran: sigma 3,94x -> 0,84x nilai benar; jalur harian **bit-identik** dengan rumus lama |
+| D7 | streak yang tumbuh sesudah divonis: 4/5 entry terisi -> 5/5 |
+| D8 | kunci kosong baru = AKTIF (tidak dicuri); kunci kosong berumur 1 jam = tetap dibuang |
+| D9 | 4 bentuk berkas cache rusak -> semuanya cache-miss, nol lemparan ke pemanggil |
+
+### Kritis — SELESAI
+
+#### D1. Vonis lensa Spekulatif berhenti terbaca di seluruh sistem — SELESAI
 `personal_evaluation.py::_classify` · `personal_calibration.py` · frontend
 
 Sejak `0f3f337` lensa Spekulatif mengeluarkan `siaga_gerakan`, yang masuk
@@ -75,7 +94,7 @@ terisi, karena angka lamanya masih di sana. Ini persis kelas kegagalan yang
 `mechanical_tuning` dibangun untuk mencegah, kecuali kali ini yang membeku
 adalah buktinya sendiri, bukan penggunaannya.
 
-#### D2. Base rate di kartu tesis menjawab pertanyaan yang berbeda dari klaim kartunya — TERBUKA
+#### D2. Base rate di kartu tesis menjawab pertanyaan yang berbeda dari klaim kartunya — SELESAI
 `ThesisProof.jsx::BaseRateNote:80` · `personal_calibration.py::_base_rates`
 
 Lanjutan langsung D1, tapi lebih menyesatkan karena angkanya TIDAK kosong.
@@ -93,9 +112,9 @@ tepat bentuk kesalahan yang `claim_type` ditulis untuk dicegah ("rapor
 kalibrasi akan menjumlahkan tesis arah dengan tesis amplitudo jadi satu
 angka yang tidak berarti apa-apa" — docstring `claim_type`).
 
-### TERBUKA — sedang
+### Sedang
 
-#### D3. `exit_price` bukan penutupan pada `exit_date`; excess masih beda tanggal — TERBUKA
+#### D3. `exit_price` bukan penutupan pada `exit_date`; excess masih beda tanggal — SELESAI
 `personal_evaluation.py:501,564` · `yahoo_evidence.py:268`
 
 Revisi 2026-08-04 (keputusan #4b di docstring modul) menutup ketidakcocokan
@@ -122,7 +141,7 @@ sering berjalan di tengah sesi; ini bukan kasus tepi. `close` + `ohlc_date`
 (keduanya sudah ada di `PriceMarketData` sejak `09e1eff`) adalah pasangan
 yang konsisten dan belum dipakai di jalur ini.
 
-#### D4. 8 sel `ACTION_TABLE` mustahil tercapai — perbaikan `402a51d` baru separuh — TERBUKA
+#### D4. 8 sel `ACTION_TABLE` mustahil tercapai — perbaikan `402a51d` baru separuh — BUTUH KEPUTUSAN
 `reasoning.py:236` · `personal_reasoning.py::ACTION_TABLE`
 
 `STANCE_STRONG_THRESHOLD` dinaikkan 70 -> 75 supaya sel campuran tabel hidup.
@@ -152,7 +171,22 @@ MENAMBAH eksposur dan tidak pernah sekadar menahan — kebalikan dari kehati-
 hatian yang tabelnya tampak mengkodekan. Satu-satunya rem yang tersisa di
 sana adalah penurunan P4 (`band == "low"`).
 
-#### D5. `window_sigma_pct` mencampur bar harian dan bulanan untuk horizon > 1 tahun — TERBUKA
+**Tindakan 2026-08-06:** komentar di `reasoning.py:217-236` yang menyatakan
+kedua sel tertutup sudah dikoreksi, dan `scripts/check_action_table.py`
+sekarang menghitung ulang SELURUH sel mati, memisahkan yang tidak berbahaya
+(action-nya masih tercapai lewat sel lain) dari yang MENGHILANGKAN sebuah
+action — dan keluar dengan status != 0 untuk yang kedua. Hari ini: 22 sel
+mati, nol action hilang.
+
+Ambangnya sendiri TIDAK disentuh. Menggesernya ke arah mana pun cuma
+memindahkan sel matinya (di atas gerbang tier -> pita atas selalu "high"; di
+bawahnya -> pita tengah yang mati), jadi memperbaikinya berarti memilih rem
+lain untuk pita atas — keputusan kalibrasi seperti A7/A8, bukan bug yang
+boleh diputus sepihak. Pertanyaan yang menunggu jawaban pengguna: apakah
+holding berstance teratas memang selalu pantas menerima action eksposur
+penuh, atau perlu gerbang kedua yang independen dari skor tesis?
+
+#### D5. `window_sigma_pct` mencampur bar harian dan bulanan untuk horizon > 1 tahun — SELESAI
 `personal_evaluation.py:282-324`
 
 `price_history` di `evidence.json` harian hanya ~1 tahun terakhir; tahun ke-2
@@ -178,9 +212,9 @@ yang **harian penuh 5 tahun**, sedangkan jalur produksi membaca deret
 ringkas. Untuk tesis yang sama, kedua jalur menghasilkan `sigma_window_pct`
 yang berbeda, dan tidak ada field yang menandai mana yang menulis.
 
-### TERBUKA — rendah
+### Rendah — SELESAI
 
-#### D6. Backfill v2 tidak menulis `claim_type` — TERBUKA
+#### D6. Backfill v2 tidak menulis `claim_type` — SELESAI
 `scripts/backfill_verdict_v2.py:99-102`
 
 Menulis 4 dari 5 field v2 (`classification_v2`, `z_excess`,
@@ -191,7 +225,7 @@ punya penanda jenis klaim; konsumen mana pun yang nanti memecah rapor per
 `claim_type` (yaitu perbaikan D1/D2) akan melihat bucket kosong untuk seluruh
 periode pra-5-Agu.
 
-#### D7. Entry yang menyusul streak yang sudah divonis tidak pernah menerima outcome — TERBUKA
+#### D7. Entry yang menyusul streak yang sudah divonis tidak pernah menerima outcome — SELESAI
 `personal_evaluation.py:479`
 
 Keputusan #2 di docstring modul menjanjikan "baris Riwayat mana pun yang
@@ -206,7 +240,7 @@ Statistik tidak terpengaruh (dedupe `thesis_key` di frontend maupun
 `collect_theses` sudah benar) — murni inkonsistensi tampilan, tapi tepat pada
 invariant yang modul ini nyatakan sendiri.
 
-#### D8. Jendela sempit pencurian kunci di `runlock.acquire` — TERBUKA
+#### D8. Jendela sempit pencurian kunci di `runlock.acquire` — SELESAI
 `runlock.py:133-143`
 
 `os.open(O_CREAT|O_EXCL)` dan penulisan payload adalah dua langkah terpisah.
@@ -219,7 +253,7 @@ penuh yang modul ini ada untuk mencegah. Menulis payload ke tmp lalu
 `os.replace` (pola yang sudah dipakai `cache.set` dan `write_text_atomic`)
 menutupnya.
 
-#### D9. `cache.get`/`get_stale` membaca `payload["cached_at"]` di luar `try` — TERBUKA (lama)
+#### D9. `cache.get`/`get_stale` membaca `payload["cached_at"]` di luar `try` — SELESAI
 `cache.py:65,149`
 
 Berkas cache yang JSON-nya sah tapi bentuknya tidak terduga (list, atau dict

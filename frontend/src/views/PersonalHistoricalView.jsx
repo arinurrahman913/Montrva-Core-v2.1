@@ -3,7 +3,10 @@ import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
-import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, isBestAction, rankPersonalPicks } from '../format'
+import {
+  MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, isBestAction, rankPersonalPicks,
+  operativeVerdict, claimTypeOf, CLAIM_RULE_LABEL,
+} from '../format'
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -225,10 +228,14 @@ function BenchmarkRow({ outcome }) {
   )
 }
 
-function OutcomeCard({ outcome }) {
+function OutcomeCard({ outcome, action }) {
   const hasPrices = outcome.entry_price != null || outcome.exit_price != null
   const ret = outcome.return_pct
-  const tone = outcome.classification === 'terbukti' ? 'var(--good)' : outcome.classification === 'meleset' ? 'var(--bad)' : 'var(--dim)'
+  // Vonis yang MENJAWAB klaim tesis ini, bukan `classification` mentah —
+  // lihat operativeVerdict di format.js (audit 2026-08-06, D1).
+  const verdict = operativeVerdict(outcome, action)
+  const claim = claimTypeOf(outcome, action)
+  const tone = verdict === 'terbukti' ? 'var(--good)' : verdict === 'meleset' ? 'var(--bad)' : 'var(--dim)'
   const meta = []
   if (outcome.due_at) meta.push(`jatuh tempo ${fmtDay(outcome.due_at)}`)
   if (outcome.horizon_days != null) meta.push(`horizon ${outcome.horizon_days} hari`)
@@ -237,12 +244,23 @@ function OutcomeCard({ outcome }) {
   return (
     <div style={{ marginTop: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span className={`pill ${outcomeClass(outcome.classification)}`}>{prettyOutcome(outcome.classification)}</span>
+        <span className={`pill ${outcomeClass(verdict)}`} title={CLAIM_RULE_LABEL[claim]}>{prettyOutcome(verdict)}</span>
         {ret != null && (
           <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: tone }}>{ret >= 0 ? '+' : ''}{ret}%</span>
         )}
-        {outcome.threshold_pct != null && (
-          <span style={{ fontSize: 10, color: 'var(--faint)' }}>target +{outcome.threshold_pct}%</span>
+        {/* Aturan mana yang memvonis. "terbukti" di bawah aturan arah dan
+            "terbukti" di bawah aturan amplitudo menjawab pertanyaan yang
+            berbeda; tanpa penanda ini keduanya terlihat identik. */}
+        {claim === 'amplitudo' ? (
+          outcome.z_excess != null && (
+            <span style={{ fontSize: 10, color: 'var(--faint)' }} title={CLAIM_RULE_LABEL.amplitudo}>
+              z {outcome.z_excess >= 0 ? '+' : ''}{outcome.z_excess} · ambang |z| ≥ {outcome.z_threshold ?? 1}
+            </span>
+          )
+        ) : (
+          outcome.threshold_pct != null && (
+            <span style={{ fontSize: 10, color: 'var(--faint)' }}>target +{outcome.threshold_pct}%</span>
+          )
         )}
         <MissReason reason={outcome.miss_reason} />
       </div>
@@ -339,7 +357,7 @@ function ExpandedTimeline({ ticker, timeline, calibration }) {
               </div>
               <RiskBadge call={call} />
               {moduleOutcome ? (
-                <OutcomeCard outcome={moduleOutcome} />
+                <OutcomeCard outcome={moduleOutcome} action={call.action} />
               ) : (
                 <ThesisProof ticker={ticker} module={module} action={call.action} horizon={call.horizon} horizonAnchor={call.horizon_anchor} calibration={calibration} thesisScore={call.thesis_score} />
               )}
@@ -360,7 +378,7 @@ function outcomeSummary(entry) {
   if (!entry?.outcome) return null
   const counts = { terbukti: 0, meleset: 0, ambigu: 0 }
   for (const m of MODULES) {
-    const c = entry.outcome[m]?.classification
+    const c = operativeVerdict(entry.outcome[m], entry.personal_call_set?.[m]?.action)
     if (c in counts) counts[c] += 1
   }
   return counts
@@ -475,6 +493,11 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   // menampilkannya, "hit 29,9% dari 167 tesis" terbaca jauh lebih meyakinkan
   // daripada bukti yang sebenarnya ada.
   const entryDates = new Set()
+  // Jenis klaim yang ikut tercampur ke dalam angka gabungan di bawah. Hit rate
+  // yang menjumlahkan tesis arah dengan tesis amplitudo tidak berarti apa-apa
+  // (lihat operativeVerdict), jadi kalau keduanya hadir, angkanya harus
+  // menyatakan itu — bukan diam-diam ditampilkan sebagai satu persen.
+  const claimsSeen = new Set()
   for (const t of timelines) {
     for (const e of t.entries || []) {
       if (!e.outcome) continue
@@ -492,12 +515,21 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
         const key = `${t.ticker}:${o.thesis_key || `${m}:${e.analyzed_at}`}`
         if (seenThesisKeys.has(key)) continue
         seenThesisKeys.add(key)
-        if (o.classification === 'terbukti') terbukti++
-        else if (o.classification === 'meleset') meleset++
-        else if (o.classification === 'ambigu') ambigu++
+        // Vonis yang menjawab klaim tesis ini (audit 2026-08-06, D1). Sebelum
+        // ini, seluruh tesis `siaga_gerakan` — yaitu SEMUA tesis Spekulatif
+        // sejak 5 Agu, satu-satunya lensa yang bisa jatuh tempo tahun ini —
+        // punya classification "tidak_berlaku" dan tidak masuk hitungan mana
+        // pun di bawah, sehingga kartu Track Record membeku diam-diam.
+        const v = operativeVerdict(o, e.personal_call_set?.[m]?.action)
+        const claim = claimTypeOf(o, e.personal_call_set?.[m]?.action)
+        if (v === 'terbukti') terbukti++
+        else if (v === 'meleset') meleset++
+        else if (v === 'ambigu') ambigu++
+        else continue
+        claimsSeen.add(claim)
         if (o.excess_return_pct != null) { excessSum += o.excess_return_pct; excessCount += 1 }
         if (o.miss_reason) missTally[o.miss_reason] = (missTally[o.miss_reason] || 0) + 1
-        if (o.classification && o.classification !== 'tidak_berlaku' && o.entry_date) entryDates.add(o.entry_date)
+        if (o.entry_date) entryDates.add(o.entry_date)
       }
     }
   }
@@ -513,6 +545,14 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
       label: 'Track Record',
       value: accuracyPct != null ? `${accuracyPct.toFixed(0)}%` : '—',
       tone: accuracyPct == null ? undefined : accuracyPct >= 50 ? 'good' : 'bad',
+      // Kalau riwayatnya memuat DUA jenis klaim, satu persen gabungan
+      // menjumlahkan "tesis arah yang benar" dengan "tesis amplitudo yang
+      // benar" — dua pertanyaan berbeda. Angkanya tetap ditampilkan (rapor
+      // Kalibrasi memecahnya dengan benar), tapi tidak boleh terbaca sebagai
+      // satu ukuran tunggal tanpa peringatan.
+      sub: claimsSeen.size > 1
+        ? 'mencampur klaim arah + amplitudo — lihat Kalibrasi untuk pecahannya'
+        : undefined,
     },
     {
       // Dihitung per TESIS (thesis_key), sama dengan Track Record di atas.

@@ -59,6 +59,17 @@ Lima keputusan penting di modul ini (hasil audit 2026-07-27):
        `exit_date` yang sama; `benchmark_price_now` cuma cadangan terakhir
        dan ditandai lewat `benchmark_source`.
 
+   REVISI 2026-08-06 (audit D3): (b) di atas baru menyelesaikan sisi INDEKS.
+   Sisi sahamnya masih memakai `price_market.last_price` — kuotasi HIDUP, bisa
+   dari sesi yang belum selesai — sementara `exit_date` menunjuk bar lengkap
+   terakhir, yang sejak `09e1eff` (bar tak lengkap dibuang) rutin satu sesi
+   lebih awal. Jadi ketidakcocokan tanggal yang sama masih ada, cuma pindah
+   sisi; dan sejak vonis v2, excess adalah PEMBILANG z, jadi kesalahan itu
+   ikut mengalir ke vonis. Sekarang harga keluar diambil dari BARIS yang sama
+   dengan `exit_date` (lihat `_last_complete_bar`), sehingga saham dan indeks
+   benar-benar dibaca pada tanggal yang sama, dan `exit_price` yang disimpan
+   memang penutupan pada `exit_date` di sebelahnya.
+
 5. ADA `thesis_key`. Sama untuk semua entry dalam satu streak — dipakai
    frontend untuk menghitung "berapa tesis yang terbukti/meleset" (bukan
    "berapa baris"), supaya tesis yang lama dipegang tidak mendominasi
@@ -152,14 +163,37 @@ def _reconstruct_start_price(price_history: list[dict] | None, since_date: str) 
     return best_close
 
 
-def _last_bar_date(price_history: list[dict] | None) -> str | None:
-    """Tanggal bar terakhir yang tersedia -- dipakai sebagai tanggal harga
-    penutup yang benar-benar dipakai evaluasi. price_history sudah dinormalkan
-    ke dict oleh pemanggil."""
+def _last_complete_bar(price_history: list[dict] | None) -> tuple[str | None, float | None]:
+    """(tanggal, penutupan) bar lengkap terakhir — SATU pasang, dari baris yang
+    sama.
+
+    Audit 2026-08-06 (D3): sisi keluar dulu memakai `price_market.last_price`
+    (kuotasi HIDUP, bisa dari sesi yang belum selesai) sementara `exit_date`
+    diambil dari bar lengkap terakhir, dan harga indeks dibaca pada `exit_date`
+    itu. Sejak `09e1eff` membuang bar tak lengkap dari price_history, keduanya
+    rutin berbeda satu sesi. Dua akibatnya: `excess_return_pct` — yang sejak
+    vonis v2 jadi PEMBILANG z, bukan lagi sekadar metrik pendukung — kembali
+    memuat satu sesi gerak indeks yang bukan hasil tesis, dan record menyimpan
+    `exit_price` yang bukan penutupan pada `exit_date` di sebelahnya.
+
+    Mengambil tanggal dan harga dari baris yang sama membuat pasangan itu benar
+    by construction, dan menempatkan sisi saham pada tanggal yang sama dengan
+    sisi indeks. Ini deret yang sama yang dipakai window_sigma_pct, jadi
+    pembilang dan penyebut z akhirnya mengukur jendela yang sama persis.
+    """
     if not price_history:
-        return None
-    dates = [b.get("date") for b in price_history if b.get("date")]
-    return max(dates)[:10] if dates else None
+        return None, None
+    best_date = None
+    best_close = None
+    for b in price_history:
+        d = b.get("date")
+        close = b.get("close")
+        if not d or close is None:
+            continue
+        d = str(d)[:10]
+        if best_date is None or d > best_date:
+            best_date, best_close = d, close
+    return best_date, best_close
 
 
 def _classify(action: str, horizon: str, return_pct: float | None) -> str | None:
@@ -279,6 +313,34 @@ SIGMA_LOOKBACK_BARS = 60
 SIGMA_MIN_BARS = 20
 
 
+def _business_days(a: date, b: date) -> int:
+    """Hari bursa (Sen-Jum) dari `a` sampai `b`, tidak menghitung `a` sendiri.
+
+    Libur bursa diabaikan (~9 hari/tahun, <4%) — presisi segitu tidak
+    menggerakkan vonis |z| >= 1, dan menambah kalender libur berarti dependensi
+    baru untuk ketelitian yang tidak dipakai. Dipakai HANYA di wilayah bar
+    bulanan; di wilayah harian jumlah bar yang sebenarnya lebih tepat dan
+    itu yang dipakai (lihat window_sigma_pct).
+    """
+    if b <= a:
+        return 0
+    full_weeks, rem = divmod((b - a).days, 7)
+    n = full_weeks * 5
+    wd = a.weekday()
+    for i in range(1, rem + 1):
+        if (wd + i) % 7 < 5:
+            n += 1
+    return n
+
+
+def _bar_gap_days(d1: str, d2: str) -> int:
+    """Jarak dua bar berurutan dalam hari bursa, minimal 1."""
+    try:
+        return max(1, _business_days(date.fromisoformat(d1), date.fromisoformat(d2)))
+    except ValueError:
+        return 1
+
+
 def window_sigma_pct(
     price_history: list[dict] | None, entry_date: str | None, exit_date: str | None,
 ) -> float | None:
@@ -286,9 +348,31 @@ def window_sigma_pct(
 
     sigma harian dihitung dari maksimal SIGMA_LOOKBACK_BARS bar terakhir yang
     tanggalnya <= entry_date (tidak pernah menyentuh bar di dalam jendela --
-    lihat catatan #2 di atas), lalu diskalakan akar-waktu ke jumlah bar bursa
-    yang benar-benar ada di dalam jendela. Memakai jumlah bar, bukan selisih
-    hari kalender: akhir pekan tidak menambah deru.
+    lihat catatan #2 di atas), lalu diskalakan akar-waktu ke panjang jendela.
+
+    JARAK ANTAR-BAR TIDAK BOLEH DIANGGAP SERAGAM (audit 2026-08-06, D5).
+    `price_history` di evidence.json harian hanya ~1 tahun terakhir; tahun ke-2
+    s/d ke-5 satu bar per BULAN (`_downsample_price_history`). Versi pertama
+    fungsi ini memperlakukan seluruh deret sebagai bar harian, jadi untuk tesis
+    berumur > 1 tahun: `prior` seluruhnya bar bulanan sehingga "sigma harian"
+    yang dihitung sebenarnya sigma bulanan (~sqrt(21) kali terlalu besar),
+    sementara jendelanya dihitung dalam bar HARIAN (~252/tahun). Untuk tesis
+    Multibagger 730 hari itu melebihkan sigma sekitar 3x, mengecilkan z 3x, dan
+    mendaratkan hampir semua vonis di "ambigu" — aktif tepat pada vonis PERTAMA
+    lensa jangka panjang (2027), saat tidak ada lagi pembanding untuk
+    menyadarinya.
+
+    Dua penawarnya, keduanya menjaga jalur harian tetap PERSIS seperti semula
+    (bar berurutan berjarak 1 hari bursa -> pembagi sqrt(1) -> tidak berubah,
+    jadi vonis v2 yang sudah tertulis tidak bergeser):
+
+      1. tiap return dinormalkan ke setara-harian dengan membaginya sqrt(jarak
+         bar dalam hari bursa). Bar bulanan menghasilkan sigma bulanan/sqrt(21),
+         yang memang penaksir sigma harian.
+      2. panjang jendela memakai jumlah bar kalau deret di dalamnya masih
+         harian (jumlah bar itu ukuran yang PERSIS, libur bursa terhitung
+         benar), dan jatuh ke hitungan hari bursa kalau tidak — di wilayah
+         bulanan satu bar tidak lagi mewakili satu hari.
 
     None kalau bar historisnya kurang dari SIGMA_MIN_BARS -- pemanggil
     menuliskannya sebagai vonis v2 yang kosong, bukan menebak.
@@ -303,12 +387,14 @@ def window_sigma_pct(
     if not bars:
         return None
 
-    prior = [c for d, c in bars if d <= entry_date[:10]][-SIGMA_LOOKBACK_BARS:]
+    entry, exit_ = entry_date[:10], exit_date[:10]
+    prior = [(d, c) for d, c in bars if d <= entry][-SIGMA_LOOKBACK_BARS:]
     if len(prior) < SIGMA_MIN_BARS:
         return None
     rets = [
-        (prior[i] - prior[i - 1]) / prior[i - 1] * 100.0
-        for i in range(1, len(prior)) if prior[i - 1]
+        (prior[i][1] - prior[i - 1][1]) / prior[i - 1][1] * 100.0
+        / (_bar_gap_days(prior[i - 1][0], prior[i][0]) ** 0.5)
+        for i in range(1, len(prior)) if prior[i - 1][1]
     ]
     if len(rets) < SIGMA_MIN_BARS - 1:
         return None
@@ -318,10 +404,17 @@ def window_sigma_pct(
     if sigma_daily <= 0:
         return None
 
-    n_bars = sum(1 for d, _ in bars if entry_date[:10] < d <= exit_date[:10])
-    if n_bars < 1:
+    n_bars = sum(1 for d, _ in bars if entry < d <= exit_)
+    try:
+        n_business = _business_days(date.fromisoformat(entry), date.fromisoformat(exit_))
+    except ValueError:
+        n_business = n_bars
+    # Deret di dalam jendela masih harian kalau jumlah barnya mendekati jumlah
+    # hari bursa; kalau jauh lebih sedikit, jendelanya jatuh di wilayah bulanan.
+    n = n_bars if n_bars >= n_business * 0.8 else n_business
+    if n < 1:
         return None
-    return sigma_daily * (n_bars ** 0.5)
+    return sigma_daily * (n ** 0.5)
 
 
 def claim_type(action: str) -> str:
@@ -475,8 +568,27 @@ def evaluate_due_entries(
                 start_entry = streak[0]
                 # Sudah pernah dievaluasi (entry mana pun di streak ini yang
                 # sudah punya outcome buat modul ini menandai SELURUH streak
-                # sudah divonis -- lihat docstring _find_streaks) -- lompat.
-                if any((e.get("outcome") or {}).get(module) for e in streak):
+                # sudah divonis -- lihat docstring _find_streaks).
+                #
+                # Audit 2026-08-06 (D7): dulu ini `continue` begitu saja, dan
+                # itu melanggar janji keputusan #2 di docstring modul ("baris
+                # Riwayat mana pun ... menunjukkan verdict yang sama"). Sebuah
+                # streak TERUS TUMBUH selama action-nya tidak berubah, jadi
+                # entry harian yang lahir SESUDAH vonis ikut bergabung ke
+                # streak yang sudah dilewati ini dan tidak pernah terisi —
+                # tesis yang sama tampil "terbukti" di baris lama dan "menunggu
+                # evaluasi" di baris baru. Vonisnya tidak dihitung ulang (itu
+                # yang bikin nilainya bergeser tiap hari); yang sudah ada
+                # disalin apa adanya ke entry yang belum punya.
+                done = next(
+                    (rec for e in streak if (rec := (e.get("outcome") or {}).get(module))), None
+                )
+                if done is not None:
+                    for e in streak:
+                        outcome = e.get("outcome") or {}
+                        if not outcome.get(module):
+                            outcome[module] = done
+                            e["outcome"] = outcome
                     continue
 
                 since = start_entry.get("analyzed_at") or ""
@@ -494,11 +606,19 @@ def evaluate_due_entries(
                     start_price = _reconstruct_start_price(price_history, since[:10])
                     baseline = "price_history"
 
-                return_pct = _price_return_pct(start_price, current_price)
+                # Harga saham keluar dibaca pada bar lengkap terakhir, DAN
+                # harganya diambil dari baris yang sama dengan tanggalnya
+                # (lihat _last_complete_bar) -- harga indeks lalu dibaca pada
+                # tanggal itu juga, bukan hari ini. `last_price` cuma cadangan
+                # kalau tidak ada satu pun bar; `exit_price_source` menandainya
+                # supaya jendela yang tidak sejajar tetap bisa dikenali.
+                exit_date, exit_close = _last_complete_bar(price_history)
+                if exit_close is not None:
+                    exit_price, exit_price_source = exit_close, "bar_lengkap"
+                else:
+                    exit_price, exit_price_source = current_price, "kuotasi_terakhir"
 
-                # Harga saham keluar dibaca pada bar lengkap terakhir; harga
-                # indeks harus dibaca pada TANGGAL YANG SAMA, bukan hari ini.
-                exit_date = _last_bar_date(price_history)
+                return_pct = _price_return_pct(start_price, exit_price)
                 bench_start, bench_end, bench_source = resolve_benchmark_pair(
                     benchmark_series,
                     start_call.get("benchmark_at_call"),
@@ -561,7 +681,12 @@ def evaluate_due_entries(
                     # baru, tidak ada perhitungan ulang.
                     "entry_price": round(start_price, 4) if start_price is not None else None,
                     "entry_date": since[:10],
-                    "exit_price": round(current_price, 4) if current_price is not None else None,
+                    "exit_price": round(exit_price, 4) if exit_price is not None else None,
+                    # Dari mana `exit_price` berasal. "bar_lengkap" = penutupan
+                    # PADA `exit_date` di bawah, jadi sejajar dengan harga
+                    # indeks; "kuotasi_terakhir" = tidak ada bar sama sekali,
+                    # jadi tanggalnya tidak sejajar dan excess-nya kasar.
+                    "exit_price_source": exit_price_source,
                     # Tanggal bar terakhir yang tersedia saat evaluasi -- BUKAN
                     # due_at. Keduanya sering beda dan itu bukan bug: BE jatuh
                     # tempo Minggu 2 Agu, harga yang dipakai tutupan Jumat 31

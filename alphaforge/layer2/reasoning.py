@@ -233,6 +233,22 @@ INF = float("inf")
 #
 # Speculative TIDAK ikut: ambangnya 60, sudah beda dari gerbang, jadi sel
 # campurannya memang sudah hidup.
+#
+# KOREKSI (audit 2026-08-06, D4): yang di atas menutup SATU dari dua sel, bukan
+# keduanya. `[pita tengah][tier high]` sekarang hidup (skor 70-74) dan itu yang
+# menghidupkan action perantara. Tapi `[pita atas][tier medium/low]` tetap
+# mustahil dan tidak bisa diperbaiki dengan menggeser ambang ini ke arah mana
+# pun: selama stance dan tier dibaca dari BILANGAN YANG SAMA, ambang stance di
+# ATAS gerbang tier berarti pita atas selalu tier "high", dan ambang di BAWAHnya
+# cuma memindahkan sel matinya ke pita tengah. Akibatnya kolom tingkat inert di
+# pita atas — untuk posisi `holding` itu berarti stance teratas selalu menerima
+# action eksposur penuh, tidak pernah sekadar "tahan".
+#
+# Tidak ada action yang HILANG karenanya (`akumulasi_saat_koreksi` /
+# `cicil_bertahap` tetap tercapai lewat pita tengah), jadi ini tidak diperbaiki
+# sepihak: memilih rem lain untuk pita atas adalah keputusan kalibrasi sekelas
+# A7/A8. `scripts/check_action_table.py` menghitung ulang seluruh sel mati dan
+# GAGAL kalau suatu saat ada action yang benar-benar hilang.
 STANCE_STRONG_THRESHOLD = 75.0
 
 

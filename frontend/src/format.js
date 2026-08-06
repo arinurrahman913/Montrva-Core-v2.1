@@ -485,6 +485,44 @@ export function prettyOutcome(classification) {
   return prettyStance(classification)
 }
 
+// Jenis klaim sebuah outcome: "arah" atau "amplitudo". Cerminan `claim_type`
+// di personal_evaluation.py. Record lama (dan hasil backfill sebelum
+// 2026-08-06) tidak menyimpannya, jadi diturunkan dari action-nya — semua
+// action pra-`siaga_gerakan` berklaim arah.
+export function claimTypeOf(outcome, action) {
+  if (outcome?.claim_type) return outcome.claim_type
+  return MAGNITUDE_ACTIONS.has(action) ? 'amplitudo' : 'arah'
+}
+
+// Vonis yang benar-benar MENJAWAB klaim tesis ini. Cerminan
+// personal_calibration.operative_verdict — lihat docstring-nya untuk alasan
+// lengkapnya.
+//
+// Ringkasnya (audit 2026-08-06, D1): `siaga_gerakan` mengklaim AMPLITUDO, dan
+// vonis v1 dengan benar memberinya "tidak_berlaku" karena v1 menilai ARAH
+// terhadap target absolut — pertanyaan yang action ini tidak pernah jawab.
+// Seluruh frontend dulu cuma membaca `classification`, jadi setiap tesis
+// Spekulatif sejak 5 Agu tampil sebagai pill netral "tidak berlaku" dan tidak
+// masuk hitungan Track Record mana pun, sementara vonis sebenarnya
+// (`classification_v2`) tidak dibaca satu baris pun. Karena Spekulatif
+// satu-satunya lensa yang bisa jatuh tempo tahun ini, halaman ini akan
+// membeku diam-diam di populasi pra-5-Agu.
+export function operativeVerdict(outcome, action) {
+  if (!outcome) return null
+  return claimTypeOf(outcome, action) === 'amplitudo'
+    ? outcome.classification_v2 ?? null
+    : outcome.classification ?? null
+}
+
+// Kalimat yang menyebut ATURAN mana yang memvonis. Wajib tampil berdampingan
+// dengan vonisnya: "terbukti" di bawah aturan arah dan "terbukti" di bawah
+// aturan amplitudo menjawab dua pertanyaan berbeda, dan tanpa penanda ini
+// keduanya terlihat identik di layar.
+export const CLAIM_RULE_LABEL = {
+  arah: 'klaim arah — dinilai terhadap target absolut per horizon',
+  amplitudo: 'klaim amplitudo — dinilai |z| >= 1 (excess dibagi deru sahamnya sendiri)',
+}
+
 // Sama persis dengan HORIZON_OUTCOME_THRESHOLD_PCT + ACTION_CATEGORY_ENTRY di
 // alphaforge/personal/personal_evaluation.py -- makin panjang horizon, makin
 // besar target return-nya (horizon pendek tidak boleh "menang" cuma karena
