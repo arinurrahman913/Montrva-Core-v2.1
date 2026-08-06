@@ -26,11 +26,25 @@ ambang stance ke 75 memang menghidupkan `[pita tengah][tier high]` (skor
 dihitung dari bilangan yang sama (`thesis_score` == `score` lensa), dan
 75 > 70, jadi `score >= 75` SELALU berarti tier "high".
 
-Skrip ini tidak menghakimi apakah sel mati itu salah — kadang memang wajar
-(sel matinya menghasilkan action yang identik dengan kembaran hidupnya, jadi
-tidak ada perilaku yang hilang). Yang dilakukannya: menyebutkan semuanya,
-memisahkan yang tidak berbahaya dari yang MENGHILANGKAN sebuah action, dan
-keluar dengan status != 0 untuk yang kedua.
+Keputusan pengguna 2026-08-06 atas temuan itu adalah OPSI A: ambangnya
+dibiarkan, dan sel matinya diisi dengan apa yang benar-benar terjadi di pita
+itu supaya tabelnya berhenti menjanjikan gradasi yang tidak ada. Skrip ini
+yang menjaga keputusan itu tetap benar, lewat tiga pemeriksaan:
+
+  1. tiap sel mati isinya harus salah satu action yang BENAR-BENAR tercapai
+     di baris stance-nya. Ini inti opsi A: tabel tidak boleh memuat action
+     yang aljabar skornya tidak bisa hasilkan untuk stance itu.
+  2. tidak ada action yang hilang total dari sebuah sel (position, module) —
+     kalau sel mati menelan satu-satunya tempat sebuah action bisa muncul,
+     yang hilang adalah perilaku, bukan cuma teks.
+  3. tidak ada sel HIDUP di kolom "low" yang berisi action ACTION_FULL_
+     EXPOSURE. Dulu ini terbaca langsung dari teks tabel (kolom "low" memang
+     tidak pernah berisi action penuh), tapi opsi A menaruh `akumulasi`/
+     `tambah` di kolom "low" pita atas — sel yang tidak bisa menyala. Sifat
+     yang sebenarnya penting cuma berlaku untuk sel yang bisa menyala, dan
+     itu yang diperiksa di sini.
+
+Ketiganya membuat skrip keluar dengan status != 0.
 
 Pakai:
     python scripts/check_action_table.py
@@ -44,6 +58,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from alphaforge.layer2.reasoning import STANCE_STRONG_THRESHOLD  # noqa: E402
+from alphaforge.personal.personal_contracts import ACTION_FULL_EXPOSURE  # noqa: E402
 from alphaforge.personal.personal_reasoning import (  # noqa: E402
     ACTION_TABLE, _thesis_score_tier,
 )
@@ -101,56 +116,79 @@ def main() -> int:
     print(f"Gerbang tier 'high': 70 (_thesis_score_tier)")
     print("Keduanya membaca thesis_score yang SAMA.\n")
 
-    harmless: list[str] = []
-    harmful: list[str] = []
+    dead: list[str] = []
+    phantom: list[str] = []   # (1) sel mati menjanjikan action di luar barisnya
+    lost: list[str] = []      # (2) action hilang total dari sel ini
+    p4: list[str] = []        # (3) sel hidup kolom "low" berisi eksposur penuh
 
     for position, modules in ACTION_TABLE.items():
         for module, table in modules.items():
             reach = reachable_pairs(module)
+
+            def is_live(stance: str, tier: str) -> bool:
+                return (stance, tier) in reach or stance.endswith(UNREADABLE_SUFFIX)
+
             live_actions = {
                 action
                 for stance, row in table.items()
                 for tier, action in row.items()
-                if (stance, tier) in reach or stance.endswith(UNREADABLE_SUFFIX)
+                if is_live(stance, tier)
             }
             for stance, row in table.items():
-                if stance.endswith(UNREADABLE_SUFFIX):
-                    continue
+                live_in_row = {a for t, a in row.items() if is_live(stance, t)}
                 for tier, action in row.items():
-                    if (stance, tier) in reach:
-                        continue
                     where = f"{position}/{module} [{stance}][{tier}] -> {action!r}"
-                    if action in live_actions:
-                        harmless.append(f"  {where} (action ini tetap tercapai lewat sel lain)")
-                    else:
-                        harmful.append(f"  {where}")
+                    if is_live(stance, tier):
+                        if tier == "low" and action in ACTION_FULL_EXPOSURE:
+                            p4.append(f"  {where}")
+                        continue
+                    dead.append(f"  {where}")
+                    if action not in live_in_row:
+                        phantom.append(
+                            f"  {where} — baris ini cuma bisa menghasilkan "
+                            f"{sorted(live_in_row)}"
+                        )
+                    if action not in live_actions:
+                        lost.append(f"  {where}")
 
-    if harmless:
-        print(f"SEL MATI TANPA KEHILANGAN ACTION ({len(harmless)}):")
-        print("\n".join(sorted(harmless)))
+    if dead:
+        print(f"Sel yang tidak bisa tercapai ({len(dead)}) — diisi sesuai pita-nya (opsi A):")
+        print("\n".join(sorted(dead)))
         print()
 
-    if harmful:
-        print(f"SEL MATI YANG MENGHILANGKAN ACTION ({len(harmful)}):")
-        print("\n".join(sorted(harmful)))
-        print(
-            "\nSetiap baris di atas berarti sebuah action tidak akan pernah bisa\n"
-            "dipilih untuk kombinasi mana pun — tabelnya menjanjikan sesuatu yang\n"
-            "aljabar skornya tidak bisa berikan."
-        )
+    failed = False
+    for label, rows, explain in (
+        ("SEL MATI MENJANJIKAN ACTION DI LUAR BARISNYA", phantom,
+         "Tabel memuat action yang aljabar skornya tidak bisa hasilkan untuk stance\n"
+         "itu. Inilah yang membuat tabel ini terbaca seolah punya gradasi yang tidak\n"
+         "ada — isi selnya dengan action yang benar-benar keluar di pita tersebut."),
+        ("ACTION HILANG TOTAL", lost,
+         "Sebuah action tidak bisa dipilih untuk kombinasi mana pun di sel ini.\n"
+         "Yang hilang perilaku, bukan cuma teks."),
+        ("P4 BOCOR DI SEL HIDUP", p4,
+         "Sel yang BISA menyala menaruh action eksposur penuh di kolom 'low'.\n"
+         "Penegakan runtime (downgrade_full_exposure) masih menangkapnya, tapi\n"
+         "sifat 'aman by construction' hilang — kembalikan ke action non-penuh."),
+    ):
+        if rows:
+            failed = True
+            print(f"{label} ({len(rows)}):")
+            print("\n".join(sorted(rows)))
+            print(f"\n{explain}\n")
+
+    if failed:
         return 1
 
-    print("Tidak ada action yang hilang.")
-    if harmless:
-        print(
-            "\nCatatan: sel mati di atas tidak menghilangkan action, TAPI membuat\n"
-            "kolom tingkat jadi inert di stance tersebut. Untuk sisi `holding` itu\n"
-            "berarti posisi berstance teratas selalu menerima action eksposur penuh\n"
-            "dan tidak pernah sekadar 'tahan' — satu-satunya rem yang tersisa di\n"
-            "sana adalah penurunan P4 (band == 'low'). Apakah itu yang diinginkan\n"
-            "adalah keputusan kalibrasi, bukan bug yang bisa diperbaiki sepihak\n"
-            "(sekelas A7/A8 di docs/AUDIT_LOG.md)."
-        )
+    print("Ketiga pemeriksaan lolos: sel mati konsisten dengan pita-nya, nol action")
+    print("hilang, nol kebocoran P4 di sel hidup.")
+    print(
+        "\nCatatan tetap (opsi A, keputusan pengguna 2026-08-06): kolom tingkat\n"
+        "memang inert di pita atas. Untuk sisi `holding` itu berarti posisi\n"
+        "berstance teratas selalu menerima action penambah eksposur, dan yang\n"
+        "menahannya cuma P4 (band == 'low'), bukan kekuatan tesisnya. Memberi pita\n"
+        "atas rem kedua yang independen dari skor adalah keputusan kalibrasi\n"
+        "sekelas A7/A8 di docs/AUDIT_LOG.md — bukan bug."
+    )
     return 0
 
 

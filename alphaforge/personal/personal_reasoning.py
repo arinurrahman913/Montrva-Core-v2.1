@@ -52,21 +52,60 @@ HORIZON_UPPER_DAYS = {
 # di seluruh universe (lihat docstring _thesis_score_tier), yang diam-diam
 # membuat kolom "high" di sini (mulai_posisi/akumulasi/masuk_spekulatif)
 # MUSTAHIL dipilih walau stance-nya qualify. Baris "*_tak_terbaca" sengaja
-# disamakan dengan PASSIVE_ACTION (P3) dan tidak pernah memilih action
-# ACTION_FULL_EXPOSURE di kolom "low" (P4, yang TETAP memakai confidence.band
-# asli sebagai penjaga kualitas data, terpisah dari tingkat di sini) --
-# keduanya lolos by construction, validate_personal_call() cuma jaring
-# pengaman regresi, bukan jalur utama penegakan.
+# disamakan dengan PASSIVE_ACTION (P3).
+#
+# P4 (tidak ada action ACTION_FULL_EXPOSURE saat confidence.band "low")
+# dulu juga lolos by construction lewat teks tabel ini: kolom "low" tidak
+# pernah berisi action eksposur penuh. Sejak sel mati diisi apa adanya
+# (2026-08-06, opsi A — lihat blok di atas ACTION_TABLE), kolom "low" pita
+# atas memuat `akumulasi`/`tambah`, jadi sifat itu tidak lagi terbaca dari
+# teksnya. Yang menegakkan P4 sekarang dua hal yang keduanya nyata:
+# `downgrade_full_exposure` dipanggil di build_personal_call (penegakan
+# runtime, sejak 2026-07-31), dan check_action_table.py memeriksa sifat lama
+# itu pada sel yang BENAR-BENAR bisa menyala. validate_personal_call() tetap
+# jaring pengaman regresi, bukan jalur utama.
+# SEL YANG TIDAK BISA TERCAPAI DIISI DENGAN APA YANG BENAR-BENAR TERJADI DI
+# PITA ITU, bukan dengan action yang lebih hati-hati yang tidak akan pernah
+# dipilih (keputusan pengguna 2026-08-06, opsi A atas temuan audit D4).
+#
+# Duduk perkaranya: `stance` dan kolom tingkat dihitung dari BILANGAN YANG SAMA
+# (`thesis_score` == skor lensa). Ambang stance kuat 75 ada DI ATAS gerbang
+# tier "high" 70, jadi `score >= 75` selalu berarti tier "high" — sel
+# `[pita atas][medium]` dan `[pita atas][low]` mustahil, apa pun isinya.
+# Menggeser ambangnya tidak menolong, cuma memindahkan sel matinya ke pita
+# tengah. Selama satu angka menyetir dua sumbu, akan selalu ada sel kosong.
+#
+# Sebelum ini sel-sel itu berisi versi yang lebih hati-hati (`tahan`,
+# `cicil_bertahap`, `akumulasi_saat_koreksi`), sehingga tabel ini TERBACA
+# seolah tingkat memodulasi pita atas — padahal tidak, dan tidak pernah.
+# Sekarang isinya sama dengan sel hidup di barisnya, jadi yang dibaca orang
+# dari tabel ini sama dengan yang dihasilkan sistem. Perilakunya NOL berubah:
+# tidak satu pun sel yang diubah pernah bisa terpilih.
+#
+# Konsekuensi yang harus disadari, dan sengaja diterima: holding berstance
+# teratas selalu menerima action penambah eksposur, dan yang menahannya cuma
+# P4 (`band == "low"` -> downgrade_full_exposure), bukan kekuatan tesisnya.
+# Memberi pita atas rem kedua yang independen dari skor adalah keputusan
+# kalibrasi sekelas A7/A8, dan tidak diambil di sini.
+#
+# `scripts/check_action_table.py` menegakkan tiga hal sekaligus: (1) tiap sel
+# mati isinya harus salah satu action yang benar-benar tercapai di barisnya —
+# tabel tidak boleh menjanjikan action yang aljabar skornya tidak bisa berikan;
+# (2) tidak ada action yang hilang total; (3) tidak ada sel HIDUP di kolom
+# "low" yang berisi action eksposur penuh (P4 by construction, kini diperiksa
+# pada sel yang benar-benar bisa menyala, bukan pada teks tabelnya).
 ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
     "no_holding": {
         "multibagger": {
-            "ruang_terbuka": {"high": "mulai_posisi", "medium": "cicil_bertahap", "low": "cicil_bertahap"},
+            # medium/low mustahil (skor >=75 selalu tier high) — lihat blok di atas
+            "ruang_terbuka": {"high": "mulai_posisi", "medium": "mulai_posisi", "low": "mulai_posisi"},
             "ruang_sempit": {"high": "cicil_bertahap", "medium": "pantau", "low": "pantau"},
+            # high/medium mustahil (skor <45 selalu tier low)
             "ruang_tertutup": {"high": "lewati", "medium": "lewati", "low": "lewati"},
             "ruang_tak_terbaca": {"high": "pantau", "medium": "pantau", "low": "pantau"},
         },
         "quality_compound": {
-            "compounding_kuat": {"high": "akumulasi", "medium": "akumulasi_saat_koreksi", "low": "akumulasi_saat_koreksi"},
+            "compounding_kuat": {"high": "akumulasi", "medium": "akumulasi", "low": "akumulasi"},
             "compounding_rapuh": {"high": "akumulasi_saat_koreksi", "medium": "pantau", "low": "pantau"},
             "bukan_compounder": {"high": "lewati", "medium": "lewati", "low": "lewati"},
             "mesin_tak_terbaca": {"high": "pantau", "medium": "pantau", "low": "pantau"},
@@ -98,15 +137,18 @@ ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
     },
     "holding": {
         "multibagger": {
-            "ruang_terbuka": {"high": "tambah_bertahap", "medium": "tahan", "low": "tahan"},
+            "ruang_terbuka": {"high": "tambah_bertahap", "medium": "tambah_bertahap", "low": "tambah_bertahap"},
             "ruang_sempit": {"high": "tahan", "medium": "tahan", "low": "kurangi"},
-            "ruang_tertutup": {"high": "kurangi", "medium": "jual", "low": "jual"},
+            # `kurangi` di kolom high dulu tidak pernah menyala (skor <45 selalu
+            # tier low), jadi stance ini selalu berakhir `jual`. `kurangi` tetap
+            # hidup lewat ruang_sempit/low di atas.
+            "ruang_tertutup": {"high": "jual", "medium": "jual", "low": "jual"},
             "ruang_tak_terbaca": {"high": "tahan", "medium": "tahan", "low": "tahan"},
         },
         "quality_compound": {
-            "compounding_kuat": {"high": "tambah", "medium": "tahan", "low": "tahan"},
+            "compounding_kuat": {"high": "tambah", "medium": "tambah", "low": "tambah"},
             "compounding_rapuh": {"high": "tahan", "medium": "tahan", "low": "kurangi"},
-            "bukan_compounder": {"high": "kurangi", "medium": "jual", "low": "jual"},
+            "bukan_compounder": {"high": "jual", "medium": "jual", "low": "jual"},
             "mesin_tak_terbaca": {"high": "tahan", "medium": "tahan", "low": "tahan"},
         },
         "speculative": {

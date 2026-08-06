@@ -36,12 +36,10 @@ action diperbaiki, bar tak lengkap dibuang — tapi konsumen di frontend,
 rapor kalibrasi, dan penulis record tetap membaca bentuk yang lama. Tidak
 satu pun dari ini akan memunculkan error; semuanya gagal dengan diam.
 
-**Status: 8 dari 9 SELESAI di commit yang sama dengan catatan ini.** Yang
-tersisa cuma D4, dan bukan karena sulit: sisanya adalah keputusan kalibrasi
-(rem apa yang pantas untuk pita atas), bukan cacat yang bisa diperbaiki
-sepihak — sekelas A7/A8. Penjaganya sudah ada
-(`scripts/check_action_table.py`) supaya bagian yang BERBAHAYA dari kelas bug
-itu tidak bisa kambuh diam-diam.
+**Status: 9 dari 9 SELESAI.** Delapan ditutup sebagai perbaikan; D4 ditutup
+sebagai KEPUTUSAN (opsi A, dipilih pengguna 2026-08-06) — ambangnya
+dibiarkan, tabelnya yang dijujurkan, dan sifat yang hilang karenanya
+sekarang dijaga mesin lewat `scripts/check_action_table.py`.
 
 Verifikasi tiap perbaikan dijalankan, bukan cuma dibaca:
 
@@ -54,6 +52,7 @@ Verifikasi tiap perbaikan dijalankan, bukan cuma dibaca:
 | D7 | streak yang tumbuh sesudah divonis: 4/5 entry terisi -> 5/5 |
 | D8 | kunci kosong baru = AKTIF (tidak dicuri); kunci kosong berumur 1 jam = tetap dibuang |
 | D9 | 4 bentuk berkas cache rusak -> semuanya cache-miss, nol lemparan ke pemanggil |
+| D4 | 68.026 kombinasi (skor x stance x tier x posisi x modul) -> 0 action berbeda dari sebelum perubahan |
 
 ### Kritis — SELESAI
 
@@ -141,7 +140,7 @@ sering berjalan di tengah sesi; ini bukan kasus tepi. `close` + `ohlc_date`
 (keduanya sudah ada di `PriceMarketData` sejak `09e1eff`) adalah pasangan
 yang konsisten dan belum dipakai di jalur ini.
 
-#### D4. 8 sel `ACTION_TABLE` mustahil tercapai — perbaikan `402a51d` baru separuh — BUTUH KEPUTUSAN
+#### D4. 8 sel `ACTION_TABLE` mustahil tercapai — perbaikan `402a51d` baru separuh — SELESAI (opsi A)
 `reasoning.py:236` · `personal_reasoning.py::ACTION_TABLE`
 
 `STANCE_STRONG_THRESHOLD` dinaikkan 70 -> 75 supaya sel campuran tabel hidup.
@@ -171,20 +170,48 @@ MENAMBAH eksposur dan tidak pernah sekadar menahan — kebalikan dari kehati-
 hatian yang tabelnya tampak mengkodekan. Satu-satunya rem yang tersisa di
 sana adalah penurunan P4 (`band == "low"`).
 
-**Tindakan 2026-08-06:** komentar di `reasoning.py:217-236` yang menyatakan
-kedua sel tertutup sudah dikoreksi, dan `scripts/check_action_table.py`
-sekarang menghitung ulang SELURUH sel mati, memisahkan yang tidak berbahaya
-(action-nya masih tercapai lewat sel lain) dari yang MENGHILANGKAN sebuah
-action — dan keluar dengan status != 0 untuk yang kedua. Hari ini: 22 sel
-mati, nol action hilang.
+**KEPUTUSAN PENGGUNA 2026-08-06 — OPSI A: ambang dibiarkan, tabelnya yang
+dijujurkan.**
 
-Ambangnya sendiri TIDAK disentuh. Menggesernya ke arah mana pun cuma
-memindahkan sel matinya (di atas gerbang tier -> pita atas selalu "high"; di
-bawahnya -> pita tengah yang mati), jadi memperbaikinya berarti memilih rem
-lain untuk pita atas — keputusan kalibrasi seperti A7/A8, bukan bug yang
-boleh diputus sepihak. Pertanyaan yang menunggu jawaban pengguna: apakah
-holding berstance teratas memang selalu pantas menerima action eksposur
-penuh, atau perlu gerbang kedua yang independen dari skor tesis?
+Dua opsi yang diajukan: (A) biarkan perilakunya, tapi isi sel mati dengan
+action yang benar-benar keluar di pita itu supaya tabel berhenti menjanjikan
+gradasi yang tidak ada; (B) tambah gerbang kedua yang independen dari
+`thesis_score` (kandidat terkuat `unrealized_return_pct` — sudah dihitung
+`compute_position`, benar-benar lepas dari skor, dan menjawab hal yang skor
+tesis tidak bisa jawab: "perusahaannya masih bagus" bukan berarti "posisi
+saya belum kebesaran"). Pengguna memilih A.
+
+Pemeriksaan yang mempersempit keputusan ini sebelum diambil: efeknya cuma
+menggigit di SATU tempat, `quality_compound` + holding, karena di situ
+`tambah` adalah satu-satunya action eksposur penuh yang keluar tanpa syarat.
+`multibagger` + holding menghasilkan `tambah_bertahap`, yang bukan anggota
+`ACTION_FULL_EXPOSURE` dan memang tidak punya rem P4 — itu desain yang
+konsisten (`tambah_bertahap` justru TARGET penurunan), bukan celah.
+
+Yang dikerjakan:
+
+- Sel mati diisi sesuai pita-nya. `[compounding_kuat][medium/low]`
+  `tahan` -> `tambah`, `[ruang_terbuka][medium/low]` `tahan` ->
+  `tambah_bertahap`, `[bukan_compounder][high]` `kurangi` -> `jual`, dst.
+  **Perilaku nol berubah** — diuji atas 68.026 kombinasi (skor 0-100 langkah
+  0,01 x stance x tier x posisi x modul) terhadap tabel sebelum perubahan:
+  0 action berbeda. P5 (action di luar kosakata selnya) tetap nihil.
+- `check_action_table.py` naik dari 1 pemeriksaan jadi 3, semuanya
+  menggagalkan build: (1) sel mati wajib berisi action yang benar-benar
+  tercapai di baris stance-nya; (2) nol action hilang total; (3) nol sel
+  HIDUP di kolom "low" yang berisi action eksposur penuh.
+- Pemeriksaan (3) menggantikan sifat lama yang hilang karena opsi A: dulu
+  "P4 aman by construction" terbaca dari teks tabel (kolom "low" tidak pernah
+  berisi action penuh), tapi sekarang kolom itu memuat `akumulasi`/`tambah`
+  di sel yang tidak bisa menyala. Sifat yang benar-benar penting cuma berlaku
+  untuk sel yang bisa menyala, dan itu yang sekarang diperiksa mesin.
+  Komentar di `personal_reasoning.py` yang mengklaim jaminan lama ikut
+  dikoreksi.
+
+Yang SENGAJA tetap begini, dan harus tetap disadari: kolom tingkat inert di
+pita atas. Holding berstance teratas selalu menerima action penambah
+eksposur, dan yang menahannya cuma P4 (`band == "low"`), bukan kekuatan
+tesisnya. Ini pilihan sadar, bukan cacat yang belum dikerjakan.
 
 #### D5. `window_sigma_pct` mencampur bar harian dan bulanan untuk horizon > 1 tahun — SELESAI
 `personal_evaluation.py:282-324`
