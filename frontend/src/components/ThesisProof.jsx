@@ -76,7 +76,7 @@ function scoreTierKey(score) {
 // nol tesis pernah jatuh tempo dan yang pertama baru mungkin 2027/2028.
 // Tanpa kalimat itu, kartu 5 tahunan terlihat sama meyakinkannya dengan
 // kartu spekulatif yang sudah punya 167 vonis.
-export function BaseRateNote({ calibration, module, thesisScore }) {
+export function BaseRateNote({ calibration, module, thesisScore, action }) {
   const base = calibration?.base_rates?.[module]
   if (!base) return null
 
@@ -86,26 +86,46 @@ export function BaseRateNote({ calibration, module, thesisScore }) {
     </div>
   )
 
-  if (!base.n) {
+  // JENIS KLAIM DULU, baru tingkat skor (audit 2026-08-06, D2). Kartu ini
+  // menempelkan angka tepat di bawah action-nya, dan sejak `siaga_gerakan`
+  // ada, action di kartu bisa mengklaim AMPLITUDO sementara satu-satunya base
+  // rate yang tersedia berasal dari tesis ARAH lama (`masuk_spekulatif`,
+  // target absolut 3%). Angka lamanya kebetulan jauh lebih besar (~30% vs
+  // base rate |z| >= 1 sekitar 16%), jadi kartu yang tidak pernah menjanjikan
+  // arah tetap memamerkan hit rate tesis berarah.
+  //
+  // Karena itu TIDAK ADA fallback lintas jenis klaim: kalau klaim kartu ini
+  // belum punya tesis yang jatuh tempo, yang benar adalah mengatakannya.
+  // Menjatuhkannya ke `base` level modul akan mengembalikan persis bug-nya,
+  // karena di sanalah kedua jenis klaim bercampur.
+  const claim = MAGNITUDE_ACTIONS.has(action) ? 'amplitudo' : 'arah'
+  const scope = base.by_claim_type?.[claim] ?? base
+
+  if (!scope.n) {
     return wrap(
       <>
-        Belum ada tesis lensa ini yang pernah jatuh tempo
+        Belum ada tesis lensa ini{base.by_claim_type && <> ber{claim === 'amplitudo' ? 'klaim amplitudo' : 'klaim arah'}</>} yang pernah jatuh tempo
         {base.earliest_possible_verdict && <> — vonis paling cepat <strong>{base.earliest_possible_verdict}</strong></>}.
+        {claim === 'amplitudo' && base.by_claim_type?.arah?.n > 0 && (
+          <> Angka {base.by_claim_type.arah.n} tesis berklaim arah yang ada di riwayat sengaja TIDAK dipakai di sini: itu menjawab pertanyaan yang berbeda.</>
+        )}
       </>,
       true,
     )
   }
 
-  // Pakai irisan paling spesifik yang benar-benar punya isi, lalu jatuh ke
-  // level modul. Tidak pernah mengarang bucket kosong jadi "0%".
+  // Di DALAM jenis klaim yang sama, pakai irisan paling spesifik yang
+  // benar-benar punya isi, lalu jatuh ke level jenis klaim. Tidak pernah
+  // mengarang bucket kosong jadi "0%".
   const tierKey = scoreTierKey(thesisScore)
-  const tier = base.by_score_tier?.[tierKey]
-  const use = tier && tier.n ? tier : base
+  const tier = scope.by_score_tier?.[tierKey]
+  const use = tier && tier.n ? tier : scope
   const scoped = use === tier
 
   return wrap(
     <>
-      Tesis sejenis{scoped ? ` (${tierKey})` : ''}:{' '}
+      Tesis sejenis ({claim === 'amplitudo' ? 'klaim amplitudo' : 'klaim arah'}
+      {scoped ? `, ${tierKey}` : ''}):{' '}
       <strong style={{ color: 'var(--good)' }}>{use.terbukti} terbukti</strong> ·{' '}
       <strong style={{ color: 'var(--bad)' }}>{use.meleset} meleset</strong>
       {use.hit_rate_pct != null && (
@@ -407,7 +427,7 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
         </div>
       )}
 
-      <BaseRateNote calibration={calibration} module={module} thesisScore={thesisScore} />
+      <BaseRateNote calibration={calibration} module={module} thesisScore={thesisScore} action={action} />
     </div>
   )
 }

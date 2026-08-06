@@ -16,6 +16,323 @@ Status yang dipakai:
 
 ---
 
+## Audit #3 — 2026-08-06 (rentang `fe0a35f`..`0f3f337`)
+
+Audit menyeluruh atas SELURUH kode yang masuk setelah Audit #2 ditutup:
+40 commit, ~6.000 baris tambahan di 58 berkas. Read-only, dikerjakan satu
+lintasan (bukan tiga agen paralel seperti #1/#2), dengan verifikasi eksekusi
+untuk temuan yang bisa dieksekusi tanpa data live — repo tidak memuat
+`dashboard/data`, jadi angka populasi di bawah dikutip dari komentar kode
+yang mengukurnya, bukan diukur ulang di sini.
+
+Fokus diarahkan ke yang paling belum teruji dan paling menentukan keluaran:
+vonis v2 + kalibrasi (5 Agu), lensa Spekulatif yang berganti klaim (5 Agu),
+`_ramp`/ambang stance (31 Jul), risk.py (2-3 Agu), dan jalur harga/benchmark
+yang baru (3-4 Agu).
+
+**Pola yang berulang di tiga temuan teratas: perubahan yang benar di hulu
+tidak diikuti pembacanya di hilir.** Aturan penilaian diperbaiki, kosakata
+action diperbaiki, bar tak lengkap dibuang — tapi konsumen di frontend,
+rapor kalibrasi, dan penulis record tetap membaca bentuk yang lama. Tidak
+satu pun dari ini akan memunculkan error; semuanya gagal dengan diam.
+
+**Status: 9 dari 9 SELESAI.** Delapan ditutup sebagai perbaikan; D4 ditutup
+sebagai KEPUTUSAN (opsi A, dipilih pengguna 2026-08-06) — ambangnya
+dibiarkan, tabelnya yang dijujurkan, dan sifat yang hilang karenanya
+sekarang dijaga mesin lewat `scripts/check_action_table.py`.
+
+Verifikasi tiap perbaikan dijalankan, bukan cuma dibaca:
+
+| Temuan | Bukti |
+|---|---|
+| D1 | `build_calibration` atas riwayat sintetis: `theses_directional` 0 -> 6 |
+| D2 | `base_rates.speculative.by_claim_type.amplitudo` terisi terpisah dari `arah` |
+| D3 | evaluasi ujung-ke-ujung: `exit_price` 130.0 (kuotasi hidup) -> 110.0 (penutupan pada `exit_date`) |
+| D5 | jendela campuran: sigma 3,94x -> 0,84x nilai benar; jalur harian **bit-identik** dengan rumus lama |
+| D7 | streak yang tumbuh sesudah divonis: 4/5 entry terisi -> 5/5 |
+| D8 | kunci kosong baru = AKTIF (tidak dicuri); kunci kosong berumur 1 jam = tetap dibuang |
+| D9 | 4 bentuk berkas cache rusak -> semuanya cache-miss, nol lemparan ke pemanggil |
+| D4 | 68.026 kombinasi (skor x stance x tier x posisi x modul) -> 0 action berbeda dari sebelum perubahan |
+
+### Kritis — SELESAI
+
+#### D1. Vonis lensa Spekulatif berhenti terbaca di seluruh sistem — SELESAI
+`personal_evaluation.py::_classify` · `personal_calibration.py` · frontend
+
+Sejak `0f3f337` lensa Spekulatif mengeluarkan `siaga_gerakan`, yang masuk
+`ACTION_CATEGORY_MAGNITUDE`. Diverifikasi dengan menjalankan kodenya:
+
+```
+_classify("siaga_gerakan",   "mingguan", +12%) -> "tidak_berlaku"
+_classify("masuk_spekulatif","mingguan", +12%) -> "terbukti"
+claim_type("siaga_gerakan")                    -> "amplitudo"
+classify_v2("siaga_gerakan", excess=-9, sigma=4) -> ("terbukti", -2.25)
+```
+
+Itu benar dan memang disengaja: klaim amplitudo tidak boleh dinilai aturan
+arah. Yang tidak diikuti adalah sisi pembacanya.
+
+- `personal_calibration.DIRECTIONAL = ("terbukti","meleset","ambigu")` —
+  `tidak_berlaku` tidak ada di dalamnya, jadi `build_calibration` membuang
+  seluruh tesis Spekulatif baru sebelum mengiris apa pun.
+- `grep` atas seluruh repo: **`classification_v2`, `z_excess`, dan
+  `claim_type` tidak dibaca satu baris pun** di luar tempat penulisannya.
+  Frontend (`PersonalHistoricalView.jsx:495`, `format.js:473`) hanya membaca
+  `classification` v1.
+
+Akibatnya, untuk tiap tesis Spekulatif yang jatuh tempo mulai 5 Agu: v1
+memberi `tidak_berlaku` (dibuang semua konsumen), v2 memberi vonis
+sesungguhnya (tidak dibaca siapa pun). Dan Spekulatif adalah SATU-SATUNYA
+lensa yang bisa jatuh tempo tahun ini — Multibagger 730 hari, Quality 1825
+hari, vonis pertamanya baru mungkin 2027/2028 (`_not_yet_evaluable`).
+
+Jadi kartu Track Record, `accuracyPct`, rekap sebab meleset, daftar tanggal
+masuk, dan seluruh `slices` rapor kalibrasi **membeku di populasi
+pra-5-Agu dan tidak akan pernah bertambah lagi** — sambil tetap terlihat
+terisi, karena angka lamanya masih di sana. Ini persis kelas kegagalan yang
+`mechanical_tuning` dibangun untuk mencegah, kecuali kali ini yang membeku
+adalah buktinya sendiri, bukan penggunaannya.
+
+#### D2. Base rate di kartu tesis menjawab pertanyaan yang berbeda dari klaim kartunya — SELESAI
+`ThesisProof.jsx::BaseRateNote:80` · `personal_calibration.py::_base_rates`
+
+Lanjutan langsung D1, tapi lebih menyesatkan karena angkanya TIDAK kosong.
+
+`BaseRateNote` menempel `base_rates[module].hit_rate_pct` ke kartu tesis
+hidup. Untuk `siaga_gerakan`, angka itu dihitung dari tesis `masuk_spekulatif`
+lama — vonis ARAH terhadap target absolut 3%. Kartunya sendiri sekarang
+mengklaim AMPLITUDO, dinilai `|z| >= 1`, yang base rate-nya menurut komentar
+kode sendiri **sekitar 16%, bukan ~30%** (blok di atas `classify_v2`).
+
+Jadi pengguna membaca "tesis sejenis: 30% terbukti" di bawah sebuah kartu
+yang tidak pernah menjanjikan arah. Tidak ada penyaringan `claim_type` di
+mana pun, jadi tidak ada yang mencegahnya. Angka lama + pertanyaan baru =
+tepat bentuk kesalahan yang `claim_type` ditulis untuk dicegah ("rapor
+kalibrasi akan menjumlahkan tesis arah dengan tesis amplitudo jadi satu
+angka yang tidak berarti apa-apa" — docstring `claim_type`).
+
+### Sedang
+
+#### D3. `exit_price` bukan penutupan pada `exit_date`; excess masih beda tanggal — SELESAI
+`personal_evaluation.py:501,564` · `yahoo_evidence.py:268`
+
+Revisi 2026-08-04 (keputusan #4b di docstring modul) menutup ketidakcocokan
+tanggal antara sisi saham dan sisi indeks. Setengahnya kembali terbuka
+setelah `09e1eff`:
+
+- `current_price = price_market.last_price`, dan `last_price =
+  fi.get("lastPrice") or hist["Close"].iloc[-1]` — `fast_info.lastPrice`
+  adalah harga HIDUP, bisa dari sesi yang belum selesai.
+- `exit_date = _last_bar_date(price_history)`, dan sejak `09e1eff`
+  `price_history` **membuang bar tak lengkap**, jadi tanggal ini bar LENGKAP
+  terakhir — sering satu sesi lebih awal.
+- Indeks dibaca pada `exit_date`. Sahamnya tidak.
+
+Dua akibat. (1) `excess_return_pct` kembali memuat satu sesi gerak indeks
+yang bukan hasil tesis — dan excess itulah pembilang `z` di vonis v2, jadi
+kesalahannya sekarang ikut mengalir ke vonis, bukan cuma ke metrik pendukung.
+(2) Record menyimpan `exit_price` dan `exit_date` berdampingan padahal yang
+pertama bukan penutupan pada yang kedua — komentar di baris 565-570 justru
+menyatakan sebaliknya ("Tanggal INI juga yang dipakai membaca harga indeks").
+
+Pipeline penuh ~3 jam dan job terjadwal tiap 2 jam, jadi evaluasi jelas
+sering berjalan di tengah sesi; ini bukan kasus tepi. `close` + `ohlc_date`
+(keduanya sudah ada di `PriceMarketData` sejak `09e1eff`) adalah pasangan
+yang konsisten dan belum dipakai di jalur ini.
+
+#### D4. 8 sel `ACTION_TABLE` mustahil tercapai — perbaikan `402a51d` baru separuh — SELESAI (opsi A)
+`reasoning.py:236` · `personal_reasoning.py::ACTION_TABLE`
+
+`STANCE_STRONG_THRESHOLD` dinaikkan 70 -> 75 supaya sel campuran tabel hidup.
+Komentar di `reasoning.py:217-236` menyatakan **kedua** sel campuran
+tertutup. Sebenarnya cuma satu yang terbuka: stance dan tier dihitung dari
+BILANGAN YANG SAMA (`thesis_score = score`), dan 75 > 70, jadi
+`score >= 75` SELALU berarti tier `high`.
+
+Dienumerasi atas seluruh rentang skor 0-100:
+
+| modul | sel mati | akibat |
+|---|---|---|
+| quality_compound / holding | `[compounding_kuat][medium]`, `[low]` -> `tahan` | holding stance teratas **tidak pernah** bisa dapat "tahan" — selalu `tambah` |
+| multibagger / holding | `[ruang_terbuka][medium]`, `[low]` -> `tahan` | selalu `tambah_bertahap` |
+| quality_compound / holding | `[bukan_compounder][high]` -> `kurangi` | stance terburuk selalu `jual`, tidak pernah `kurangi` |
+| multibagger / holding | `[ruang_tertutup][high]` -> `kurangi` | idem |
+
+Sisi `no_holding` tidak berubah perilakunya (sel matinya punya kembaran
+hidup: `akumulasi_saat_koreksi` tetap tercapai lewat `[compounding_rapuh]
+[high]`, yaitu skor 70-74 — itu bagian yang MEMANG diperbaiki `402a51d`).
+Spekulatif bersih: ambangnya 60, seluruh sel matinya menghasilkan action
+yang identik dengan kembaran hidupnya.
+
+Yang berbahaya khusus sisi `holding`: kolom tier menjadi inert justru di dua
+stance ekstrem, sehingga posisi berskor tertinggi selalu diperintahkan
+MENAMBAH eksposur dan tidak pernah sekadar menahan — kebalikan dari kehati-
+hatian yang tabelnya tampak mengkodekan. Satu-satunya rem yang tersisa di
+sana adalah penurunan P4 (`band == "low"`).
+
+**KEPUTUSAN PENGGUNA 2026-08-06 — OPSI A: ambang dibiarkan, tabelnya yang
+dijujurkan.**
+
+Dua opsi yang diajukan: (A) biarkan perilakunya, tapi isi sel mati dengan
+action yang benar-benar keluar di pita itu supaya tabel berhenti menjanjikan
+gradasi yang tidak ada; (B) tambah gerbang kedua yang independen dari
+`thesis_score` (kandidat terkuat `unrealized_return_pct` — sudah dihitung
+`compute_position`, benar-benar lepas dari skor, dan menjawab hal yang skor
+tesis tidak bisa jawab: "perusahaannya masih bagus" bukan berarti "posisi
+saya belum kebesaran"). Pengguna memilih A.
+
+Pemeriksaan yang mempersempit keputusan ini sebelum diambil: efeknya cuma
+menggigit di SATU tempat, `quality_compound` + holding, karena di situ
+`tambah` adalah satu-satunya action eksposur penuh yang keluar tanpa syarat.
+`multibagger` + holding menghasilkan `tambah_bertahap`, yang bukan anggota
+`ACTION_FULL_EXPOSURE` dan memang tidak punya rem P4 — itu desain yang
+konsisten (`tambah_bertahap` justru TARGET penurunan), bukan celah.
+
+Yang dikerjakan:
+
+- Sel mati diisi sesuai pita-nya. `[compounding_kuat][medium/low]`
+  `tahan` -> `tambah`, `[ruang_terbuka][medium/low]` `tahan` ->
+  `tambah_bertahap`, `[bukan_compounder][high]` `kurangi` -> `jual`, dst.
+  **Perilaku nol berubah** — diuji atas 68.026 kombinasi (skor 0-100 langkah
+  0,01 x stance x tier x posisi x modul) terhadap tabel sebelum perubahan:
+  0 action berbeda. P5 (action di luar kosakata selnya) tetap nihil.
+- `check_action_table.py` naik dari 1 pemeriksaan jadi 3, semuanya
+  menggagalkan build: (1) sel mati wajib berisi action yang benar-benar
+  tercapai di baris stance-nya; (2) nol action hilang total; (3) nol sel
+  HIDUP di kolom "low" yang berisi action eksposur penuh.
+- Pemeriksaan (3) menggantikan sifat lama yang hilang karena opsi A: dulu
+  "P4 aman by construction" terbaca dari teks tabel (kolom "low" tidak pernah
+  berisi action penuh), tapi sekarang kolom itu memuat `akumulasi`/`tambah`
+  di sel yang tidak bisa menyala. Sifat yang benar-benar penting cuma berlaku
+  untuk sel yang bisa menyala, dan itu yang sekarang diperiksa mesin.
+  Komentar di `personal_reasoning.py` yang mengklaim jaminan lama ikut
+  dikoreksi.
+
+Yang SENGAJA tetap begini, dan harus tetap disadari: kolom tingkat inert di
+pita atas. Holding berstance teratas selalu menerima action penambah
+eksposur, dan yang menahannya cuma P4 (`band == "low"`), bukan kekuatan
+tesisnya. Ini pilihan sadar, bukan cacat yang belum dikerjakan.
+
+#### D5. `window_sigma_pct` mencampur bar harian dan bulanan untuk horizon > 1 tahun — SELESAI
+`personal_evaluation.py:282-324`
+
+`price_history` di `evidence.json` harian hanya ~1 tahun terakhir; tahun ke-2
+s/d ke-5 satu bar per bulan (`_downsample_price_history`). `window_sigma_pct`
+memperlakukan seluruh deret seolah berjarak seragam:
+
+- `prior` (bar <= `entry_date`) untuk tesis berumur > 1 tahun **seluruhnya
+  bulanan**, jadi `sigma_daily` yang dihitung sebenarnya sigma BULANAN
+  (~sqrt(21) kali lebih besar);
+- `n_bars` di dalam jendela mayoritas bar HARIAN (~252/tahun).
+
+Untuk tesis Multibagger 730 hari: sigma jendela ≈ `sigma_harian * sqrt(21) *
+sqrt(264)` ≈ 74x sigma harian, terhadap nilai benar ~22x — **overstated ~3x**,
+sehingga `z` mengecil ~3x dan hampir semua vonis akan mendarat di `ambigu`.
+
+Belum menggigit hari ini (tidak ada tesis non-spekulatif yang jatuh tempo
+sampai 2027), dan itu justru masalahnya: cacat ini akan aktif tepat pada
+vonis PERTAMA lensa jangka panjang, saat tidak ada lagi pembanding untuk
+menyadarinya.
+
+Terkait: `scripts/backfill_verdict_v2.py` membaca `.cache/price_history`
+yang **harian penuh 5 tahun**, sedangkan jalur produksi membaca deret
+ringkas. Untuk tesis yang sama, kedua jalur menghasilkan `sigma_window_pct`
+yang berbeda, dan tidak ada field yang menandai mana yang menulis.
+
+### Rendah — SELESAI
+
+#### D6. Backfill v2 tidak menulis `claim_type` — SELESAI
+`scripts/backfill_verdict_v2.py:99-102`
+
+Menulis 4 dari 5 field v2 (`classification_v2`, `z_excess`,
+`sigma_window_pct`, `z_threshold`) tapi melewatkan `claim_type` — field yang
+docstring `personal_evaluation.claim_type` sebut "**wajib** disimpan
+berdampingan dengan outcome". Seluruh riwayat hasil backfill karenanya tidak
+punya penanda jenis klaim; konsumen mana pun yang nanti memecah rapor per
+`claim_type` (yaitu perbaikan D1/D2) akan melihat bucket kosong untuk seluruh
+periode pra-5-Agu.
+
+#### D7. Entry yang menyusul streak yang sudah divonis tidak pernah menerima outcome — SELESAI
+`personal_evaluation.py:479`
+
+Keputusan #2 di docstring modul menjanjikan "baris Riwayat mana pun yang
+dilihat pengguna untuk tesis ini menunjukkan verdict yang sama". Tapi begitu
+sebuah streak dievaluasi, `if any(... outcome ...): continue` melewati
+SELURUH streak pada run berikutnya — sementara entry harian baru dengan
+action yang sama terus bergabung ke streak itu. Entry-entry baru itu tidak
+pernah diisi, jadi tesis yang sama tampil "terbukti" di baris lama dan
+"menunggu evaluasi" di baris baru.
+
+Statistik tidak terpengaruh (dedupe `thesis_key` di frontend maupun
+`collect_theses` sudah benar) — murni inkonsistensi tampilan, tapi tepat pada
+invariant yang modul ini nyatakan sendiri.
+
+#### D8. Jendela sempit pencurian kunci di `runlock.acquire` — SELESAI
+`runlock.py:133-143`
+
+`os.open(O_CREAT|O_EXCL)` dan penulisan payload adalah dua langkah terpisah.
+Proses kedua yang membaca kunci tepat di antaranya melihat berkas KOSONG ->
+`json.loads` gagal -> `read_lock` mengembalikan None (dianggap rusak/basi) ->
+`release(check_owner=False)` **menghapus kunci yang baru saja sah dibuat**,
+lalu mengambilnya sendiri. Jendelanya mikrodetik dan job terjadwal cuma tiap
+2 jam, jadi peluangnya kecil — tapi konsekuensinya persis tabrakan dua run
+penuh yang modul ini ada untuk mencegah. Menulis payload ke tmp lalu
+`os.replace` (pola yang sudah dipakai `cache.set` dan `write_text_atomic`)
+menutupnya.
+
+#### D9. `cache.get`/`get_stale` membaca `payload["cached_at"]` di luar `try` — SELESAI
+`cache.py:65,149`
+
+Berkas cache yang JSON-nya sah tapi bentuknya tidak terduga (list, atau dict
+tanpa `cached_at`) melempar `KeyError`/`TypeError` ke pemanggil alih-alih
+diperlakukan sebagai cache-miss. Bukan temuan baru (baris ini tidak berubah
+di rentang audit) dan belum pernah terlihat terjadi; dicatat supaya tidak
+ditemukan ulang sebagai "baru" di audit berikutnya.
+
+### Diperiksa dan bersih
+
+- **`_ramp` (reasoning.py:239)** — aljabar dead-band diperiksa untuk keempat
+  kombinasi (satu sisi/dua sisi, `INF`, `span <= 0`, `value is None`).
+  Pembagian nol tidak mungkin, `frac` selalu diklem ke <= 1, tanda dibawa
+  `weight_*` masing-masing. `_record` melewatkan sumbangan nol persis seperti
+  perilaku step lama.
+- **`measure_baseline.py`** — proporsi gabungan, galat baku selisih dua
+  proporsi, dan selang 95% semuanya benar; uji pemisah "gerakan besar" vs
+  "arah | besar" memakai penyebut yang tepat (`n` vs `big`). Jendela mundur
+  (`exit_date <= entry_date`) dibuang di KEDUA blok perhitungan, bukan cuma
+  yang pertama. Kedua sisi memakai sumber harga & metode yang sama.
+- **Urutan pipeline** — `sync_benchmark_history` berjalan SEBELUM
+  `evaluate_due_entries`, jadi indeks pada `exit_date` sudah ada saat dibaca.
+- **Penangan gagal lapisan personal** (`refresh_full_pipeline.py:372-375`) —
+  mengosongkan `personal_call_sets` DAN `personal_timelines`, dan gerbang
+  tulis di baris 483 memeriksa `personal_call_sets`; riwayat 141 MB tidak
+  bisa tertimpa kosong lewat jalur ini.
+- **`write_text_atomic` (json_safe.py)** — tmp unik per-penulis, bersih-bersih
+  saat gagal, `os.replace`. Benar.
+- **`cache.set`** — retry kontensi + menyerah ke WARNING sudah sesuai maksud
+  (cache adalah optimasi); kegagalan menulis ISI tetap dilempar.
+- **`benchmark_history.py`** — deret hanya tumbuh, revisi penutupan menimpa,
+  `benchmark_close_on_or_before` mundur (tidak pernah maju) dengan toleransi
+  7 hari dan mengembalikan tanggal yang benar-benar dipakai.
+- **`institutional_flow.py`** — sentinel `pctChange = 100.0` dihitung sebagai
+  KEJADIAN, tidak pernah sebagai besaran; arah dan basis dipisah; posisi habis
+  (`pct <= -100`) dilewati alih-alih dipaksa. `_get` melayani dataclass dan
+  dict dengan satu jalur, jadi pipeline dan `build_institutional_flow.py`
+  tidak bisa menyimpang diam-diam.
+- **`collect_theses` / dedupe frontend** — kunci diawali ticker di KEDUA
+  tempat (`personal_calibration.py:88`, `PersonalHistoricalView.jsx:492`);
+  bug "2 sampel" tidak bisa kambuh lewat jalur ini.
+- **`backend/app.py` refresh lock** — status gabungan memori + kunci disk;
+  run di luar dashboard terdeteksi dan dilaporkan, bukan ditimpa.
+- **`risk.py` renormalisasi** — `active_weight` = 1,0 saat keempat komponen
+  ada, jadi identik dengan rumus lama untuk mayoritas ticker; hanya ticker
+  tanpa riwayat EPS surprise yang naik. Skor `overall_risk`/`risk_rating`
+  tidak dikonsumsi gerbang keputusan mana pun (yang dipakai `flags` dan
+  `high_severity_count`), jadi pita 25/50/75 yang tidak dikalibrasi ulang
+  tidak menggerakkan action — beda dari kasus A7.
+
+---
+
 ## Audit #2 — 2026-07-30 (setelah commit `ca6bf5b`)
 
 Tiga agen paralel, semuanya read-only: (1) sumber data & concurrency,

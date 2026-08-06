@@ -2,7 +2,8 @@
 
 Vonis v1 (`classification`, target tetap 3%) tidak disentuh sama sekali —
 lihat blok komentar di personal_evaluation.py. Yang ditambahkan di sebelahnya:
-`classification_v2`, `z_excess`, `sigma_window_pct`, `z_threshold`.
+`classification_v2`, `claim_type`, `z_excess`, `sigma_window_pct`,
+`z_threshold`.
 
 Sumber harga: .cache/price_history (per-ticker, ~80 KB/berkas) dan BUKAN
 evidence.json 262 MB — sama seperti scripts/measure_baseline.py. Di mesin ini
@@ -28,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
 from alphaforge.personal.personal_evaluation import (  # noqa: E402
-    Z_TERBUKTI, classify_v2, window_sigma_pct,
+    Z_TERBUKTI, claim_type, classify_v2, window_sigma_pct,
 )
 
 CACHE = ROOT / ".cache" / "price_history"
@@ -100,6 +101,13 @@ def main() -> int:
                 rec["z_excess"] = z
                 rec["sigma_window_pct"] = round(sigma, 3) if sigma is not None else None
                 rec["z_threshold"] = Z_TERBUKTI
+                # Audit 2026-08-06 (D6): versi pertama menulis 4 dari 5 field
+                # v2 dan melewatkan justru yang disebut WAJIB oleh docstring
+                # `claim_type` — tanpanya, rapor kalibrasi yang mengiris per
+                # jenis klaim melihat bucket kosong untuk SELURUH riwayat hasil
+                # backfill. Diturunkan dari action yang tersimpan, sumber yang
+                # sama dengan yang dipakai classify_v2 di baris atas.
+                rec["claim_type"] = claim_type(action)
                 stats["ditulis"] += 1
 
                 key = f"{ticker}:{module}:{rec.get('thesis_key')}"
