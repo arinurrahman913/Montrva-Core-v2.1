@@ -228,6 +228,117 @@ def diagnose_miss(
     return "arah_salah"
 
 
+# --- VONIS v2: gerakan berarti, bukan gerakan biasa -------------------------
+#
+# Kenapa vonis lama tidak cukup, diukur bukan dikira (2026-08-05):
+#
+#   - Threshold-nya tetap 3% untuk seluruh ticker, sementara gerakan harga khas
+#     di jendela 4-9 hari itu +-5,16%. Targetnya berada DI BAWAH derau, jadi
+#     lolos-tidaknya lebih ditentukan ke arah mana derau jatuh daripada oleh
+#     benar-salahnya tesis.
+#   - Diuji lawan pembanding nol (scripts/measure_baseline.py): hit rate
+#     pilihan sistem 32,7% vs saham sembarangan di jendela yang sama 35,7% --
+#     selisih -3,1pp dengan selang kepercayaan 95% -8,6..+2,5pp. Nol ada di
+#     dalam selang: seleksinya tidak bisa dibedakan dari kebetulan. Angka
+#     "hit rate 34,7%" ternyata bukan sinyal, itu base rate.
+#   - Threshold tetap juga memperlakukan saham yang bergerak 2%/minggu sama
+#     dengan yang bergerak 12%/minggu. Untuk yang kedua, naik 3% bukan
+#     prestasi -- itu hari Selasa biasa.
+#
+# Aturan v2 menormalkan keduanya sekaligus:
+#
+#     z = (return_saham - return_indeks) / (sigma_harian * sqrt(hari_bursa))
+#
+# Pembilangnya excess (jadi pasar yang naik tidak lagi dihitung sebagai
+# keberhasilan tesis), penyebutnya volatilitas saham ITU SENDIRI (jadi barnya
+# ikut naik untuk saham liar). z >= +1 berarti "bergerak naik melebihi derunya
+# sendiri, setelah pasar diperhitungkan".
+#
+# TIGA HAL YANG SENGAJA:
+#
+# 1. `classification` LAMA TIDAK DIUBAH. v2 ditaruh di sebelahnya. Vonis lama
+#    adalah yang dijanjikan sistem saat call itu dibuat; menggantinya di
+#    tempat berarti menulis ulang sejarah, dan tidak ada lagi cara memeriksa
+#    apakah perubahan aturan ini membantu atau tidak.
+# 2. SIGMA DIHITUNG DARI BAR SEBELUM TANGGAL MASUK, tidak pernah dari jendela
+#    tesisnya sendiri. Memakai jendela sendiri = mengintip masa depan: saham
+#    yang kebetulan bergolak besar di jendela itu akan otomatis dapat bar yang
+#    lebih tinggi justru karena gejolaknya.
+# 3. ATURAN BARUNYA LEBIH SULIT, BUKAN LEBIH GAMPANG (base rate z>=1 sekitar
+#    16%, bukan 36%). Ini penting karena aturannya diubah SETELAH melihat
+#    hasil yang jelek -- kalau perubahannya bikin angka membaik, itu menjahit
+#    hasil ke masa lalu. Yang diperbaiki ketajaman alat ukurnya, bukan nilainya.
+Z_TERBUKTI = 1.0
+Z_MELESET = -1.0
+SIGMA_LOOKBACK_BARS = 60
+SIGMA_MIN_BARS = 20
+
+
+def window_sigma_pct(
+    price_history: list[dict] | None, entry_date: str | None, exit_date: str | None,
+) -> float | None:
+    """Deru khas saham ini SEPANJANG JENDELA tesis, dalam persen.
+
+    sigma harian dihitung dari maksimal SIGMA_LOOKBACK_BARS bar terakhir yang
+    tanggalnya <= entry_date (tidak pernah menyentuh bar di dalam jendela --
+    lihat catatan #2 di atas), lalu diskalakan akar-waktu ke jumlah bar bursa
+    yang benar-benar ada di dalam jendela. Memakai jumlah bar, bukan selisih
+    hari kalender: akhir pekan tidak menambah deru.
+
+    None kalau bar historisnya kurang dari SIGMA_MIN_BARS -- pemanggil
+    menuliskannya sebagai vonis v2 yang kosong, bukan menebak.
+    """
+    if not price_history or not entry_date or not exit_date:
+        return None
+    bars = sorted(
+        ((str(b.get("date"))[:10], b.get("close")) for b in price_history
+         if b.get("date") and b.get("close")),
+        key=lambda x: x[0],
+    )
+    if not bars:
+        return None
+
+    prior = [c for d, c in bars if d <= entry_date[:10]][-SIGMA_LOOKBACK_BARS:]
+    if len(prior) < SIGMA_MIN_BARS:
+        return None
+    rets = [
+        (prior[i] - prior[i - 1]) / prior[i - 1] * 100.0
+        for i in range(1, len(prior)) if prior[i - 1]
+    ]
+    if len(rets) < SIGMA_MIN_BARS - 1:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+    sigma_daily = var ** 0.5
+    if sigma_daily <= 0:
+        return None
+
+    n_bars = sum(1 for d, _ in bars if entry_date[:10] < d <= exit_date[:10])
+    if n_bars < 1:
+        return None
+    return sigma_daily * (n_bars ** 0.5)
+
+
+def classify_v2(
+    action: str, excess_pct: float | None, sigma_window_pct: float | None,
+) -> tuple[str | None, float | None]:
+    """(classification_v2, z). None kalau tidak bisa dihitung -- BUKAN 'ambigu',
+    karena 'tidak tahu' dan 'gerakannya tanggung' dua hal berbeda."""
+    if action not in ACTION_CATEGORY_ENTRY and action not in ACTION_CATEGORY_EXIT:
+        return "tidak_berlaku", None
+    if excess_pct is None or not sigma_window_pct:
+        return None, None
+    z = excess_pct / sigma_window_pct
+    # Action keluar mengklaim harga TIDAK naik -- arah pembuktiannya terbalik,
+    # jadi tandanya dibalik dan ambang yang sama dipakai apa adanya.
+    zz = z if action in ACTION_CATEGORY_ENTRY else -z
+    if zz >= Z_TERBUKTI:
+        return "terbukti", round(z, 3)
+    if zz <= Z_MELESET:
+        return "meleset", round(z, 3)
+    return "ambigu", round(z, 3)
+
+
 def _sorted_entries(entries: list[dict]) -> list[dict]:
     return sorted(entries, key=lambda e: e.get("analyzed_at", ""))
 
@@ -374,6 +485,15 @@ def evaluate_due_entries(
                     continue  # harga belum bisa dibaca — biarkan pending, coba lagi run berikutnya
 
                 threshold_pct = HORIZON_OUTCOME_THRESHOLD_PCT.get(start_call["horizon"])
+
+                # Vonis v2 -- berdampingan dengan yang lama, tidak menggantikan.
+                sigma_w = window_sigma_pct(price_history, since[:10], exit_date)
+                cls_v2, z_excess = classify_v2(
+                    start_call["action"],
+                    round(excess, 2) if excess is not None else None,
+                    sigma_w,
+                )
+
                 outcome_record = {
                     "classification": classification,
                     # Sebab, bukan cuma vonis (lihat diagnose_miss). None untuk
@@ -392,6 +512,11 @@ def evaluate_due_entries(
                     "benchmark_at_entry": round(bench_start, 4) if bench_start is not None else None,
                     "benchmark_at_exit": round(bench_end, 4) if bench_end is not None else None,
                     "benchmark_source": bench_source,
+                    # --- vonis v2 (lihat blok komentar di atas classify_v2) ---
+                    "classification_v2": cls_v2,
+                    "z_excess": z_excess,
+                    "sigma_window_pct": round(sigma_w, 3) if sigma_w is not None else None,
+                    "z_threshold": Z_TERBUKTI,
                     "threshold_pct": threshold_pct,
                     "baseline": baseline,
                     "due_at": due.isoformat(),

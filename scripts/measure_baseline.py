@@ -51,7 +51,7 @@ import os
 import random
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -221,6 +221,108 @@ def main() -> int:
     U = tot_uni_hit / tot_uni_n * 100
     print(f"{'TOTAL':<26} {'':>4} {'':>6} | {tot_pick_hit:>4}/{tot_pick_n:<4} {P:>6.1f}%      | "
           f"{tot_uni_hit:>5}/{tot_uni_n:<5} {U:>6.1f}%    | {P - U:>+7.1f}pp")
+
+    # --- Aturan v2 pada kedua sisi -------------------------------------------
+    # Wajib. Angka v2 untuk pilihan sistem SENDIRIAN tidak bisa dibaca: kalau
+    # ternyata `meleset` jauh lebih banyak dari `terbukti`, itu bisa berarti
+    # seleksinya buruk ATAU berarti saham median memang tertinggal dari indeks
+    # kapitalisasi-tertimbang di jendela itu (efek keluasan pasar, tidak ada
+    # hubungannya dengan seleksi). Cuma pembanding pada jendela yang sama yang
+    # bisa memisahkan keduanya -- persis alasan seluruh skrip ini ada.
+    from alphaforge.personal.personal_evaluation import classify_v2, window_sigma_pct
+
+    def v2_tally(bars_map, tickers, ed, xd, bret):
+        t = Counter()
+        for tk in tickers:
+            b = bars_map.get(tk)
+            if not b:
+                continue
+            r = ret(b, ed, xd)
+            if r is None or bret is None:
+                continue
+            hist = [{"date": d, "close": c} for d, c in sorted(b.items())]
+            sig = window_sigma_pct(hist, ed, xd)
+            cls, _ = classify_v2("masuk_spekulatif", r - bret, sig)
+            t[str(cls)] += 1
+        return t
+
+    print("\n" + "=" * 96)
+    print("ATURAN v2 (excess vs indeks, dibagi volatilitas saham itu sendiri; terbukti = z >= +1)")
+    print("=" * 96)
+    pv, uv = Counter(), Counter()
+    for w in sorted(windows):
+        ed, xd, _ = w
+        if date.fromisoformat(xd) <= date.fromisoformat(ed):
+            continue
+        if not (bench.get(ed) and bench.get(xd)):
+            continue
+        bret = (bench[xd] - bench[ed]) / bench[ed] * 100.0
+        pv += v2_tally(bars_by_ticker, windows[w], ed, xd, bret)
+        uv += v2_tally(universe_bars, universe_bars.keys(), ed, xd, bret)
+
+    def show(name, c):
+        tb, ml, am = c["terbukti"], c["meleset"], c["ambigu"]
+        n = tb + ml + am
+        if not n:
+            print(f"{name:22s} tidak ada data")
+            return None
+        print(f"{name:22s} terbukti {tb:5d} ({tb/n*100:5.1f}%) · meleset {ml:5d} ({ml/n*100:5.1f}%) · "
+              f"ambigu {am:5d} ({am/n*100:5.1f}%)  dari {n}")
+        return tb / n * 100, ml / n * 100, n
+
+    a = show("pilihan sistem", pv)
+    b = show("sembarang saham", uv)
+    if a and b:
+        print(f"\nselisih 'terbukti' : {a[0] - b[0]:+.1f}pp    selisih 'meleset' : {a[1] - b[1]:+.1f}pp")
+        p1, p2 = a[0] / 100, b[0] / 100
+        n1, n2 = a[2], b[2]
+        pool = (p1 * n1 + p2 * n2) / (n1 + n2)
+        se2 = (pool * (1 - pool) * (1 / n1 + 1 / n2)) ** 0.5 * 100
+        d2 = a[0] - b[0]
+        print(f"selang kepercayaan 95% untuk selisih 'terbukti': "
+              f"{d2 - 1.96 * se2:+.1f}pp .. {d2 + 1.96 * se2:+.1f}pp")
+        if d2 - 1.96 * se2 <= 0 <= d2 + 1.96 * se2:
+            print("-> masih tidak bisa dibedakan dari kebetulan, sekarang dengan alat yang lebih tajam.")
+        else:
+            print("-> DI LUAR derau: seleksi benar-benar berbeda dari acak di bawah aturan v2.")
+
+        # --- UJI PEMISAH: besarnya gerakan vs ARAH gerakan ---------------------
+        # Selisih 'terbukti' di atas saja MENYESATKAN kalau dibaca sebagai
+        # keunggulan meramal. Pilihan sistem punya LEBIH BANYAK terbukti DAN
+        # lebih banyak meleset sekaligus -- artinya |z| >= 1 lebih sering
+        # terjadi pada pilihannya, yaitu sahamnya bergerak lebih besar relatif
+        # terhadap deru historisnya sendiri. Itu kemampuan mendeteksi PERISTIWA
+        # (lensa ini memang memilih ticker berkatalis, 80% earnings), bukan
+        # kemampuan menebak ARAH.
+        #
+        # Dua pertanyaan itu harus dipisah, dan cuma yang kedua yang menentukan
+        # apakah action "masuk" masuk akal:
+        #   (1) seberapa sering gerakannya besar   -> pangsa |z| >= 1
+        #   (2) KALAU besar, seberapa sering NAIK  -> terbukti / (terbukti+meleset)
+        def big_and_dir(name, c):
+            tb, ml, am = c["terbukti"], c["meleset"], c["ambigu"]
+            n, big = tb + ml + am, tb + ml
+            if not n or not big:
+                return None
+            print(f"  {name:20s} gerakan besar {big:5d}/{n:<5d} ({big/n*100:5.1f}%)   "
+                  f"| kalau besar, naik: {tb:4d}/{big:<5d} ({tb/big*100:5.1f}%)")
+            return big / n, tb / big, n, big
+
+        print("\n" + "-" * 96)
+        print("PEMISAHAN: mendeteksi gerakan BESAR vs menebak ARAH-nya")
+        print("-" * 96)
+        pa = big_and_dir("pilihan sistem", pv)
+        ub = big_and_dir("sembarang saham", uv)
+        if pa and ub:
+            for label, (x1, n1_), (x2, n2_) in (
+                ("pangsa gerakan besar", (pa[0], pa[2]), (ub[0], ub[2])),
+                ("arah naik | besar", (pa[1], pa[3]), (ub[1], ub[3])),
+            ):
+                pl = (x1 * n1_ + x2 * n2_) / (n1_ + n2_)
+                s = (pl * (1 - pl) * (1 / n1_ + 1 / n2_)) ** 0.5 * 100
+                d = (x1 - x2) * 100
+                sig = "DI LUAR derau" if abs(d) > 1.96 * s else "di dalam derau"
+                print(f"  {label:24s} selisih {d:+6.1f}pp  SK95% {d - 1.96 * s:+6.1f}..{d + 1.96 * s:+6.1f}pp  -> {sig}")
 
     print(f"\nmedian return pilihan sistem : {statistics.median(pick_returns):+.2f}%")
     print(f"median return sembarang saham: {statistics.median(uni_returns):+.2f}%")
