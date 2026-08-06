@@ -29,7 +29,12 @@ ACTION_VOCAB: dict[PositionStatus, dict[Module, tuple[str, ...]]] = {
     "no_holding": {
         "multibagger": ("mulai_posisi", "cicil_bertahap", "pantau", "lewati"),
         "quality_compound": ("akumulasi", "akumulasi_saat_koreksi", "pantau", "lewati"),
-        "speculative": ("masuk_spekulatif", "tunggu_katalis", "lewati"),
+        # "masuk_spekulatif" DIGANTI "siaga_gerakan" (2026-08-05) — lihat blok
+        # penjelasan di atas ACTION_CATEGORY_MAGNITUDE di bawah. Nama lama
+        # TIDAK dihapus dari kategori/evaluasi karena 309 tesis lama memakainya
+        # dan harus tetap dinilai dengan aturan yang berlaku saat dibuat; yang
+        # berubah cuma apa yang DIPRODUKSI mulai sekarang.
+        "speculative": ("siaga_gerakan", "tunggu_katalis", "lewati"),
     },
     "holding": {
         "multibagger": ("tambah_bertahap", "tahan", "kurangi", "jual"),
@@ -61,7 +66,9 @@ FULL_TO_GRADED_ACTION: dict[PositionStatus, dict[Module, dict[str, str]]] = {
     "no_holding": {
         "multibagger": {"mulai_posisi": "cicil_bertahap"},
         "quality_compound": {"akumulasi": "akumulasi_saat_koreksi"},
-        "speculative": {"masuk_spekulatif": "tunggu_katalis"},
+        # Kedua nama dipetakan: yang lama supaya rekonstruksi call historis
+        # tetap berperilaku sama, yang baru untuk yang diproduksi mulai kini.
+        "speculative": {"masuk_spekulatif": "tunggu_katalis", "siaga_gerakan": "tunggu_katalis"},
     },
     "holding": {
         "multibagger": {},
@@ -90,6 +97,40 @@ PASSIVE_ACTION: dict[PositionStatus, dict[Module, str]] = {
 # reasoning.py buat memilih horizon_label, dan frontend buat memilih teks.
 ACTION_CATEGORY_REVIEW = frozenset({"pantau", "lewati", "tunggu_katalis"})
 ACTION_CATEGORY_EXIT = frozenset({"kurangi", "jual"})
+
+# --- Action berklaim AMPLITUDO, bukan arah (2026-08-05) ---------------------
+#
+# Diukur, bukan dikira. Lensa Spekulatif diuji lawan pembanding nol (saham
+# yang TIDAK dipilih, pada jendela tanggal yang sama persis, aturan yang sama
+# persis — scripts/measure_baseline.py):
+#
+#     pilihan sistem   gerakan besar 48,9%  | kalau besar, naik 25,8%
+#     saham acak       gerakan besar 33,4%  | kalau besar, naik 21,7%
+#     selisih          +15,5pp (SK95% +10,0..+21,0)  |  +4,2pp (SK95% -2,8..+11,1)
+#                      DI LUAR derau                 |  di dalam derau
+#
+# Lensa ini BISA menemukan saham yang akan bergerak besar — masuk akal secara
+# mekanis, dia memang memilih ticker berkatalis dan 80% katalisnya earnings.
+# Yang TIDAK terdeteksi sama sekali: kemampuan menebak ARAH gerakan itu.
+#
+# `masuk_spekulatif` mengklaim arah, jadi ia menjanjikan hal yang tidak
+# dikuasai lensanya, sekaligus menyembunyikan hal yang dikuasai. `siaga_gerakan`
+# mengklaim persis yang terukur: "akan bergerak melebihi derunya sendiri, arah
+# tidak diklaim".
+#
+# JEBAKAN YANG HAMPIR MELOLOSKAN KESIMPULAN SALAH: selisih 'terbukti' di bawah
+# aturan v2 adalah +5,4pp dan tampak signifikan. Dibaca sendirian itu terlihat
+# seperti "sistem terbukti unggul meramal". Padahal pilihan sistem punya lebih
+# banyak terbukti DAN lebih banyak meleset sekaligus (ambigu 51% vs 67%) — itu
+# tanda amplitudo, bukan arah. Aturan umumnya: kalau sebuah metrik naik
+# "signifikan", periksa dulu apakah metrik kebalikannya ikut naik.
+ACTION_CATEGORY_MAGNITUDE = frozenset({"siaga_gerakan"})
+
+# P4 berlaku untuk action ini juga: data yang terlalu tipis tidak boleh dipakai
+# mengklaim apa pun, termasuk klaim amplitudo. Tapi `siaga_gerakan` BUKAN
+# tindakan eksposur, jadi ia sengaja tidak dimasukkan ke ACTION_FULL_EXPOSURE —
+# memasukkannya akan membuat nama konstanta itu berbohong. Gerbangnya dipisah.
+ACTION_GATED_BY_CONFIDENCE = ACTION_FULL_EXPOSURE | ACTION_CATEGORY_MAGNITUDE
 
 
 def horizon_label(action: str) -> HorizonLabel:
@@ -225,9 +266,14 @@ def validate_personal_call(
         if call.action != expected:
             violations.append(f"P3: stance tak_terbaca tapi action='{call.action}' (harus '{expected}')")
 
-    # P4: confidence low -> tidak boleh action menambah eksposur penuh/langsung.
-    if confidence_band == "low" and call.action in ACTION_FULL_EXPOSURE:
-        violations.append(f"P4: confidence.band=low tapi action='{call.action}' (menambah eksposur penuh)")
+    # P4: confidence low -> tidak boleh action menambah eksposur penuh/langsung,
+    # DAN tidak boleh action berklaim amplitudo (`siaga_gerakan`): data yang
+    # terlalu tipis tidak layak dipakai mengklaim apa pun. Gerbangnya memakai
+    # ACTION_GATED_BY_CONFIDENCE, bukan ACTION_FULL_EXPOSURE, supaya nama
+    # konstanta yang kedua tetap jujur — siaga_gerakan bukan tindakan eksposur.
+    if confidence_band == "low" and call.action in ACTION_GATED_BY_CONFIDENCE:
+        kind = "berklaim amplitudo" if call.action in ACTION_CATEGORY_MAGNITUDE else "menambah eksposur penuh"
+        violations.append(f"P4: confidence.band=low tapi action='{call.action}' ({kind})")
 
     # P5: action wajib dari kosakata yang cocok dengan position_status.
     if call.action not in vocab:

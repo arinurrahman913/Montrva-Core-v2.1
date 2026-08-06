@@ -70,7 +70,7 @@ from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 from ..layer1.benchmark_history import benchmark_close_on_or_before
-from .personal_contracts import ACTION_CATEGORY_EXIT
+from .personal_contracts import ACTION_CATEGORY_EXIT, ACTION_CATEGORY_MAGNITUDE
 from .personal_historical import call_due_date
 
 if TYPE_CHECKING:
@@ -163,6 +163,11 @@ def _last_bar_date(price_history: list[dict] | None) -> str | None:
 
 
 def _classify(action: str, horizon: str, return_pct: float | None) -> str | None:
+    # Vonis v1 menilai ARAH terhadap target absolut. `siaga_gerakan` tidak
+    # mengklaim arah sama sekali, jadi di sini ia "tidak_berlaku" — bukan
+    # kegagalan, melainkan pertanyaan yang tidak ia jawab. Penilaiannya ada di
+    # classify_v2 (|z| >= 1). Membiarkannya dinilai v1 akan menuduh action ini
+    # meleset karena tidak memenuhi janji yang tidak pernah ia buat.
     if action not in ACTION_CATEGORY_ENTRY and action not in ACTION_CATEGORY_EXIT:
         return "tidak_berlaku"  # action tanpa klaim arah -- tidak dievaluasi
     if return_pct is None:
@@ -319,16 +324,42 @@ def window_sigma_pct(
     return sigma_daily * (n_bars ** 0.5)
 
 
+def claim_type(action: str) -> str:
+    """Apa yang sebenarnya DIKLAIM action ini — penentu bagaimana ia dinilai.
+
+    Wajib disimpan berdampingan dengan outcome: sesudah `siaga_gerakan` ada,
+    `classification_v2` menjawab "klaimnya terbukti atau tidak", dan klaimnya
+    BEDA per action. Tanpa penanda ini, rapor kalibrasi akan menjumlahkan
+    "tesis arah yang benar" dengan "tesis amplitudo yang benar" jadi satu
+    angka yang tidak berarti apa-apa.
+    """
+    if action in ACTION_CATEGORY_MAGNITUDE:
+        return "amplitudo"
+    if action in ACTION_CATEGORY_ENTRY or action in ACTION_CATEGORY_EXIT:
+        return "arah"
+    return "tanpa_klaim"
+
+
 def classify_v2(
     action: str, excess_pct: float | None, sigma_window_pct: float | None,
 ) -> tuple[str | None, float | None]:
     """(classification_v2, z). None kalau tidak bisa dihitung -- BUKAN 'ambigu',
     karena 'tidak tahu' dan 'gerakannya tanggung' dua hal berbeda."""
-    if action not in ACTION_CATEGORY_ENTRY and action not in ACTION_CATEGORY_EXIT:
+    kind = claim_type(action)
+    if kind == "tanpa_klaim":
         return "tidak_berlaku", None
     if excess_pct is None or not sigma_window_pct:
         return None, None
     z = excess_pct / sigma_window_pct
+
+    if kind == "amplitudo":
+        # Klaimnya "akan bergerak melebihi derunya sendiri", tanpa arah. Jadi
+        # yang dinilai |z|, dan hasilnya BINER -- tidak ada "ambigu", karena
+        # klaimnya sendiri tidak punya wilayah abu-abu: gerakannya melewati
+        # ambang atau tidak. (Untuk klaim arah, 'ambigu' ada karena gerakan
+        # kecil memang tidak membuktikan maupun membantah arah apa pun.)
+        return ("terbukti" if abs(z) >= Z_TERBUKTI else "meleset"), round(z, 3)
+
     # Action keluar mengklaim harga TIDAK naik -- arah pembuktiannya terbalik,
     # jadi tandanya dibalik dan ambang yang sama dipakai apa adanya.
     zz = z if action in ACTION_CATEGORY_ENTRY else -z
@@ -514,6 +545,7 @@ def evaluate_due_entries(
                     "benchmark_source": bench_source,
                     # --- vonis v2 (lihat blok komentar di atas classify_v2) ---
                     "classification_v2": cls_v2,
+                    "claim_type": claim_type(start_call["action"]),
                     "z_excess": z_excess,
                     "sigma_window_pct": round(sigma_w, 3) if sigma_w is not None else None,
                     "z_threshold": Z_TERBUKTI,

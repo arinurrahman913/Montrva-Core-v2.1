@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { api } from '../api'
-import { horizonProgress, horizonTargetPrice } from '../format'
+import { horizonProgress, horizonTargetPrice, MAGNITUDE_ACTIONS, noiseBandPct } from '../format'
 
 // Sejak kapan ACTION ini (bukan cuma ticker-nya) muncul: jalan MUNDUR dari
 // entry terbaru di personal_history, berhenti begitu action lensa ini beda
@@ -313,27 +313,60 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
   const progress = horizon ? horizonProgress(since, horizon, horizonAnchor) : null
   const hitTarget = target != null && currentPrice >= target.targetPrice
 
+  // Klaim AMPLITUDO (siaga_gerakan): tidak ada target harga, karena arahnya
+  // memang tidak diklaim. Yang menggantikannya pita ±deru — sudah bergerak
+  // melewatinya atau belum, ke arah mana pun. Menampilkan "Target +3%" di sini
+  // akan mengembalikan persis kesalahpahaman yang membuat action ini diganti.
+  const isMagnitude = MAGNITUDE_ACTIONS.has(action)
+  const bandPct = isMagnitude
+    ? noiseBandPct(priceHistory, progress ? Math.max(Math.round(progress.upperDays * 5 / 7), 1) : bars.length)
+    : null
+  const movedBeyondNoise = bandPct != null && pct != null && Math.abs(pct) >= bandPct
+
   return (
     <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <span style={{ fontSize: 9.5, color: 'var(--faint)' }}>Sejak {sinceDate || 'mulai dilacak'}</span>
-        {hitTarget ? (
+        {movedBeyondNoise ? (
+          <span
+            style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gold-hi)', textTransform: 'uppercase', letterSpacing: '.03em' }}
+            title="Sudah bergerak melebihi deru khasnya sendiri. Sengaja TIDAK diwarnai hijau/merah — klaimnya amplitudo, dan gerakan turun sama sahnya dengan naik."
+          >
+            ✓ Sudah lewat pita deru
+          </span>
+        ) : hitTarget ? (
           <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--good)', textTransform: 'uppercase', letterSpacing: '.03em' }}>✓ Sudah capai target</span>
         ) : liveClose != null && (
           <span style={{ fontSize: 9.5, color: 'var(--accent)' }} title="Quote live, bukan snapshot pipeline">● live</span>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: target ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: (target || bandPct != null) ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
         <div style={{ borderLeft: '2px solid var(--rule)', paddingLeft: 8 }}>
           <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Entry</div>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700 }}>{fmtPrice(entryPrice)}</div>
         </div>
-        <div style={{ borderLeft: `2px solid ${hitTarget ? 'var(--good)' : 'var(--gold)'}`, paddingLeft: 8 }}>
+        {/* Untuk klaim amplitudo, hijau/merah menyesatkan: turun 8% BUKAN
+            kegagalan tesis ini — tesisnya cuma bilang "akan bergerak". Jadi
+            pewarnaan arah dimatikan dan diganti penanda netral. */}
+        <div style={{ borderLeft: `2px solid ${isMagnitude ? 'var(--accent)' : hitTarget ? 'var(--good)' : 'var(--gold)'}`, paddingLeft: 8 }}>
           <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{liveClose != null ? 'Sekarang' : 'Terakhir'}</div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>{fmtPrice(currentPrice)}</div>
-          {pct != null && <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>{pct >= 0 ? '+' : ''}{pct.toFixed(1)}%</div>}
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: isMagnitude ? 'var(--text)' : pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>{fmtPrice(currentPrice)}</div>
+          {pct != null && (
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: isMagnitude ? 'var(--dim)' : pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+              {isMagnitude ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${Math.abs(pct).toFixed(1)}% gerak)` : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+            </div>
+          )}
         </div>
+        {bandPct != null && (
+          <div style={{ borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>
+            <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Pita deru</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: movedBeyondNoise ? 'var(--gold-hi)' : 'var(--dim)' }}>
+              ±{bandPct.toFixed(1)}%
+            </div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--faint)' }}>1σ, arah apa pun</div>
+          </div>
+        )}
         {target && (
           <div style={{ borderLeft: '2px solid var(--gold)', paddingLeft: 8 }}>
             <div style={{ fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Target</div>
@@ -350,7 +383,9 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
       />
 
       <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6 }}>
-        Pergerakan harga, bukan validasi tesis — dibaca sendiri, bukan vonis sistem (§12).
+        {isMagnitude
+          ? 'Klaimnya AMPLITUDO, bukan arah: lensa ini terukur bisa menemukan saham yang akan bergerak melebihi derunya sendiri (+15,5pp di atas acak), tapi tidak terbukti menebak ke arah mana (+4,2pp, masih di dalam derau). Turun sama sahnya dengan naik.'
+          : 'Pergerakan harga, bukan validasi tesis — dibaca sendiri, bukan vonis sistem (§12).'}
       </div>
 
       {progress && (

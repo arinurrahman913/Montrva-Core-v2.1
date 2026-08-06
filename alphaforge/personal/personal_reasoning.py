@@ -19,7 +19,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .personal_contracts import PersonalCall, downgrade_full_exposure, validate_personal_call
+from .personal_contracts import (
+    ACTION_CATEGORY_MAGNITUDE, PersonalCall, downgrade_full_exposure, validate_personal_call,
+)
 
 if TYPE_CHECKING:
     from ..layer2.reasoning_contracts import ModuleOutput
@@ -81,7 +83,14 @@ ACTION_TABLE: dict[str, dict[str, dict[str, dict[str, str]]]] = {
             # 1087 ticker) lolos jadi kandidat masuk_spekulatif tiap hari,
             # mayoritas cuma modal "earnings terjadwal" (katalis paling umum)
             # + confidence medium, bukan keyakinan tinggi beneran.
-            "asimetri_berkatalis": {"high": "masuk_spekulatif", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
+            # "masuk_spekulatif" -> "siaga_gerakan" (2026-08-05). Alasan lengkap
+            # + angkanya ada di atas ACTION_CATEGORY_MAGNITUDE di
+            # personal_contracts.py. Ringkasnya: lensa ini terbukti menemukan
+            # saham yang akan bergerak besar (+15,5pp di atas acak, di luar
+            # derau) tapi TIDAK terbukti bisa menebak arahnya (+4,2pp, di dalam
+            # derau) -- jadi action-nya berhenti menjanjikan arah dan mulai
+            # menyatakan apa yang benar-benar terukur.
+            "asimetri_berkatalis": {"high": "siaga_gerakan", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
             "asimetri_tanpa_katalis": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
             "tanpa_asimetri": {"high": "lewati", "medium": "lewati", "low": "lewati"},
             "asimetri_tak_terbaca": {"high": "tunggu_katalis", "medium": "tunggu_katalis", "low": "tunggu_katalis"},
@@ -392,6 +401,13 @@ def build_personal_call(
         action_rationale=(
             f"Stance '{module_output.stance}' (skor tesis {module_output.thesis_score:.0f}, "
             f"tingkat {score_tier}): {module_output.stance_rationale}"
+            # Klaim amplitudo WAJIB menyatakan batasnya sendiri di rationale.
+            # Tanpa kalimat ini, pembaca akan membaca "siaga" sebagai "beli" —
+            # persis kekeliruan yang membuat action ini diganti.
+            + (" — klaimnya AMPLITUDO, bukan arah: lensa ini terukur bisa menemukan saham "
+               "yang akan bergerak melebihi derunya sendiri, tapi tidak terbukti bisa "
+               "menebak ke arah mana."
+               if action in ACTION_CATEGORY_MAGNITUDE else "")
             + (f" — diturunkan dari '{action_downgraded_from}' karena confidence lensa ini "
                f"'low' (P4: data terlalu tipis untuk eksposur penuh)."
                if action_downgraded_from else "")

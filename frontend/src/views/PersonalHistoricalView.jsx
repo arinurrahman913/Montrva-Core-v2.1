@@ -3,7 +3,7 @@ import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
 import DataTable from '../components/DataTable'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
-import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, BEST_ACTION, rankPersonalPicks } from '../format'
+import { MODULE_LABELS, outcomeClass, prettyOutcome, prettyAction, isBestAction, rankPersonalPicks } from '../format'
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -27,7 +27,7 @@ function lensThreads(timeline) {
     let chosen = null
     for (const e of entries) {
       const call = (e.personal_call_set || {})[m]
-      if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) chosen = e
+      if (call && call.position_status === 'no_holding' && isBestAction(m, call.action)) chosen = e
     }
     if (chosen) threads.push({ module: m, entry: chosen, call: chosen.personal_call_set[m] })
   }
@@ -388,7 +388,7 @@ function buildTopThreeIndex(allTimelines) {
       const callSet = entry.personal_call_set || {}
       for (const m of MODULES) {
         const call = callSet[m]
-        if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[m]) {
+        if (call && call.position_status === 'no_holding' && isBestAction(m, call.action)) {
           const key = `${day}|${m}`
           if (!byDayModule.has(key)) byDayModule.set(key, [])
           // Fallback thesis_score -> source_confidence (data lama, dari sebelum

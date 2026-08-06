@@ -301,7 +301,50 @@ const ACTION_CATEGORY = {
 export const BEST_ACTION = {
   multibagger: 'mulai_posisi',
   quality_compound: 'akumulasi',
-  speculative: 'masuk_spekulatif',
+  // "masuk_spekulatif" -> "siaga_gerakan" (2026-08-05). Lensa ini terukur bisa
+  // menemukan saham yang akan bergerak besar (+15,5pp di atas acak, di luar
+  // derau) tapi TIDAK terbukti menebak arahnya (+4,2pp, di dalam derau), jadi
+  // action-nya berhenti mengklaim arah. Lihat ACTION_CATEGORY_MAGNITUDE di
+  // alphaforge/personal/personal_contracts.py untuk angka lengkapnya.
+  speculative: 'siaga_gerakan',
+}
+
+// Action "terkuat" per lensa LINTAS WAKTU. Ini bukan shim transisi yang nanti
+// dibuang: Riwayat Pribadi menampilkan snapshot historis, dan snapshot dari
+// sebelum 2026-08-05 memakai "masuk_spekulatif" — mereka akan ada di riwayat
+// selama bertahun-tahun. Frontend harus mengenali kedua nama SELAMANYA, kalau
+// tidak seluruh tesis Spekulatif lama hilang dari halaman begitu kosakatanya
+// berganti. BEST_ACTION di atas tetap ada untuk "apa yang diproduksi HARI INI".
+export const BEST_ACTION_ALIASES = {
+  multibagger: new Set(['mulai_posisi']),
+  quality_compound: new Set(['akumulasi']),
+  speculative: new Set(['siaga_gerakan', 'masuk_spekulatif']),
+}
+
+export function isBestAction(module, action) {
+  return BEST_ACTION_ALIASES[module]?.has(action) ?? false
+}
+
+// Action yang mengklaim AMPLITUDO, bukan arah. Harus sama dengan
+// ACTION_CATEGORY_MAGNITUDE di personal_contracts.py.
+export const MAGNITUDE_ACTIONS = new Set(['siaga_gerakan'])
+
+// Lebar "deru" khas saham ini, dalam persen, untuk jendela sepanjang
+// `windowBars` hari bursa. Cerminan window_sigma_pct() di
+// personal_evaluation.py: sigma harian dari bar SEBELUM entry (tidak pernah
+// dari jendela tesisnya sendiri — itu mengintip masa depan), diskalakan
+// akar-waktu. Dipakai kartu tesis untuk menggambar pita ±deru sebagai ganti
+// garis target, yang tidak punya arti untuk klaim amplitudo.
+export function noiseBandPct(bars, windowBars) {
+  if (!bars || bars.length < 21 || !windowBars) return null
+  const closes = bars.slice(-60).map((b) => b.close).filter((c) => c > 0)
+  if (closes.length < 21) return null
+  const rets = []
+  for (let i = 1; i < closes.length; i++) rets.push(((closes[i] - closes[i - 1]) / closes[i - 1]) * 100)
+  const mean = rets.reduce((s, r) => s + r, 0) / rets.length
+  const varr = rets.reduce((s, r) => s + (r - mean) ** 2, 0) / (rets.length - 1)
+  const sd = Math.sqrt(varr)
+  return sd > 0 ? sd * Math.sqrt(windowBars) : null
 }
 
 export function personalActionClass(action) {

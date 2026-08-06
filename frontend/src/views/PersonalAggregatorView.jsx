@@ -3,7 +3,7 @@ import { api } from '../api'
 import { useStageData } from '../useStageData'
 import ThesisProof, { RiskBadge } from '../components/ThesisProof'
 import {
-  prettyAction, horizonLabel, prettyHorizon, BEST_ACTION, rankPersonalPicks, tieAtCutoff,
+  prettyAction, horizonLabel, prettyHorizon, isBestAction, rankPersonalPicks, tieAtCutoff,
   factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
 } from '../format'
 
@@ -31,7 +31,7 @@ function allQualifying(callSets, module) {
   return rankPersonalPicks(
     callSets
       .map((cs) => ({ ticker: cs.ticker, call: cs[module] }))
-      .filter(({ call }) => call && call.position_status === 'no_holding' && call.action === BEST_ACTION[module]),
+      .filter(({ call }) => call && call.position_status === 'no_holding' && isBestAction(module, call.action)),
   )
 }
 
@@ -51,7 +51,7 @@ function previousTopPickTickers(historyData, module) {
     if (entries.length < 2) continue
     const prev = entries[entries.length - 2]
     const call = prev?.personal_call_set?.[module]
-    if (call && call.position_status === 'no_holding' && call.action === BEST_ACTION[module]) {
+    if (call && call.position_status === 'no_holding' && isBestAction(module, call.action)) {
       set.add(timeline.ticker)
     }
     if (!latestPrevDate || (prev?.analyzed_at || '') > latestPrevDate) latestPrevDate = prev?.analyzed_at
