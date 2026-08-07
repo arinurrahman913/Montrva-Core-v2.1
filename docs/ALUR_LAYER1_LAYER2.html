@@ -1,0 +1,987 @@
+<title>AlphaForge v2 — Alur & Logika Lapisan 1 sampai 2</title>
+
+<style>
+  :root {
+    --paper:      #e9ecf1;
+    --surface:    #f7f8fb;
+    --surface-2:  #dfe4ec;
+    --ink:        #141922;
+    --ink-soft:   #3d4658;
+    --muted:      #656f83;
+    --faint:      #8b94a6;
+    --rule:       #c5ccd9;
+    --rule-soft:  #d8dee8;
+    --flow:       #33549b;
+    --flow-soft:  #e2e8f6;
+    --gate:       #9a6410;
+    --gate-soft:  #f6ecd8;
+    --good:       #1f6b4a;
+    --bad:        #97302c;
+    --shadow:     0 1px 2px rgba(20,25,34,.06), 0 8px 24px -12px rgba(20,25,34,.18);
+
+    --display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    --mono: ui-monospace, 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:     #0f131a;
+      --surface:   #171c26;
+      --surface-2: #1e2531;
+      --ink:       #e4e8f0;
+      --ink-soft:  #c0c7d5;
+      --muted:     #939cae;
+      --faint:     #6f7889;
+      --rule:      #2c3441;
+      --rule-soft: #232a36;
+      --flow:      #8ba5e8;
+      --flow-soft: #1b2333;
+      --gate:      #dba75a;
+      --gate-soft: #2a2318;
+      --good:      #5fbb8c;
+      --bad:       #e2807a;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #0f131a;
+    --surface:   #171c26;
+    --surface-2: #1e2531;
+    --ink:       #e4e8f0;
+    --ink-soft:  #c0c7d5;
+    --muted:     #939cae;
+    --faint:     #6f7889;
+    --rule:      #2c3441;
+    --rule-soft: #232a36;
+    --flow:      #8ba5e8;
+    --flow-soft: #1b2333;
+    --gate:      #dba75a;
+    --gate-soft: #2a2318;
+    --good:      #5fbb8c;
+    --bad:       #e2807a;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  :root[data-theme="light"] {
+    --paper:      #e9ecf1;
+    --surface:    #f7f8fb;
+    --surface-2:  #dfe4ec;
+    --ink:        #141922;
+    --ink-soft:   #3d4658;
+    --muted:      #656f83;
+    --faint:      #8b94a6;
+    --rule:       #c5ccd9;
+    --rule-soft:  #d8dee8;
+    --flow:       #33549b;
+    --flow-soft:  #e2e8f6;
+    --gate:       #9a6410;
+    --gate-soft:  #f6ecd8;
+    --good:       #1f6b4a;
+    --bad:        #97302c;
+    --shadow:     0 1px 2px rgba(20,25,34,.06), 0 8px 24px -12px rgba(20,25,34,.18);
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 20px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .col  { max-width: 66ch; }
+
+  /* --- kepala halaman --- */
+  header.masthead {
+    padding: 64px 0 32px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.12;
+    letter-spacing: -.01em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0 0 26px;
+  }
+  .stamp {
+    display: flex; flex-wrap: wrap; gap: 10px 26px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* --- struktur --- */
+  section { margin: 0 0 68px; }
+  h2 {
+    font-family: var(--display);
+    font-size: clamp(23px, 3.2vw, 30px);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 17px; font-weight: 650; margin: 32px 0 8px; line-height: 1.35;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--flow); margin: 0 0 10px;
+  }
+  p { margin: 0 0 16px; }
+  .lead { font-size: 17px; color: var(--ink-soft); }
+  strong { font-weight: 650; }
+  code {
+    font-family: var(--mono); font-size: .87em;
+    background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+    color: var(--ink);
+  }
+  a { color: var(--flow); }
+
+  /* --- kartu tahap --- */
+  .stage {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 22px 24px;
+    margin: 0 0 16px;
+    box-shadow: var(--shadow);
+  }
+  .stage-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .stage-num {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--flow); font-weight: 600;
+  }
+  .stage-name { font-size: 17px; font-weight: 650; }
+  .stage-file {
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    margin-left: auto;
+  }
+  .io {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px; margin: 14px 0 0;
+    font-size: 13.5px;
+  }
+  .io > div { border-left: 2px solid var(--rule); padding-left: 11px; }
+  .io .lbl {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 3px;
+  }
+
+  /* --- tabel --- */
+  .tablewrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 520px; }
+  th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    background: var(--surface-2); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.mono, .mono-cell { font-family: var(--mono); font-size: 12.5px; }
+  .pass { color: var(--good); font-weight: 600; }
+  .stop { color: var(--bad); font-weight: 600; }
+
+  /* --- figur --- */
+  figure { margin: 26px 0; }
+  figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; color: var(--ink); }
+  .figbox {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 20px 18px 8px; overflow-x: auto;
+  }
+  figcaption {
+    font-size: 13px; color: var(--muted); margin-top: 12px;
+    max-width: 62ch; line-height: 1.55;
+  }
+  figcaption b { color: var(--ink-soft); }
+
+  /* --- bobot --- */
+  .weights { display: flex; flex-direction: column; gap: 5px; margin: 18px 0; }
+  .wrow { display: grid; grid-template-columns: minmax(120px, 168px) 1fr 46px; align-items: center; gap: 12px; font-size: 13px; }
+  .wbar { background: var(--surface-2); border-radius: 2px; height: 15px; position: relative; overflow: hidden; }
+  .wbar i { display: block; height: 100%; background: var(--flow); opacity: .8; }
+  .wval { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .wname.composite { color: var(--gate); }
+
+  /* --- catatan --- */
+  .note {
+    border-left: 3px solid var(--gate);
+    background: var(--gate-soft);
+    padding: 14px 18px; margin: 20px 0; border-radius: 0 4px 4px 0;
+    font-size: 14.5px;
+  }
+  .note .nlbl {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--gate); display: block; margin-bottom: 5px; font-weight: 600;
+  }
+  .note p:last-child { margin-bottom: 0; }
+
+  ul, ol { margin: 0 0 16px; padding-left: 22px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  hr.rule { border: none; border-top: 1px solid var(--rule); margin: 56px 0; }
+
+  footer {
+    border-top: 2px solid var(--ink); padding-top: 20px; margin-top: 60px;
+    font-size: 13px; color: var(--muted);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .stage { transition: border-color .15s ease; }
+  }
+  .stage:hover { border-color: var(--flow); }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">AlphaForge v2 · peta sistem</p>
+  <h1>Dari 5.243 ticker jadi tiga pendapat yang sengaja tidak didamaikan</h1>
+  <p class="standfirst">
+    Peta alur dan logika lengkap Lapisan 1 (konteks pasar) sampai Lapisan 2 (analisis saham),
+    dibaca langsung dari kode yang jalan — bukan dari dokumen spesifikasi.
+  </p>
+  <div class="stamp">
+    <span>Sumber: <b>alphaforge-core-v2.1</b> @ <b>190b655</b></span>
+    <span>Angka hidup dari run <b>2026-08-06</b> (session-20260806T174322)</span>
+    <span>Tulang punggung: <b>scripts/refresh_full_pipeline.py</b></span>
+  </div>
+</header>
+
+<section>
+  <div class="col">
+    <p class="kicker">Cara membaca halaman ini</p>
+    <h2>Empat aturan yang menjelaskan kenapa bentuknya begini</h2>
+    <p class="lead">
+      Sistem ini punya banyak tahap, tapi bentuknya ditentukan oleh sedikit keputusan.
+      Kalau empat hal ini kamu pegang, sisanya tinggal detail.
+    </p>
+    <ol>
+      <li><b>Tidak boleh ada satu angka pemenang.</b> Aggregator dilarang mengeluarkan
+      <code>verdict</code>, <code>score</code>, atau <code>rank</code> tunggal. Tiga lensa berdiri
+      berdampingan; yang menyatukan cuma <em>Synthesis</em>, dan itu pun tidak melebur.</li>
+      <li><b>Berhenti lebih dulu, baru menalar.</b> Risk berjalan <em>sebelum</em> Reasoning.
+      Ticker yang kena flag <code>ekstrem</code> tidak masuk ke tiga lensa sama sekali —
+      bukan dinilai lalu ditandai.</li>
+      <li><b>Data tidak lengkap itu keadaan, bukan kesalahan.</b> Tiap tahap punya jalur
+      "tak terbaca" yang eksplisit. Skor Lapisan 1 menormalisasi ulang bobot komponen yang mati;
+      stance punya varian <code>*_tak_terbaca</code> yang memaksa action paling pasif.</li>
+      <li><b>Riwayat menasihati, tidak menyetel.</b> Rapor kalibrasi punya gerbang bukti,
+      dan selama gerbang itu belum lolos, kode sendiri yang menolak memakai hasilnya untuk
+      mengubah ambang.</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Peta besar</p>
+  <h2>Urutannya, dan di mana aliran bisa berhenti</h2>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 780 900" role="img" aria-label="Alur pipeline AlphaForge: Screening, Evidence, Knowledge, Katalis, Peer, Confidence, Risk, gerbang halt, tiga lensa Reasoning, Aggregator, Historical dan Lapisan Pribadi, dengan Lapisan 1 memasok konteks pasar di tiga titik">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
+          </marker>
+          <marker id="ah-gate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="var(--gate)"></polygon>
+          </marker>
+        </defs>
+
+        <!-- kolom Lapisan 1 -->
+        <rect x="18" y="52" width="150" height="330" rx="3" fill="var(--flow-soft)" stroke="var(--flow)" stroke-width="1"></rect>
+        <text x="93" y="76" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--flow)" letter-spacing="1.2">LAPISAN 1</text>
+        <text x="93" y="96" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Konteks Pasar</text>
+        <text x="93" y="118" text-anchor="middle" font-size="11" fill="currentColor">12 komponen daun</text>
+        <text x="93" y="134" text-anchor="middle" font-size="11" fill="currentColor">+ 1 komposit</text>
+        <text x="93" y="158" text-anchor="middle" font-size="11" fill="currentColor">↓ rata-rata</text>
+        <text x="93" y="174" text-anchor="middle" font-size="11" fill="currentColor">tertimbang</text>
+        <text x="93" y="198" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="currentColor">LayerScore 0–100</text>
+        <text x="93" y="220" text-anchor="middle" font-size="11" fill="currentColor">→ band Risk-Off …</text>
+        <text x="93" y="236" text-anchor="middle" font-size="11" fill="currentColor">Risk-On</text>
+        <line x1="38" y1="256" x2="148" y2="256" stroke="var(--rule)" stroke-width="1"></line>
+        <text x="93" y="276" text-anchor="middle" font-size="11" fill="currentColor">memasok ke:</text>
+        <text x="93" y="296" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="currentColor">context_penalty</text>
+        <text x="93" y="314" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="currentColor">layer1_pkg</text>
+        <text x="93" y="332" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="currentColor">benchmark_at_call</text>
+        <text x="93" y="362" text-anchor="middle" font-size="10.5" fill="var(--flow)">13/13 ok · 2026-08-06</text>
+
+        <!-- spine boxes -->
+        <g stroke="currentColor" stroke-width="1.2" fill="var(--surface-2)">
+          <rect x="250" y="52"  width="250" height="44" rx="3"></rect>
+          <rect x="250" y="124" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="196" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="268" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="340" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="412" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="484" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="674" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="746" width="250" height="44" rx="3"></rect>
+          <rect x="250" y="818" width="250" height="44" rx="3"></rect>
+        </g>
+
+        <g font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">
+          <text x="375" y="80">1 · Screening</text>
+          <text x="375" y="152">2 · Evidence</text>
+          <text x="375" y="224">3 · Knowledge</text>
+          <text x="375" y="296">4 · Katalis</text>
+          <text x="375" y="368">5 · Peer</text>
+          <text x="375" y="440">6 · Confidence</text>
+          <text x="375" y="512">7 · Risk</text>
+          <text x="375" y="702">9 · Aggregator</text>
+          <text x="375" y="774">10 · Historical</text>
+          <text x="375" y="846">11 · Lapisan Pribadi</text>
+        </g>
+
+        <!-- gerbang -->
+        <polygon points="375,556 470,600 375,644 280,600" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.4"></polygon>
+        <text x="375" y="595" text-anchor="middle" font-size="12" font-weight="600" fill="var(--gate)">8 · gerbang</text>
+        <text x="375" y="612" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--gate)">halted?</text>
+
+        <!-- tiga lensa -->
+        <g stroke="currentColor" stroke-width="1.2" fill="var(--surface-2)">
+          <rect x="250" y="656" width="0" height="0"></rect>
+        </g>
+
+        <!-- panah spine -->
+        <g stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#ah)">
+          <line x1="375" y1="96"  x2="375" y2="120"></line>
+          <line x1="375" y1="168" x2="375" y2="192"></line>
+          <line x1="375" y1="240" x2="375" y2="264"></line>
+          <line x1="375" y1="312" x2="375" y2="336"></line>
+          <line x1="375" y1="384" x2="375" y2="408"></line>
+          <line x1="375" y1="456" x2="375" y2="480"></line>
+          <line x1="375" y1="528" x2="375" y2="552"></line>
+          <line x1="375" y1="644" x2="375" y2="670"></line>
+          <line x1="375" y1="718" x2="375" y2="742"></line>
+          <line x1="375" y1="790" x2="375" y2="814"></line>
+        </g>
+
+        <!-- label jalur lolos gerbang -->
+        <text x="392" y="662" font-family="var(--mono)" font-size="10" fill="currentColor">tidak → 3 lensa jalan</text>
+
+        <!-- cabang halt -->
+        <g stroke="var(--gate)" stroke-width="1.3" fill="none" marker-end="url(#ah-gate)">
+          <line x1="470" y1="600" x2="580" y2="600"></line>
+        </g>
+        <rect x="584" y="574" width="178" height="52" rx="3" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.2"></rect>
+        <text x="673" y="594" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--gate)">ya → berhenti</text>
+        <text x="673" y="611" text-anchor="middle" font-size="10.5" fill="var(--gate)">tanpa reasoning · 5 ticker</text>
+
+        <!-- panah Lapisan 1 -->
+        <g stroke="var(--flow)" stroke-width="1.1" fill="none" marker-end="url(#ah)" stroke-dasharray="4 3" color="var(--flow)">
+          <path d="M168 298 L 210 298 L 210 434 L 246 434"></path>
+          <path d="M168 316 L 226 316 L 226 690 L 246 690"></path>
+          <path d="M168 334 L 236 334 L 236 838 L 246 838"></path>
+        </g>
+
+        <!-- angka hidup -->
+        <g font-family="var(--mono)" font-size="11" fill="var(--muted)" text-anchor="start">
+          <text x="516" y="70">5.243 dipindai</text>
+          <text x="516" y="86">4.047 lolos</text>
+          <text x="516" y="152">7 panggilan/ticker</text>
+          <text x="516" y="224">4.047 profil</text>
+          <text x="516" y="296">3.004 punya katalis</text>
+          <text x="516" y="440">band high/medium/low</text>
+          <text x="516" y="512">flag tinggi / ekstrem</text>
+          <text x="516" y="702">4.047 keluaran</text>
+          <text x="516" y="774">4.223 ticker terlacak</text>
+          <text x="516" y="846">4.042 call set</text>
+        </g>
+        <text x="516" y="690" font-family="var(--mono)" font-size="11" fill="var(--muted)">4.042 reasoning</text>
+      </svg>
+    </div>
+    <figcaption>
+      Urutan sebenarnya di <b>refresh_full_pipeline.py</b>. Dua hal yang gampang salah dibaca:
+      Lapisan 1 dihitung <b>setelah</b> Screening (ia butuh cache harga dari sana) tapi
+      <b>sebelum</b> Confidence — karena Confidence harus tahu komponen konteks mana yang mati.
+      Dan selisih 4.047 vs 4.042 di dua tahap terakhir bukan bug: itu 5 ticker yang berhenti di gerbang.
+    </figcaption>
+  </figure>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lapisan 1</p>
+  <h2>Konteks pasar: 13 pembacaan jadi satu angka, tanpa menyembunyikan yang mati</h2>
+  <div class="col">
+    <p>
+      Lapisan 1 tidak melihat satu saham pun. Tugasnya menjawab "hari ini pasar sedang seperti apa",
+      lalu menyerahkan jawabannya sebagai konteks ke Lapisan 2. Dua belas komponen dihitung
+      <strong>paralel</strong> (satu thread pool), lalu <code>market_sentiment</code> disusun
+      sesudahnya sebagai komposit dari dua komponen yang sudah ada.
+    </p>
+  </div>
+
+  <h3>Bobot kontribusi ke LayerScore</h3>
+  <div class="weights">
+    <div class="wrow"><span class="wname">Market Regime</span><span class="wbar"><i style="width:100%"></i></span><span class="wval">0,135</span></div>
+    <div class="wrow"><span class="wname">Business Cycle</span><span class="wbar"><i style="width:80%"></i></span><span class="wval">0,108</span></div>
+    <div class="wrow"><span class="wname">Credit Spread</span><span class="wbar"><i style="width:74%"></i></span><span class="wval">0,100</span></div>
+    <div class="wrow"><span class="wname">Yield Curve</span><span class="wbar"><i style="width:67%"></i></span><span class="wval">0,090</span></div>
+    <div class="wrow"><span class="wname">Volatility (VIX)</span><span class="wbar"><i style="width:67%"></i></span><span class="wval">0,090</span></div>
+    <div class="wrow"><span class="wname">Market Breadth</span><span class="wbar"><i style="width:67%"></i></span><span class="wval">0,090</span></div>
+    <div class="wrow"><span class="wname">Liquidity</span><span class="wbar"><i style="width:67%"></i></span><span class="wval">0,090</span></div>
+    <div class="wrow"><span class="wname">Sector Rotation</span><span class="wbar"><i style="width:53%"></i></span><span class="wval">0,072</span></div>
+    <div class="wrow"><span class="wname">Money Flow</span><span class="wbar"><i style="width:47%"></i></span><span class="wval">0,063</span></div>
+    <div class="wrow"><span class="wname">Currency (DXY)</span><span class="wbar"><i style="width:47%"></i></span><span class="wval">0,063</span></div>
+    <div class="wrow"><span class="wname">Commodity Signals</span><span class="wbar"><i style="width:33%"></i></span><span class="wval">0,045</span></div>
+    <div class="wrow"><span class="wname">Macro Calendar</span><span class="wbar"><i style="width:20%"></i></span><span class="wval">0,027</span></div>
+    <div class="wrow"><span class="wname composite">Market Sentiment ◇</span><span class="wbar"><i style="width:20%; opacity:.5"></i></span><span class="wval">0,027</span></div>
+  </div>
+
+  <div class="col">
+    <div class="note">
+      <span class="nlbl">Kenapa sentimen bobotnya kecil</span>
+      <p>
+        ◇ <code>market_sentiment</code> bukan komponen daun — ia komposit dari
+        <em>volatility_index</em> + <em>market_breadth</em>, yang dua-duanya sudah ditimbang sendiri
+        di atas. Bobot besar di sini berarti menghitung sinyal yang sama dua kali.
+      </p>
+    </div>
+
+    <h3>Tiga aturan yang bikin skornya jujur</h3>
+    <ul>
+      <li><strong>Normalisasi ulang, bukan nol.</strong> Komponen yang statusnya bukan <code>ok</code>
+      dikeluarkan dari perhitungan, lalu total bobot dinormalisasi ulang. Komponen mati tidak
+      diam-diam dihitung sebagai skor 0 (yang akan menyeret skor ke bawah seolah pasar memburuk).</li>
+      <li><strong>Kesegaran diukur per irama datanya.</strong> Tiap komponen punya
+      <code>CADENCE_DAYS</code> sendiri — yield curve harian, sebagian lain mingguan/bulanan.
+      Segar = ≤1,5× irama, layak = ≤3×, selebihnya basi. Macro calendar dikecualikan karena ia
+      melihat ke depan, bukan menua.</li>
+      <li><strong>Pendorong dan penghambat dihitung dari sumbangan, bukan skor mentah.</strong>
+      Yang dilaporkan sebagai <em>top driver</em> adalah komponen dengan
+      <code>(skor − 50) × bobot</code> terbesar — jadi komponen berbobot kecil yang ekstrem
+      tidak mengklaim panggung dari komponen berbobot besar.</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lapisan 2 · tahap 1–4</p>
+  <h2>Menyempitkan semesta, lalu mengumpulkan fakta</h2>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 01</span>
+      <span class="stage-name">Screening</span>
+      <span class="stage-file">screening.py</span>
+    </div>
+    <p style="margin:0 0 4px">
+      Dua jenis saringan yang berbeda tegas: <strong>hard exclude</strong> membuang ticker dari
+      semesta, <strong>soft flag</strong> membiarkannya lewat tapi menempelkan catatan yang
+      dibawa terus sampai ke Confidence dan Risk.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Jenis</th><th>Aturan</th><th>Ambang</th><th>Akibat</th></tr></thead>
+        <tbody>
+          <tr><td>Hard</td><td>Riwayat harga terlalu pendek</td><td class="num">&lt; 20 bar</td><td class="stop">dibuang</td></tr>
+          <tr><td>Hard</td><td>Harga terlalu rendah</td><td class="num">&lt; $0,50</td><td class="stop">dibuang</td></tr>
+          <tr><td>Hard</td><td>Likuiditas dolar harian</td><td class="num">&lt; $300.000</td><td class="stop">dibuang</td></tr>
+          <tr><td>Hard</td><td>Kapitalisasi pasar</td><td class="num">&lt; $30 juta</td><td class="stop">dibuang</td></tr>
+          <tr><td>Soft</td><td><code>recent_ipo</code></td><td class="num">&lt; 252 hari bursa</td><td class="pass">lolos + flag</td></tr>
+          <tr><td>Soft</td><td><code>low_liquidity</code></td><td class="num">di atas ambang tapi tipis</td><td class="pass">lolos + flag</td></tr>
+          <tr><td>Soft</td><td><code>market_cap_unavailable</code></td><td class="num">—</td><td class="pass">lolos + flag</td></tr>
+          <tr><td>Soft</td><td><code>adr</code></td><td class="num">heuristik nama sekuritas</td><td class="pass">lolos + flag</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="io">
+      <div><span class="lbl">Masuk</span>Daftar ticker NASDAQ + NYSE (~5.243)</div>
+      <div><span class="lbl">Keluar</span><code>ScreeningResult</code> + cache OHLCV yang dipakai ulang Lapisan 1</div>
+      <div><span class="lbl">Jebakan</span>Flag <code>recent_ipo</code> pernah salah nembak <em>semua</em> ticker karena jendela fetch 1 tahun ≈ 252 bar, sama persis dengan ambangnya</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 02</span>
+      <span class="stage-name">Evidence</span>
+      <span class="stage-file">evidence.py + sources/</span>
+    </div>
+    <p style="margin:0 0 4px">
+      Satu-satunya tahap yang benar-benar menyentuh jaringan untuk tiap ticker — <strong>7
+      panggilan</strong> ke 3 penyedia. Tahap ini tidak menilai apa pun; ia mencatat fakta beserta
+      sumber, waktu, dan statusnya.
+    </p>
+    <div class="io">
+      <div><span class="lbl">Yahoo (×3 efektif)</span>harga &amp; OHLCV, <code>.info</code> bersama (fundamental + kepemilikan institusi), detail pemegang saham</div>
+      <div><span class="lbl">Finnhub</span>berita perusahaan, throttle ~1,05 dtk/panggilan</div>
+      <div><span class="lbl">SEC EDGAR</span>daftar filing, fakta XBRL kuartalan, perubahan lembar saham 12 bulan</div>
+      <div><span class="lbl">Aturan</span>tiap kegagalan dicatat dengan nama sumbernya; sebelumnya <code>except</code> menelan galat sehingga profil tipis tak bisa dilacak sebabnya</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 03</span>
+      <span class="stage-name">Knowledge</span>
+      <span class="stage-file">knowledge.py</span>
+    </div>
+    <p style="margin:0 0 4px">
+      Menyusun fakta mentah jadi profil berstruktur: imbal hasil, margin, valuasi, neraca, arus kas,
+      tata kelola, momentum kompetitif. <strong>Belum ada penilaian kualitatif di sini</strong> —
+      tidak ada "bagus/buruk", cuma angka yang sudah pada tempatnya.
+    </p>
+    <div class="io">
+      <div><span class="lbl">Kunci</span><code>metadata.missing_fields</code> mencatat jalur field yang kosong, bukan cuma jumlahnya — inilah yang nanti jadi <em>knowledge_gaps</em> di Reasoning</div>
+      <div><span class="lbl">Pelajaran mahal</span><code>fields_expected</code> dulu dipatok 50 padahal cuma ~13 yang diperiksa, jadi "kelengkapan data" di dashboard mustahil lewat ~26%</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 04</span>
+      <span class="stage-name">Katalis</span>
+      <span class="stage-file">catalyst.py</span>
+    </div>
+    <p style="margin:0 0 4px">
+      <strong>Nol panggilan jaringan baru.</strong> Tanggal earnings sudah ada di dalam
+      <code>.info</code> Yahoo yang di-cache tahap Evidence; tahap ini cuma menafsirkannya
+      (<em>scheduled</em> kalau tanggalnya pasti, <em>expected</em> kalau masih perkiraan).
+      Katalis jenis lain — produk, regulasi, rumor — butuh penguraian berita dan sengaja
+      didokumentasikan sebagai lubang, bukan ditebak.
+    </p>
+    <div class="io">
+      <div><span class="lbl">Live 2026-08-06</span>3.004 ticker punya katalis mendatang · 1.568 katalis lama terselesaikan</div>
+      <div><span class="lbl">Kenapa penting</span>tanpa katalis, lensa Spekulatif secara struktur <em>tidak bisa</em> mengeluarkan stance <code>asimetri_berkatalis</code></div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lapisan 2 · tahap 5–7</p>
+  <h2>Tiga penilai yang berjalan berdampingan sebelum penalaran dimulai</h2>
+  <div class="col">
+    <p>
+      Peer, Confidence, dan Risk tidak saling menggantikan. Yang pertama menjawab "dibanding
+      sesamanya bagaimana", yang kedua "seberapa layak angka ini dipercaya", yang ketiga
+      "adakah alasan untuk tidak melanjutkan sama sekali".
+    </p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 05</span>
+      <span class="stage-name">Peer Comparison</span>
+      <span class="stage-file">peer.py</span>
+    </div>
+    <p style="margin:0">
+      Membandingkan tiap metrik terhadap median kelompok sebaya. Aturan yang gampang keliru:
+      ukuran kelompok dihitung dari <strong>peer yang benar-benar punya nilai untuk metrik itu</strong>,
+      bukan dari jumlah anggota rosternya. Versi lama melaporkan <code>peer_group_count=4</code>
+      untuk perbandingan yang median, min, dan maksnya identik — karena hanya satu peer yang
+      punya angka.
+    </p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 06</span>
+      <span class="stage-name">Confidence</span>
+      <span class="stage-file">confidence.py</span>
+    </div>
+    <p style="margin:0 0 4px">
+      Skor kepercayaan <strong>terhadap data</strong>, bukan terhadap sahamnya. Dihitung per bagian
+      Knowledge (bukan per penyedia data), lalu dikurangi empat jenis penalti.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Penalti</th><th>Dipicu oleh</th><th>Kenapa ada</th></tr></thead>
+        <tbody>
+          <tr><td class="mono"><code>peer_penalty</code></td><td>kelompok sebaya terlalu kecil</td><td>perbandingan dari 1–2 peer bukan perbandingan</td></tr>
+          <tr><td class="mono"><code>context_penalty</code></td><td>komponen Lapisan 1 degraded</td><td>konteks pasar yang cacat menular ke tafsir tiap saham</td></tr>
+          <tr><td class="mono"><code>recency_penalty</code></td><td>umur bukti (hari)</td><td>fakta lama tetap fakta, tapi bobot keyakinannya turun</td></tr>
+          <tr><td class="mono"><code>consistency_penalty</code></td><td>catatan silang antar sumber</td><td>dua sumber yang berbeda angka adalah sinyal, bukan gangguan</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="io">
+      <div><span class="lbl">Band</span><code>high</code> ≥ 70 · <code>medium</code> ≥ 40 · <code>low</code> di bawahnya</div>
+      <div><span class="lbl">Wajib</span>band selain <code>high</code> harus menyebutkan <em>limiters</em> — alasan konkret kenapa tidak penuh</div>
+      <div><span class="lbl">Fakta lapangan</span>band <code>high</code> praktis tak pernah tercapai di seluruh semesta; itu sebabnya Lapisan Pribadi berhenti memakainya sebagai gerbang</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="stage-num">TAHAP 07</span>
+      <span class="stage-name">Risk / Red Flag</span>
+      <span class="stage-file">risk.py</span>
+    </div>
+    <p style="margin:0 0 4px">
+      Enam pemeriksaan dengan kosakata status yang tegas. Perhatikan bahwa
+      <strong><code>undetermined</code> bukan "aman"</strong> — artinya jalur datanya memang belum ada.
+      Kejujuran ini yang membuat sistem tidak menyamakan "tidak ditemukan masalah" dengan
+      "tidak diperiksa".
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>flag_id</th><th>Kategori</th><th>Tingkat</th><th>Status hari ini</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">dilution_12m</td><td>dilusi</td><td>tinggi</td><td class="pass">punya jalur data</td></tr>
+          <tr><td class="mono">auditor_change_3y</td><td>tata kelola</td><td>tinggi</td><td>sebagian terdeteksi</td></tr>
+          <tr><td class="mono">restatement_2y</td><td>akuntansi</td><td>tinggi</td><td>sebagian terdeteksi</td></tr>
+          <tr><td class="mono">litigation_material</td><td>litigasi</td><td>tinggi</td><td>sering undetermined</td></tr>
+          <tr><td class="mono">insider_selling_90d</td><td>orang dalam</td><td>tinggi</td><td>tidak tersedia (Form 4 tak difetch)</td></tr>
+          <tr><td class="mono">delisting_notice_recent</td><td>status listing</td><td>tinggi</td><td>terdeteksi dari 8-K</td></tr>
+          <tr><td class="mono">confirmed_fraud_or_delisting</td><td>status listing</td><td><b>ekstrem</b></td><td class="stop">memicu halt</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="nlbl">Gerbang, bukan label</span>
+      <p>
+        Satu saja flag <code>ekstrem</code> berstatus <code>triggered</code> membuat
+        <code>halted=True</code>, dan pipeline <strong>menyaring ticker itu keluar sebelum
+        Reasoning dipanggil</strong>. Keluaran Aggregator-nya tetap ada — berisi flag risikonya —
+        tapi <code>module_outputs</code> kosong dan <code>synthesis</code> null.
+        Run 2026-08-06: 5 ticker (ECHO, OPI, WW, GVA, WOLF), semuanya karena 8-K item 1.03.
+      </p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lapisan 2 · tahap 9</p>
+  <h2>Tiga lensa, dan larangan meleburnya</h2>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 430" role="img" aria-label="Satu profil pengetahuan bercabang ke tiga lensa independen dengan kosakata stance masing-masing, lalu masuk ke Synthesis yang tidak melebur; sebuah kotak verdict tunggal digambarkan dicoret sebagai hal yang dilarang">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
+          </marker>
+        </defs>
+
+        <rect x="14" y="176" width="128" height="66" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"></rect>
+        <text x="78" y="203" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Profil +</text>
+        <text x="78" y="221" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">konteks</text>
+
+        <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#ah2)">
+          <path d="M142 190 L 186 190 L 186 84 L 236 84"></path>
+          <path d="M142 209 L 210 209 L 210 209 L 236 209"></path>
+          <path d="M142 228 L 186 228 L 186 334 L 236 334"></path>
+        </g>
+
+        <g stroke="currentColor" stroke-width="1.2" fill="var(--surface)">
+          <rect x="240" y="52"  width="230" height="64" rx="3"></rect>
+          <rect x="240" y="177" width="230" height="64" rx="3"></rect>
+          <rect x="240" y="302" width="230" height="64" rx="3"></rect>
+        </g>
+
+        <g text-anchor="middle" fill="currentColor">
+          <text x="355" y="74" font-size="12.5" font-weight="600">Multibagger</text>
+          <text x="355" y="94" font-family="var(--mono)" font-size="10.5">ruang_terbuka / sempit /</text>
+          <text x="355" y="108" font-family="var(--mono)" font-size="10.5">tertutup / tak_terbaca</text>
+
+          <text x="355" y="199" font-size="12.5" font-weight="600">Quality / Compound</text>
+          <text x="355" y="219" font-family="var(--mono)" font-size="10.5">compounding_kuat / rapuh /</text>
+          <text x="355" y="233" font-family="var(--mono)" font-size="10.5">bukan_compounder / tak_terbaca</text>
+
+          <text x="355" y="324" font-size="12.5" font-weight="600">Speculative</text>
+          <text x="355" y="344" font-family="var(--mono)" font-size="10.5">asimetri_berkatalis / tanpa_katalis /</text>
+          <text x="355" y="358" font-family="var(--mono)" font-size="10.5">tanpa_asimetri / tak_terbaca</text>
+        </g>
+
+        <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#ah2)">
+          <path d="M470 84 L 520 84 L 520 190 L 566 190"></path>
+          <path d="M470 209 L 540 209 L 540 200 L 566 200"></path>
+          <path d="M470 334 L 520 334 L 520 210 L 566 210"></path>
+        </g>
+
+        <rect x="570" y="150" width="176" height="100" rx="3" fill="var(--flow-soft)" stroke="var(--flow)" stroke-width="1.4"></rect>
+        <text x="658" y="174" text-anchor="middle" font-size="12.5" font-weight="600" fill="currentColor">Synthesis</text>
+        <text x="658" y="194" text-anchor="middle" font-size="10.5" fill="currentColor">titik searah</text>
+        <text x="658" y="210" text-anchor="middle" font-size="10.5" fill="currentColor">titik berbeda</text>
+        <text x="658" y="226" text-anchor="middle" font-size="10.5" fill="currentColor">kejutan (−log P)</text>
+        <text x="658" y="242" text-anchor="middle" font-size="10.5" fill="currentColor">confidence = TERENDAH</text>
+
+        <rect x="570" y="300" width="176" height="66" rx="3" fill="none" stroke="var(--gate)" stroke-width="1.2" stroke-dasharray="5 4"></rect>
+        <text x="658" y="326" text-anchor="middle" font-size="12" font-weight="600" fill="var(--gate)">skor / peringkat</text>
+        <text x="658" y="344" text-anchor="middle" font-size="12" font-weight="600" fill="var(--gate)">tunggal</text>
+        <line x1="580" y1="362" x2="736" y2="304" stroke="var(--gate)" stroke-width="1.6"></line>
+        <text x="658" y="386" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--gate)">DILARANG (D-04)</text>
+      </svg>
+    </div>
+    <figcaption>
+      Tiap lensa punya <b>kosakata stance sendiri</b> — tidak ada enum bersama seperti
+      "beli/jual". Itu disengaja: menyamakan kosakatanya adalah langkah pertama menuju
+      melebur ketiganya jadi satu angka. Synthesis boleh menyebut di mana mereka sepakat dan
+      di mana berbeda, tapi <b>confidence-nya diambil yang terendah, bukan dirata-rata</b>,
+      dan ia tidak boleh mengeluarkan putusan tunggal.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>Enam pemeriksaan mekanis atas keluaran tiap lensa</h3>
+    <p>
+      Setiap <code>ModuleOutput</code> divalidasi tiap run. Hasilnya <strong>dicatat, tidak
+      menghentikan pipeline</strong> — polanya sama dengan pelanggaran P1–P5 di Lapisan Pribadi:
+      kalau angkanya naik, itu tanda regresi nyata.
+    </p>
+    <ul>
+      <li><b>V1</b> — jumlah <code>flag_responses</code> harus <em>tepat sama</em> dengan jumlah flag Risk bertingkat <code>tinggi</code>. Lensa tidak boleh diam soal risiko yang sudah terdeteksi.</li>
+      <li><b>V2</b> — rationale yang identik di dua flag berbeda ditandai <code>generic_response</code>. Jawaban tempelan ketahuan secara mekanis.</li>
+      <li><b>V3</b> — band selain <code>high</code> wajib menyertakan limiters.</li>
+      <li><b>V4</b> — <code>knowledge_gaps</code> harus merujuk field yang benar-benar hilang menurut Knowledge.</li>
+      <li><b>V5</b> — <code>fields_accessed</code> harus field yang sungguh dibaca; dua lensa pernah mengaku membaca <code>competitive_structure</code> yang tak pernah disentuh.</li>
+      <li><b>V6</b> — confidence modul tidak boleh melebihi confidence data keseluruhan.</li>
+    </ul>
+    <p>
+      Ambang stance kuat: <code>STANCE_STRONG_THRESHOLD = 75</code> dari skor tesis 0–100.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lapisan Pribadi</p>
+  <h2>Dari stance jadi tindakan — lewat tabel, bukan mesin skor kedua</h2>
+  <div class="col">
+    <p>
+      Lapisan Pribadi tidak menghitung ulang apa pun dari Knowledge. Ia membaca stance yang sudah
+      jadi, lalu memetakannya ke action lewat tabel bertingkat tiga:
+      <strong>status posisi × lensa × stance × tingkat skor</strong>.
+    </p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Lensa</th><th>Stance</th><th>Skor tinggi</th><th>Skor sedang</th><th>Skor rendah</th></tr>
+      </thead>
+      <tbody>
+        <tr><td rowspan="4">Multibagger</td><td class="mono">ruang_terbuka</td><td class="mono pass">mulai_posisi</td><td class="mono">cicil_bertahap</td><td class="mono">cicil_bertahap</td></tr>
+        <tr><td class="mono">ruang_sempit</td><td class="mono">cicil_bertahap</td><td class="mono">pantau</td><td class="mono">pantau</td></tr>
+        <tr><td class="mono">ruang_tertutup</td><td class="mono">lewati</td><td class="mono">lewati</td><td class="mono">lewati</td></tr>
+        <tr><td class="mono">ruang_tak_terbaca</td><td class="mono">pantau</td><td class="mono">pantau</td><td class="mono">pantau</td></tr>
+        <tr><td rowspan="4">Quality</td><td class="mono">compounding_kuat</td><td class="mono pass">akumulasi</td><td class="mono">akumulasi_saat_koreksi</td><td class="mono">akumulasi_saat_koreksi</td></tr>
+        <tr><td class="mono">compounding_rapuh</td><td class="mono">akumulasi_saat_koreksi</td><td class="mono">pantau</td><td class="mono">pantau</td></tr>
+        <tr><td class="mono">bukan_compounder</td><td class="mono">lewati</td><td class="mono">lewati</td><td class="mono">lewati</td></tr>
+        <tr><td class="mono">mesin_tak_terbaca</td><td class="mono">pantau</td><td class="mono">pantau</td><td class="mono">pantau</td></tr>
+        <tr><td rowspan="4">Speculative</td><td class="mono">asimetri_berkatalis</td><td class="mono pass">siaga_gerakan</td><td class="mono">tunggu_katalis</td><td class="mono">tunggu_katalis</td></tr>
+        <tr><td class="mono">asimetri_tanpa_katalis</td><td class="mono">tunggu_katalis</td><td class="mono">tunggu_katalis</td><td class="mono">tunggu_katalis</td></tr>
+        <tr><td class="mono">tanpa_asimetri</td><td class="mono">lewati</td><td class="mono">lewati</td><td class="mono">lewati</td></tr>
+        <tr><td class="mono">asimetri_tak_terbaca</td><td class="mono">tunggu_katalis</td><td class="mono">tunggu_katalis</td><td class="mono">tunggu_katalis</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px; color:var(--muted); max-width:66ch">
+    Tabel di atas untuk <code>position_status = no_holding</code>. Ada tabel kembarnya untuk
+    <code>holding</code>, yang kosakatanya berbeda sepenuhnya (<em>tahan</em>, <em>tambah_bertahap</em>,
+    <em>kurangi</em>, <em>jual</em>) — karena pertanyaannya memang berbeda.
+  </p>
+
+  <div class="col">
+    <h3>Lima invarian yang diperiksa tiap call</h3>
+    <ul>
+      <li><b>P1</b> — horizon wajib dari bucket yang diizinkan untuk lensa itu.</li>
+      <li><b>P2</b> — <code>horizon_basis</code> tidak boleh kosong: harus menyebut field nyata yang mendasarinya.</li>
+      <li><b>P3</b> — stance <code>*_tak_terbaca</code> wajib menghasilkan action paling pasif.</li>
+      <li><b>P4</b> — confidence <code>low</code> memblokir action yang menambah eksposur penuh; ia diturunkan ke versi bertahap. Run 2026-08-06: <b>49 action</b> diturunkan.</li>
+      <li><b>P5</b> — action wajib berasal dari kosakata yang cocok dengan status posisinya.</li>
+    </ul>
+
+    <div class="note">
+      <span class="nlbl">Satu keputusan yang lahir dari pengukuran, bukan selera</span>
+      <p>
+        Kolom "skor tinggi" dulu memakai <code>confidence.band == 'high'</code>. Karena band itu
+        praktis tak pernah tercapai, seluruh kolom itu <em>mustahil</em> terpilih — action penuh
+        secara diam-diam mati. Gerbangnya diganti ke tingkat skor tesis.
+        Perubahan sebaliknya juga terjadi: <code>masuk_spekulatif</code> diganti
+        <code>siaga_gerakan</code> setelah terukur bahwa lensa itu bisa menebak
+        <b>besarnya gerakan</b> (+15,5 poin persen di atas acak) tapi <b>tidak arahnya</b>
+        (+4,2 pp, masih di dalam derau).
+      </p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Lingkar umpan balik</p>
+  <h2>Bagaimana riwayat dinilai — dan kenapa ia belum boleh menyetel sistem</h2>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Lingkar evaluasi: call pribadi disimpan, jatuh tempo, dievaluasi jadi outcome dengan dua vonis, masuk rapor kalibrasi; panah balik ke ambang sistem digambar putus-putus dan tertahan gerbang bukti">
+        <defs>
+          <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="currentColor"></polygon>
+          </marker>
+          <marker id="ah3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0,1 9,5 0,9" fill="var(--gate)"></polygon>
+          </marker>
+        </defs>
+
+        <g stroke="currentColor" stroke-width="1.2" fill="var(--surface-2)">
+          <rect x="16"  y="40" width="150" height="58" rx="3"></rect>
+          <rect x="206" y="40" width="150" height="58" rx="3"></rect>
+          <rect x="396" y="40" width="150" height="58" rx="3"></rect>
+          <rect x="586" y="40" width="158" height="58" rx="3"></rect>
+        </g>
+        <g text-anchor="middle" fill="currentColor" font-size="12.5" font-weight="600">
+          <text x="91"  y="64">call pribadi</text>
+          <text x="281" y="64">jatuh tempo</text>
+          <text x="471" y="64">outcome</text>
+          <text x="665" y="64">rapor kalibrasi</text>
+        </g>
+        <g text-anchor="middle" fill="currentColor" font-size="10.5" font-family="var(--mono)">
+          <text x="91"  y="82">harga + indeks</text>
+          <text x="281" y="82">horizon lewat</text>
+          <text x="471" y="82">vonis v1 &amp; v2</text>
+          <text x="665" y="82">irisan + base rate</text>
+        </g>
+
+        <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#ah3)">
+          <line x1="166" y1="69" x2="202" y2="69"></line>
+          <line x1="356" y1="69" x2="392" y2="69"></line>
+          <line x1="546" y1="69" x2="582" y2="69"></line>
+        </g>
+
+        <text x="471" y="132" text-anchor="middle" font-size="11.5" fill="currentColor">v1: harga vs target absolut</text>
+        <text x="471" y="150" text-anchor="middle" font-size="11.5" fill="currentColor">v2: z = (excess ÷ deru jendela) ≥ 1</text>
+
+        <rect x="230" y="186" width="300" height="72" rx="3" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.3"></rect>
+        <text x="380" y="210" text-anchor="middle" font-size="12" font-weight="600" fill="var(--gate)">gerbang bukti</text>
+        <text x="380" y="230" text-anchor="middle" font-size="11" fill="var(--gate)">n ≥ 30 tesis DAN ≥ 5 tanggal masuk</text>
+        <text x="380" y="248" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--gate)">status: 4 tanggal — belum lolos</text>
+
+        <path d="M665 98 L 665 222 L 536 222" stroke="var(--gate)" stroke-width="1.3" fill="none" stroke-dasharray="5 4" marker-end="url(#ah3g)"></path>
+        <path d="M230 222 L 91 222 L 91 104" stroke="var(--gate)" stroke-width="1.3" fill="none" stroke-dasharray="5 4" marker-end="url(#ah3g)"></path>
+        <text x="120" y="180" font-family="var(--mono)" font-size="10" fill="var(--gate)">tertahan</text>
+      </svg>
+    </div>
+    <figcaption>
+      Lingkar ini <b>tidak tertutup dengan sendirinya</b>. Panah balik ke ambang sistem digambar
+      putus-putus karena memang belum tersambung: <code>mechanical_tuning.allowed</code> masih
+      <code>false</code>, dan kode sendiri yang memeriksanya tiap kali rapor dibangun.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>Kenapa ada dua vonis</h3>
+    <p>
+      Vonis lama (v1) bertanya "harga naik ≥ target?". Masalahnya terukur:
+      gerakan khas saham di jendela 4–9 hari itu ±5,16% sementara targetnya 3% —
+      <strong>targetnya di bawah derau</strong>. Hit rate 34% terdengar seperti sinyal, padahal
+      saham acak di jendela yang sama kena 35,7%.
+    </p>
+    <p>
+      Vonis v2 membagi kelebihan imbal hasil dengan deru saham itu sendiri:
+      <code>z = (return − return indeks) ÷ (σ harian × √bar bursa)</code>, terbukti kalau z ≥ 1.
+      σ diambil dari 60 bar <em>sebelum</em> masuk — memakai jendela sendiri sama saja mengintip
+      masa depan. Untuk action yang mengklaim amplitudo (<code>siaga_gerakan</code>), yang dinilai
+      <code>|z|</code> dan hasilnya biner, karena klaimnya memang tidak punya wilayah abu-abu.
+    </p>
+
+    <h3>Sebab meleset, bukan cuma vonisnya</h3>
+    <p>
+      Tiap tesis yang meleset diberi satu sebab dari kosakata tertutup, dan urutan pemeriksaannya
+      penting: <strong>arah diperiksa dulu, baru kelebihan terhadap indeks</strong>. Kalau dibalik,
+      tesis yang naik 2% saat indeks naik 1% akan salah dilabeli "unggul indeks" padahal yang
+      gagal adalah targetnya.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Sebab</th><th>Artinya</th><th>Live</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">arah_salah</td><td>harga bergerak berlawanan dengan klaim</td><td class="num">184</td></tr>
+          <tr><td class="mono">target_ketinggian</td><td>arah benar, tapi tidak sampai ambang horizon</td><td class="num">57</td></tr>
+          <tr><td class="mono">turun_bareng_pasar</td><td>turun, tapi tetap unggul indeks</td><td class="num">0</td></tr>
+          <tr><td class="mono">harga_justru_naik</td><td>untuk action keluar: harga malah naik</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <p class="kicker">Angka hidup</p>
+  <h2>Bentuk corong pada run 2026-08-06</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Tahap</th><th>Jumlah</th><th>Catatan</th></tr></thead>
+      <tbody>
+        <tr><td>Semesta dipindai</td><td class="num">5.243</td><td>NASDAQ + NYSE</td></tr>
+        <tr><td>Lolos Screening</td><td class="num">4.047</td><td>hard exclude membuang ~23%</td></tr>
+        <tr><td>Evidence · Knowledge · Aggregator</td><td class="num">4.047</td><td>tiap ticker yang lolos dapat profil</td></tr>
+        <tr><td>Punya katalis mendatang</td><td class="num">3.004</td><td>mayoritas earnings terjadwal</td></tr>
+        <tr><td>Berhenti di gerbang risiko</td><td class="num">5</td><td>semuanya 8-K item 1.03</td></tr>
+        <tr><td>Masuk tiga lensa</td><td class="num">4.042</td><td>selisih 5 = ticker yang berhenti</td></tr>
+        <tr><td>Action diturunkan (P4)</td><td class="num">49</td><td>confidence lensa <code>low</code></td></tr>
+        <tr><td>Tesis sudah punya vonis</td><td class="num">365</td><td>semuanya lensa Spekulatif</td></tr>
+        <tr><td>Tanggal masuk berbeda</td><td class="num">4</td><td>gerbang bukti butuh 5</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <div class="note">
+      <span class="nlbl">Yang paling penting dari tabel ini</span>
+      <p>
+        365 tesis terdengar banyak, tapi semuanya lahir di <strong>4 tanggal masuk</strong> —
+        jadi itu bukan 365 taruhan independen, melainkan 4 taruhan yang disebar ke ratusan ticker.
+        Multibagger dan Quality belum punya satu pun vonis: yang pertama paling cepat
+        <b>2027-07-27</b>, yang kedua <b>2028-07-28</b>. Sistem ini baru terukur di sepertiga
+        dirinya sendiri.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    <p style="margin:0">
+      Disusun dari pembacaan langsung <code>refresh_full_pipeline.py</code>,
+      <code>layer1/pipeline.py</code>, <code>layer2/{screening,evidence,knowledge,catalyst,peer,confidence,risk,reasoning,aggregator}.py</code>,
+      dan <code>personal/{personal_reasoning,personal_contracts,personal_evaluation,personal_calibration}.py</code>
+      pada commit <code>190b655</code>. Angka hidup dari session-20260806T174322 dan
+      <code>calibration.json</code> setelah perbaikan <code>exit_date</code>.
+    </p>
+  </div>
+</footer>
+
+</div>
