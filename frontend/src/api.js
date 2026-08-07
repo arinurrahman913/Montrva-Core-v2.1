@@ -58,7 +58,19 @@ export const api = {
   // tapi fungsi ini tetap aman dipanggil (404 di-throw seperti biasa).
   personalCalls: () => getJSON('/api/personal/calls'),
   personalTicker: (ticker) => getJSON(`/api/personal/ticker/${encodeURIComponent(ticker)}`),
+  // Riwayat UTUH — 160 MB. TIDAK dipakai halaman mana pun lagi; tiga fungsi di
+  // bawahnya menggantikannya. Dibiarkan ada untuk debugging manual, tapi jangan
+  // dipanggil dari komponen: halaman Riwayat dulu butuh ~1 menit karena ini.
   personalHistory: () => getJSON('/api/personal/history'),
+  // ~2,4 MB — hanya call yang berhak ikut perebutan top-3, tanpa isi timeline.
+  // Perankingannya tetap di sini (rankPersonalPicks), backend cuma menyaring.
+  personalHistoryCandidates: () => getJSON('/api/personal/history/candidates'),
+  // Timeline penuh untuk beberapa ticker sekaligus (~0,9 MB untuk 35 ticker).
+  personalHistoryTickers: (tickers) =>
+    getJSON(`/api/personal/history/tickers?tickers=${encodeURIComponent(tickers.join(','))}`),
+  // ~10 KB — dasar badge "BARU" di Agregator, dulu satu-satunya alasan halaman
+  // itu ikut mengunduh riwayat 160 MB.
+  personalHistoryPreviousPicks: () => getJSON('/api/personal/history/previous-picks'),
   personalDueForReview: () => getJSON('/api/personal/due-for-review'),
   // ~10 KB (sudah teragregasi backend), BUKAN personalHistory yang 127 MB.
   personalCalibration: () => getJSON('/api/personal/calibration'),

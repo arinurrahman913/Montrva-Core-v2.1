@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
@@ -389,33 +390,34 @@ function outcomeSummary(entry) {
 // hari lintas semua ticker), top-3 per hari harus dihitung ULANG di sini
 // dengan menggabungkan SEMUA timeline dulu, dikelompokkan per (tanggal,
 // lensa) -- baru bisa tahu siapa saja yang benar-benar masuk 3 besar hari itu.
+//
+// MASUKANNYA sekarang proyeksi tipis dari /api/personal/history/candidates
+// (~2,4 MB: ticker, tanggal, lensa, + field ranking), bukan seluruh
+// personal_history.json (160 MB). Yang dipindah ke backend cuma penyaringan
+// "call ini berhak ikut perebutan" -- PERANKINGANNYA tetap di sini, memakai
+// rankPersonalPicks yang sama dengan Agregator, karena aturan pemecah seri
+// itulah yang dulu bikin dua halaman menyebut top-3 berbeda untuk hari yang
+// sama. Menyalinnya ke Python akan menghidupkan lagi risiko itu.
 const TOP_N = 3
 
-function buildTopThreeIndex(allTimelines) {
-  const byDayModule = new Map() // "YYYY-MM-DD|module" -> [{ticker, score}]
-  for (const timeline of allTimelines) {
-    for (const entry of timeline.entries || []) {
-      const day = (entry.analyzed_at || '').slice(0, 10)
-      if (!day) continue
-      const callSet = entry.personal_call_set || {}
-      for (const m of MODULES) {
-        const call = callSet[m]
-        if (call && call.position_status === 'no_holding' && isBestAction(m, call.action)) {
-          const key = `${day}|${m}`
-          if (!byDayModule.has(key)) byDayModule.set(key, [])
-          // Fallback thesis_score -> source_confidence (data lama, dari sebelum
-          // audit 2026-07-27/28 yang menambahkan field itu) ditangani di dalam
-          // comparePersonalPicks, bukan di sini -- supaya persis sama dengan
-          // yang dipakai Agregator. Tanpa fallback itu semua entry lama ikut
-          // default ke 50 dan seri, jadi ticker yang DULU benar-benar tampil
-          // sebagai top-pick card bisa kalah undian ulang sekarang cuma karena
-          // datanya lebih tua dari field ini (bug nyata, ditemukan live: AMD
-          // hilang dari Riwayat padahal terverifikasi pernah tampil sebagai
-          // card di Agregator pada 2026-07-27).
-          byDayModule.get(key).push({ ticker: timeline.ticker, call })
-        }
-      }
-    }
+function buildTopThreeIndex(candidates) {
+  const byDayModule = new Map() // "YYYY-MM-DD|module" -> [{ticker, call}]
+  for (const c of candidates || []) {
+    if (!c.day || !c.module) continue
+    const key = `${c.day}|${c.module}`
+    if (!byDayModule.has(key)) byDayModule.set(key, [])
+    // Fallback thesis_score -> source_confidence (data lama, dari sebelum
+    // audit 2026-07-27/28 yang menambahkan field itu) ditangani di dalam
+    // comparePersonalPicks, bukan di sini -- supaya persis sama dengan
+    // yang dipakai Agregator. Tanpa fallback itu semua entry lama ikut
+    // default ke 50 dan seri, jadi ticker yang DULU benar-benar tampil
+    // sebagai top-pick card bisa kalah undian ulang sekarang cuma karena
+    // datanya lebih tua dari field ini (bug nyata, ditemukan live: AMD
+    // hilang dari Riwayat padahal terverifikasi pernah tampil sebagai
+    // card di Agregator pada 2026-07-27).
+    // `c` sendiri sudah membawa field ranking di tingkat atas, dan
+    // comparePersonalPicks membaca `x.call || x` -- jadi dioper apa adanya.
+    byDayModule.get(key).push(c)
   }
   const topSetByDayModule = new Map()
   for (const [key, list] of byDayModule) {
@@ -434,15 +436,35 @@ function buildTopThreeIndex(allTimelines) {
 // pun), dia tetap kesimpen di sini SELAMANYA walau sekarang sudah keluar dari
 // daftar top pick Agregator (holding, atau kesalip confidence ticker lain) --
 // itu justru intinya: record utuh sampai jatuh tempo, apa pun hasilnya nanti.
-function wasEverTopThree(timeline, topSetByDayModule) {
-  return (timeline.entries || []).some((entry) => {
-    const day = (entry.analyzed_at || '').slice(0, 10)
-    return MODULES.some((m) => topSetByDayModule.get(`${day}|${m}`)?.has(timeline.ticker))
-  })
+//
+// Dulu ini memeriksa satu timeline lawan indeks; sekarang mengembalikan
+// himpunannya langsung, karena himpunan inilah yang menentukan timeline mana
+// yang perlu diambil dari server sama sekali.
+function everTopThreeTickers(topSetByDayModule) {
+  const out = new Set()
+  for (const set of topSetByDayModule.values()) for (const t of set) out.add(t)
+  return [...out].sort()
 }
 
 export default function PersonalHistoricalView({ onSelectTicker }) {
-  const { data, error } = useStageData(api.personalHistory)
+  // Dua langkah, sengaja: siapa yang pernah top-3 itu pertanyaan lintas SELURUH
+  // populasi (4.186 ticker), tapi yang ditampilkan halaman ini cuma ~35 timeline.
+  // Dulu keduanya dijawab dengan satu unduhan 160 MB dan halaman butuh ~1 menit
+  // sebelum menampilkan apa pun. Sekarang: proyeksi kandidat ~2,4 MB untuk
+  // menjawab pertanyaan pertama, lalu ~0,9 MB timeline untuk yang benar-benar
+  // dipakai.
+  const { data: candData, error } = useStageData(api.personalHistoryCandidates)
+  const trackedList = useMemo(
+    () => (candData ? everTopThreeTickers(buildTopThreeIndex(candData.candidates)) : []),
+    [candData],
+  )
+  // Kunci string, bukan array: array baru tiap render akan membuat useStageData
+  // memuat ulang tanpa henti.
+  const trackedKey = trackedList.join(',')
+  const { data: tlData } = useStageData(
+    () => (trackedKey ? api.personalHistoryTickers(trackedList) : Promise.resolve({ timelines: {} })),
+    [trackedKey],
+  )
   const { data: dueData } = useStageData(api.personalDueForReview)
   // ~10 KB — dipakai BaseRateNote di tiap kartu tesis hidup. Diambil sekali di
   // sini lalu dioper turun; satu halaman bisa merender puluhan kartu, jadi
@@ -450,11 +472,9 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
   const { data: calibration } = useStageData(api.personalCalibration)
 
   if (error) return <div className="empty">Gagal memuat data/personal/personal_history.json: {error}</div>
-  if (!data) return <div className="loading">Memuat…</div>
+  if (!candData || !tlData) return <div className="loading">Memuat…</div>
 
-  const allTimelines = Object.values(data)
-  const topThreeIndex = buildTopThreeIndex(allTimelines)
-  const timelines = allTimelines.filter((t) => wasEverTopThree(t, topThreeIndex))
+  const timelines = trackedList.map((t) => tlData.timelines?.[t]).filter(Boolean)
   const totalEntries = timelines.reduce((s, t) => s + (t.total_entries || 0), 0)
   // /api/personal/due-for-review menghitung lintas SEMUA ticker (bukan cuma
   // yang pernah top pick) -- irisan ke timelines yang sudah difilter di atas

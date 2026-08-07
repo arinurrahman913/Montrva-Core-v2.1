@@ -43,20 +43,17 @@ function topPicks(callSets, module, n = 3) {
 // belakang di personal_history per ticker (bukan snapshot baru, murni baca
 // data yang sudah ada). Dipakai buat tandai apa yang BARU muncul/keluar,
 // bukan bikin fitur notifikasi/push baru.
-function previousTopPickTickers(historyData, module) {
-  const set = new Set()
-  let latestPrevDate = null
-  for (const timeline of Object.values(historyData || {})) {
-    const entries = timeline.entries || []
-    if (entries.length < 2) continue
-    const prev = entries[entries.length - 2]
-    const call = prev?.personal_call_set?.[module]
-    if (call && call.position_status === 'no_holding' && isBestAction(module, call.action)) {
-      set.add(timeline.ticker)
-    }
-    if (!latestPrevDate || (prev?.analyzed_at || '') > latestPrevDate) latestPrevDate = prev?.analyzed_at
+//
+// Perhitungannya PINDAH KE BACKEND (_build_previous_picks di
+// backend/personal_routes.py) dengan aturan yang sama persis. Alasannya: itu
+// menuntut entry kedua-dari-belakang milik SETIAP ticker, dan satu-satunya
+// cara menjawabnya di browser adalah mengunduh personal_history.json utuh
+// (160 MB) -- untuk sebuah badge. Yang tersisa di sini cuma pembacaan hasilnya.
+function previousTopPickTickers(prevPicks, module) {
+  return {
+    tickers: new Set(prevPicks?.tickers?.[module] || []),
+    asOf: prevPicks?.as_of || null,
   }
-  return { tickers: set, asOf: latestPrevDate }
 }
 
 // Kenapa sebuah ticker keluar dari top pick -- dibedakan "sekarang holding"
@@ -71,12 +68,12 @@ function dropReason(callSets, ticker, module) {
   return `action berubah jadi ${prettyAction(call.action)}`
 }
 
-function computeTopPickDiff(callSets, historyData) {
+function computeTopPickDiff(callSets, prevPicks) {
   const byLens = {}
   for (const module of LENSES) {
     const current = topPicks(callSets, module, 99) // semua yang qualify, bukan cuma top 3, buat diff akurat
     const currentTickers = new Set(current.map((p) => p.ticker))
-    const { tickers: prevTickers, asOf } = previousTopPickTickers(historyData, module)
+    const { tickers: prevTickers, asOf } = previousTopPickTickers(prevPicks, module)
     const added = current.filter((p) => !prevTickers.has(p.ticker))
     const removed = [...prevTickers].filter((t) => !currentTickers.has(t)).map((ticker) => ({
       ticker, reason: dropReason(callSets, ticker, module),
@@ -335,7 +332,7 @@ function TieNote({ tie }) {
   )
 }
 
-function TopPicksSection({ callSets, historyData, onSelectTicker, calibration }) {
+function TopPicksSection({ callSets, prevPicks, onSelectTicker, calibration }) {
   const picksByLens = LENSES.map((m) => {
     const all = allQualifying(callSets, m)
     return { module: m, picks: all.slice(0, 3), tie: tieAtCutoff(all, 3) }
@@ -348,9 +345,9 @@ function TopPicksSection({ callSets, historyData, onSelectTicker, calibration })
   // itu terhadap SEMUA kandidat yang qualify (n=99), bukan cuma top-3 yang
   // tampil -- makanya di-Set-kan per lens supaya lookup "apa ticker top-3 ini
   // baru dibanding kemarin" gampang & O(1) saat render tiap card.
-  const newTickersByLens = historyData
+  const newTickersByLens = prevPicks
     ? Object.fromEntries(
-        Object.entries(computeTopPickDiff(callSets, historyData)).map(([m, d]) => [m, new Set(d.added.map((x) => x.ticker))]),
+        Object.entries(computeTopPickDiff(callSets, prevPicks)).map(([m, d]) => [m, new Set(d.added.map((x) => x.ticker))]),
       )
     : {}
 
@@ -400,11 +397,12 @@ function TopPicksSection({ callSets, historyData, onSelectTicker, calibration })
 // Pribadi, bukan dobel di sini.
 export default function PersonalAggregatorView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalCalls)
-  // historyData opsional (badge "BARU" cuma bonus) -- gagal/lum termuat TIDAK
-  // boleh memblokir render Top Pick, jadi tidak dicek error-nya di sini.
-  const { data: historyData } = useStageData(api.personalHistory)
+  // ~10 KB, dulu seluruh riwayat 160 MB -- badge "BARU" saja. Tetap opsional:
+  // gagal/belum termuat TIDAK boleh memblokir render Top Pick, jadi tidak
+  // dicek error-nya di sini.
+  const { data: prevPicks } = useStageData(api.personalHistoryPreviousPicks)
   // ~10 KB — base rate tesis sejenis di tiap kartu (BaseRateNote). Sama seperti
-  // historyData: opsional, kegagalannya tidak boleh memblokir render Top Pick.
+  // prevPicks: opsional, kegagalannya tidak boleh memblokir render Top Pick.
   const { data: calibration } = useStageData(api.personalCalibration)
 
   if (error) return <div className="empty">Gagal memuat data/personal/personal_calls.json: {error}</div>
@@ -412,5 +410,5 @@ export default function PersonalAggregatorView({ onSelectTicker }) {
 
   const callSets = data.call_sets || []
 
-  return <TopPicksSection callSets={callSets} historyData={historyData} onSelectTicker={onSelectTicker} calibration={calibration} />
+  return <TopPicksSection callSets={callSets} prevPicks={prevPicks} onSelectTicker={onSelectTicker} calibration={calibration} />
 }
