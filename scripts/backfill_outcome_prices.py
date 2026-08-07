@@ -14,10 +14,21 @@ Yang dipulihkan di sini SEMUANYA turunan eksak, bukan taksiran:
   exit_price   entry_price x (1 + return_pct/100). return_pct memang dihitung
                dari kedua harga itu, jadi ini membalik aritmetika yang sama,
                bukan menebak harga baru.
-  exit_date    tanggal bar yang harganya cocok dengan exit_price (toleransi
-               ketat). Kalau tidak ada yang cocok -> None, TIDAK dikarang:
-               last_price saat evaluasi bisa saja harga intraday yang tidak
-               pernah jadi harga tutup.
+  exit_date    bar terakhir yang sudah tutup pada saat evaluasi berjalan --
+               exit_date_as_of(), aturan yang sama persis dengan yang dipakai
+               evaluator. Kalau tidak ada bar seperti itu -> None.
+
+               REVISI 2026-08-06: dulu ini mencari bar yang HARGANYA cocok
+               dengan exit_price. Cara itu punya batas atas tapi tidak punya
+               batas bawah, jadi ketika tidak ada bar yang cocok di dalam
+               jendela -- sering, karena exit_price umumnya last_price intraday
+               yang tidak pernah jadi harga tutup -- pencariannya mundur ke
+               seluruh riwayat dua tahun dan menunjuk hari yang kebetulan sama
+               harganya. Hasilnya 450 outcome ber-exit_date SEBELUM entry_date
+               (mis. HTO: masuk 27 Jul, keluar 9 Apr). Diuji lawan 617 record
+               yang tanggalnya wajar, exit_date_as_of mereproduksi 91,9%; sisa
+               8% justru punya pola yang sama dengan yang rusak, jadi acuannya
+               sendiri yang meragukan di situ.
   target_price entry_price x (1 + threshold_pct/100), cuma untuk action
                berklaim naik (sama aturannya dengan evaluator).
   horizon_days due_at - entry_date.
@@ -45,18 +56,12 @@ sys.path.insert(0, str(ROOT))
 
 from alphaforge.json_safe import dumps_safe  # noqa: E402
 from alphaforge.personal.personal_evaluation import (  # noqa: E402
-    ACTION_CATEGORY_ENTRY, _reconstruct_start_price,
+    ACTION_CATEGORY_ENTRY, _reconstruct_start_price, exit_date_as_of,
 )
 
 HISTORY = ROOT / "dashboard" / "data" / "personal" / "personal_history.json"
 PRICE_CACHE = ROOT / ".cache" / "price_history"
 MODULES = ("multibagger", "quality_compound", "speculative")
-
-# Bar dianggap cocok dengan exit_price kalau selisihnya < 0,05% -- cukup ketat
-# untuk tidak salah menunjuk hari lain, cukup longgar untuk menyerap
-# pembulatan return_pct ke 2 desimal.
-_MATCH_TOLERANCE = 0.0005
-
 
 def load_price_history(ticker: str) -> list[dict] | None:
     """Baca cache price_history mentah -> bentuk yang sama dengan yang dipakai
@@ -78,17 +83,16 @@ def load_price_history(ticker: str) -> list[dict] | None:
     return bars or None
 
 
-def match_bar_date(bars: list[dict] | None, price: float, not_after: str | None) -> str | None:
-    if not bars or price is None:
+def reconstruct_exit_date(
+    bars: list[dict] | None, evaluated_at: str | None, entry_date: str | None,
+) -> str | None:
+    """exit_date_as_of + pagar jendela: hasil yang mendahului tanggal masuk
+    berarti riwayat harga ticker ini berhenti sebelum tesisnya mulai, dan
+    tanggal seperti itu lebih buruk daripada tidak ada tanggal sama sekali."""
+    got = exit_date_as_of([b["date"] for b in bars] if bars else None, evaluated_at)
+    if got and entry_date and got < entry_date[:10]:
         return None
-    best = None
-    for b in bars:
-        if not_after and b["date"] > not_after:
-            continue
-        if b["close"] and abs(b["close"] - price) / price < _MATCH_TOLERANCE:
-            if best is None or b["date"] > best:
-                best = b["date"]
-    return best
+    return got
 
 
 def backfill(history: dict) -> tuple[int, int, int]:
@@ -127,7 +131,9 @@ def backfill(history: dict) -> tuple[int, int, int]:
                 o["entry_price"] = round(entry_price, 4)
                 o["entry_date"] = entry_date
                 o["exit_price"] = round(exit_price, 4)
-                o["exit_date"] = match_bar_date(cache[ticker], exit_price, o.get("evaluated_at", "")[:10] or None)
+                o["exit_date"] = reconstruct_exit_date(
+                    cache[ticker], o.get("evaluated_at"), entry_date,
+                )
                 o["target_price"] = (
                     round(entry_price * (1 + threshold / 100.0), 4)
                     if threshold is not None and action in ACTION_CATEGORY_ENTRY else None

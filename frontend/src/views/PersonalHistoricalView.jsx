@@ -299,6 +299,18 @@ function OutcomeCard({ outcome }) {
           ⓘ rincian harga dipulihkan setelah evaluasi
         </div>
       )}
+      {/* Pemulihan pertama menaruh tanggal keluar yang mustahil di 450 outcome
+          (pencocokan harga tanpa batas bawah menunjuk hari berbulan-bulan
+          sebelum tesisnya mulai). scripts/repair_exit_dates.py menghitungnya
+          ulang dengan aturan evaluator sendiri. Disebut terpisah dari catatan
+          harga di atas karena yang dipulihkan di sini TANGGAL -- dan tanggal
+          itulah yang menentukan hari pembacaan indeks & panjang jendela
+          vonis-z, bukan cuma keterangan di kartu. */}
+      {outcome.exit_date_repaired && (
+        <div style={{ marginTop: 3, fontSize: 9, color: 'var(--faint)' }} title="Tanggal keluar yang tersimpan sebelumnya mendahului tanggal masuk — dihitung ulang sebagai bar terakhir yang sudah tutup saat evaluasi berjalan, aturan yang sama dengan yang dipakai evaluator">
+          ⓘ tanggal keluar diperbaiki (sebelumnya mendahului tanggal masuk)
+        </div>
+      )}
     </div>
   )
 }

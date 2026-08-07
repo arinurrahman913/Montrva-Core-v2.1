@@ -66,12 +66,15 @@ Lima keputusan penting di modul ini (hasil audit 2026-07-27):
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 from ..layer1.benchmark_history import benchmark_close_on_or_before
 from .personal_contracts import ACTION_CATEGORY_EXIT, ACTION_CATEGORY_MAGNITUDE
 from .personal_historical import call_due_date
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..layer2.contracts import EvidencePackage
@@ -160,6 +163,54 @@ def _last_bar_date(price_history: list[dict] | None) -> str | None:
         return None
     dates = [b.get("date") for b in price_history if b.get("date")]
     return max(dates)[:10] if dates else None
+
+
+# Jam tutup sesi bursa AS dalam UTC (16:00 ET). Dipakai menentukan apakah bar
+# suatu hari SUDAH ADA pada saat evaluasi berjalan -- lihat exit_date_as_of.
+_SESSION_CLOSE_UTC_HOUR = 20
+
+
+def exit_date_as_of(bar_dates: list[str] | None, evaluated_at: str | None) -> str | None:
+    """Bar terakhir yang sudah tutup pada saat `evaluated_at` -- yaitu tanggal
+    yang `_last_bar_date` KEMBALIKAN kalau dipanggil pada momen itu.
+
+    Ada supaya alat pemulih di scripts/ bisa merekonstruksi `exit_date` sebuah
+    outcome lama tanpa menciptakan aturannya sendiri: evaluator membaca bar
+    terakhir dari cache harga saat itu, dan cache itu belum memuat bar hari
+    yang sesinya belum tutup. Menyamakan "tanggal evaluasi" dengan "tanggal
+    bar" salah 91,9% dari waktu di data nyata -- pipeline jalan malam waktu
+    New York, jadi tanggal UTC-nya sudah berganti hari sementara sesi hari itu
+    belum dibuka.
+
+    Sebuah bar bertanggal D dianggap tersedia sejak D 20:00 UTC (tutup sesi).
+    Aturan ini sengaja berbasis JAM, bukan "tanggal UTC dikurangi satu": yang
+    kedua kebetulan benar untuk evaluasi subuh UTC tapi meleset satu hari kalau
+    pipeline jalan sore waktu New York -- dan itu jam yang sama sekali wajar.
+
+    None kalau tidak ada bar yang memenuhi (mis. evaluasi mendahului seluruh
+    riwayat harga yang tersimpan) -- pemanggil menuliskannya apa adanya, bukan
+    menebak tanggal terdekat.
+    """
+    if not bar_dates or not evaluated_at:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(evaluated_at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    available = []
+    for d in bar_dates:
+        day = str(d)[:10]
+        try:
+            close_at = datetime.fromisoformat(day).replace(
+                hour=_SESSION_CLOSE_UTC_HOUR, tzinfo=timezone.utc,
+            )
+        except ValueError:
+            continue
+        if close_at <= moment:
+            available.append(day)
+    return max(available) if available else None
 
 
 def _classify(action: str, horizon: str, return_pct: float | None) -> str | None:
@@ -499,6 +550,20 @@ def evaluate_due_entries(
                 # Harga saham keluar dibaca pada bar lengkap terakhir; harga
                 # indeks harus dibaca pada TANGGAL YANG SAMA, bukan hari ini.
                 exit_date = _last_bar_date(price_history)
+                # Pagar: bar terakhir yang lebih tua dari tanggal masuk berarti
+                # cache harga ticker ini berhenti sebelum tesisnya dimulai.
+                # Tanggal seperti itu tidak boleh mengalir ke bawah -- ia
+                # membaca harga indeks di hari yang salah DAN membuat jendela
+                # window_sigma_pct kosong (n_bars=0 -> vonis v2 diam-diam
+                # hilang). None jauh lebih jujur, dan sudah ditangani semua
+                # pemakainya. Ini menutup kelas cacat yang di data lama sempat
+                # lolos lewat alat pemulih (450 outcome, 2026-08-06).
+                if exit_date and exit_date < since[:10]:
+                    log.warning(
+                        "%s/%s: bar terakhir %s mendahului tanggal masuk %s — "
+                        "exit_date dikosongkan", ticker, module, exit_date, since[:10],
+                    )
+                    exit_date = None
                 bench_start, bench_end, bench_source = resolve_benchmark_pair(
                     benchmark_series,
                     start_call.get("benchmark_at_call"),
