@@ -1,23 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { api } from '../api'
-import { horizonProgress, horizonTargetPrice, MAGNITUDE_ACTIONS, noiseBandPct } from '../format'
-
-// Sejak kapan ACTION ini (bukan cuma ticker-nya) muncul: jalan MUNDUR dari
-// entry terbaru di personal_history, berhenti begitu action lensa ini beda
-// dari sekarang. Dipakai bareng oleh PersonalAggregatorView (kartu top pick)
-// dan PersonalHistoricalView (expand row) -- diekstrak ke sini supaya dua
-// tempat itu tidak menduplikasi logika yang sama persis.
-export function firstSeenAt(historyEntries, module, currentAction) {
-  if (!historyEntries || historyEntries.length === 0) return null
-  const sorted = [...historyEntries].sort((a, b) => (a.analyzed_at || '').localeCompare(b.analyzed_at || ''))
-  let firstMatch = null
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const action = sorted[i]?.personal_call_set?.[module]?.action
-    if (action !== currentAction) break
-    firstMatch = sorted[i].analyzed_at
-  }
-  return firstMatch
-}
+import { actionStreak, horizonProgress, horizonTargetPrice, MAGNITUDE_ACTIONS, noiseBandPct } from '../format'
 
 // Badge risiko -- lapisan pribadi sebelumnya tidak pernah membaca Risk sama
 // sekali, cuma menitipkan pesan generik "cek Risk Flags sendiri" di teks.
@@ -291,7 +274,8 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
 
   if (priceHistory === null) return <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8 }}>Memuat bukti harga…</div>
 
-  const since = firstSeenAt(historyEntries, module, action)
+  const streak = actionStreak(historyEntries, module, action, calibration?.run_dates)
+  const since = streak?.since || null
   // `since` adalah timestamp ISO penuh ("2026-07-15T10:30:00"), `b.date`
   // cuma "YYYY-MM-DD". Bandingkan sebagai string apa adanya menjatuhkan bar
   // hari anchor itu sendiri, karena "2026-07-15" < "2026-07-15T10:30:00"
@@ -326,7 +310,24 @@ export default function ThesisProof({ ticker, module, action, horizon, horizonAn
   return (
     <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <span style={{ fontSize: 9.5, color: 'var(--faint)' }}>Sejak {sinceDate || 'mulai dilacak'}</span>
+        <span style={{ fontSize: 9.5, color: 'var(--faint)' }}>
+          Sejak {sinceDate || 'mulai dilacak'}
+          {streak && (
+            <span
+              title={
+                `Action "${action}" bertahan ${streak.runs} run pipeline berturut-turut` +
+                (streak.missing > 0
+                  ? `, dengan ${streak.missing} run yang ticker ini tidak ikut diskrining (streak tidak diputus -- itu ketiadaan data, bukan pembalikan sinyal).`
+                  : '.') +
+                ' Satuannya RUN, bukan hari: pipeline tidak jalan tiap hari.'
+              }
+            >
+              {' · '}
+              {streak.runs === 1 ? 'baru muncul run ini' : `run ke-${streak.runs} berturut-turut`}
+              {streak.missing > 0 && ` (${streak.missing} run terlewat)`}
+            </span>
+          )}
+        </span>
         {movedBeyondNoise ? (
           <span
             style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gold-hi)', textTransform: 'uppercase', letterSpacing: '.03em' }}

@@ -325,6 +325,65 @@ export function isBestAction(module, action) {
   return BEST_ACTION_ALIASES[module]?.has(action) ?? false
 }
 
+// Apakah dua action merujuk panggilan YANG SAMA, meski kosakatanya berganti di
+// tengah rentang waktu yang dibandingkan. Perbandingan string mentah tidak cukup
+// begitu ada penggantian nama: `masuk_spekulatif` -> `siaga_gerakan` (2026-08-05)
+// membuat SETIAP streak Spekulatif terbaca "run ke-1" di run pertama sesudahnya,
+// padahal panggilannya tidak berubah sama sekali -- terverifikasi atas riwayat
+// nyata (AAOI: 9 run berturut-turut terbaca 1).
+//
+// Sengaja bersandar pada BEST_ACTION_ALIASES, bukan daftar sinonim kedua yang
+// terpisah: dua daftar untuk fakta yang sama pasti berbeda cepat atau lambat.
+// Konsekuensinya, penggantian nama action NON-terkuat (mis. `tunggu_katalis`)
+// tidak tertangani -- kalau itu terjadi, kelompok aliasnya yang harus diperluas,
+// di satu tempat ini.
+export function sameAction(module, a, b) {
+  if (a === b) return true
+  if (!a || !b) return false
+  const aliases = BEST_ACTION_ALIASES[module]
+  return !!aliases && aliases.has(a) && aliases.has(b)
+}
+
+// Sejak kapan ACTION ini (bukan cuma ticker-nya) berlaku, DAN sudah berapa run
+// berturut-turut: jalan MUNDUR dari entry terbaru di personal_history, berhenti
+// begitu action lensa ini beda dari sekarang. Dipakai ThesisProof, yang tampil
+// di DUA permukaan (kartu top pick Agregator Pribadi + panel expand Riwayat
+// Pribadi) — satu fungsi, bukan dua salinan.
+//
+// `runs` ada karena lensa Spekulatif terukur sangat lengket: 85–98% pick hari
+// ini sama dengan run sebelumnya (empat dari lima input skornya bergerak lambat
+// — volatilitas, return 1 tahun, kepemilikan institusi yang cuma berubah
+// kuartalan). Tanpa angka ini, tesis yang baru muncul hari ini dan tesis yang
+// sudah nongkrong 9 run terbaca persis sama di kartu.
+//
+// `missing` butuh `runDates` (union tanggal run lintas ticker, dari
+// calibration.json): timeline SATU ticker cuma memuat run yang ticker itu ikut
+// diskrining, jadi run yang terlewat tidak kelihatan dari timeline itu sendiri.
+// Streak sengaja TIDAK diputus oleh run yang terlewat — ticker yang tidak lolos
+// screening sehari adalah ketiadaan data, bukan pembalikan sinyal; memutusnya
+// akan menulis "run ke-1" untuk tesis yang sebenarnya sudah berumur dua minggu.
+export function actionStreak(historyEntries, module, currentAction, runDates) {
+  if (!historyEntries || historyEntries.length === 0) return null
+  const sorted = [...historyEntries].sort((a, b) => (a.analyzed_at || '').localeCompare(b.analyzed_at || ''))
+  let since = null
+  let runs = 0
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const action = sorted[i]?.personal_call_set?.[module]?.action
+    if (!sameAction(module, action, currentAction)) break
+    since = sorted[i].analyzed_at
+    runs++
+  }
+  if (!since) return null
+
+  let missing = 0
+  if (Array.isArray(runDates) && runDates.length > 0) {
+    const from = since.slice(0, 10)
+    const to = (sorted[sorted.length - 1].analyzed_at || '').slice(0, 10)
+    missing = Math.max(0, runDates.filter((d) => d >= from && d <= to).length - runs)
+  }
+  return { since, runs, missing }
+}
+
 // Action yang mengklaim AMPLITUDO, bukan arah. Harus sama dengan
 // ACTION_CATEGORY_MAGNITUDE di personal_contracts.py.
 export const MAGNITUDE_ACTIONS = new Set(['siaga_gerakan'])

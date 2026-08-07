@@ -166,6 +166,24 @@ def _slice_by(rows: list[dict], dimension: str, keyfn) -> list[dict]:
     return sorted(out, key=lambda d: -d["n"])
 
 
+def _run_dates(timelines: dict[str, dict]) -> list[str]:
+    """Tanggal (UTC) SETIAP run pipeline yang pernah menulis riwayat pribadi.
+
+    Dipakai kartu tesis (ThesisProof) untuk membedakan "run ke-9 berturut-turut"
+    dari "9 entry tapi ada run yang bolong di tengah". Timeline satu ticker cuma
+    memuat run yang ticker itu ikut diskrining, jadi run yang terlewat TIDAK
+    kelihatan sama sekali dari timeline itu sendiri — union lintas ticker-lah
+    satu-satunya yang tahu run mana saja yang pernah ada.
+    """
+    dates: set[str] = set()
+    for timeline in timelines.values():
+        for entry in timeline.get("entries", []):
+            analyzed = entry.get("analyzed_at")
+            if analyzed:
+                dates.add(analyzed[:10])
+    return sorted(dates)
+
+
 def _not_yet_evaluable(timelines: dict[str, dict], evaluated: list[dict], today: date) -> list[dict]:
     """Per modul: berapa tesis sudah divonis, berapa call masih berjalan, dan
     KAPAN paling cepat vonis pertama bisa ada.
@@ -312,5 +330,6 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
         "not_yet_evaluable": not_yet,
         # Dipakai kartu tesis hidup (ThesisProof), bukan halaman rapor.
         "base_rates": _base_rates(rows, not_yet),
+        "run_dates": _run_dates(timelines),
         "mechanical_tuning": _mechanical_tuning(rows, slices, overall),
     }
