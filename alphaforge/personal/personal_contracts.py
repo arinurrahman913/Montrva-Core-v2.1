@@ -132,6 +132,31 @@ ACTION_CATEGORY_MAGNITUDE = frozenset({"siaga_gerakan"})
 # memasukkannya akan membuat nama konstanta itu berbohong. Gerbangnya dipisah.
 ACTION_GATED_BY_CONFIDENCE = ACTION_FULL_EXPOSURE | ACTION_CATEGORY_MAGNITUDE
 
+# Kelompok action yang merujuk panggilan YANG SAMA meski kosakatanya berganti di
+# tengah rentang waktu yang dibandingkan. Perbandingan string mentah tidak cukup
+# begitu ada penggantian nama: `masuk_spekulatif` -> `siaga_gerakan` (2026-08-05)
+# membuat SETIAP hitungan "sudah berapa run bertahan" terbaca 1 di run pertama
+# sesudahnya, padahal panggilannya tidak berubah sama sekali (AAOI: 9 run
+# berturut-turut terbaca 1).
+#
+# KEMBAR dengan BEST_ACTION_ALIASES di frontend/src/format.js — dua-duanya harus
+# berubah bersama, sama seperti ACTION_CATEGORY_MAGNITUDE dengan MAGNITUDE_ACTIONS.
+ACTION_ALIASES: dict[Module, frozenset[str]] = {
+    "multibagger": frozenset({"mulai_posisi"}),
+    "quality_compound": frozenset({"akumulasi"}),
+    "speculative": frozenset({"siaga_gerakan", "masuk_spekulatif"}),
+}
+
+
+def same_action(module: str, a: str | None, b: str | None) -> bool:
+    """Apakah dua action merujuk panggilan yang sama (lihat ACTION_ALIASES)."""
+    if a == b:
+        return a is not None
+    if not a or not b:
+        return False
+    aliases = ACTION_ALIASES.get(module)
+    return bool(aliases) and a in aliases and b in aliases
+
 
 def horizon_label(action: str) -> HorizonLabel:
     if action in ACTION_CATEGORY_REVIEW:
@@ -207,6 +232,21 @@ class PersonalCall:
     holding_since: str | None = None
     unrealized_return_pct: float | None = None
     horizon_status: HorizonStatus = "tidak_berlaku"
+
+    # Sudah berapa run pipeline BERTURUT-TURUT action ini bertahan, dan sejak
+    # kapan. Diisi belakangan (annotate_action_streaks) karena butuh riwayat,
+    # yang baru dimuat sesudah call set dibangun. None = riwayat tidak tersedia
+    # saat call ini dibuat, BUKAN "baru pertama kali" — 1 yang berarti itu.
+    #
+    # Ada di sini, bukan cuma dihitung frontend, karena frontend hanya memegang
+    # riwayat ticker yang kartunya dibuka: pertanyaan "dari 312 pick hari ini
+    # mana yang baru" tidak bisa dijawab satu kartu pada satu waktu.
+    streak_runs: int | None = None
+    streak_since: str | None = None
+    # Run yang terjadi di dalam rentang streak tapi ticker ini tidak ikut
+    # diskrining. Tidak memutus streak — absen dari screening itu ketiadaan
+    # data, bukan pembalikan sinyal.
+    streak_runs_missing: int = 0
 
     violations: list[str] = field(default_factory=list)
     generated_at: str = ""

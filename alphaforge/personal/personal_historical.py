@@ -44,6 +44,80 @@ def _entry_date(entry: dict) -> str:
     return entry["analyzed_at"]
 
 
+def run_dates(timelines: dict[str, dict]) -> list[str]:
+    """Tanggal (UTC) SETIAP run pipeline yang pernah menulis riwayat pribadi.
+
+    Union lintas ticker, karena timeline SATU ticker cuma memuat run yang ticker
+    itu ikut diskrining — run yang terlewat tidak kelihatan dari timeline itu
+    sendiri sama sekali. Dipakai annotate_action_streaks() di bawah dan rapor
+    kalibrasi (yang meneruskannya ke kartu tesis lewat calibration.json).
+    """
+    dates: set[str] = set()
+    for timeline in timelines.values():
+        for entry in timeline.get("entries", []):
+            analyzed = entry.get("analyzed_at")
+            if analyzed:
+                dates.add(analyzed[:10])
+    return sorted(dates)
+
+
+def annotate_action_streaks(
+    call_sets: list["PersonalCallSet"],
+    timelines: dict[str, dict],
+    dates: list[str] | None = None,
+) -> list["PersonalCallSet"]:
+    """Isi streak_runs/streak_since/streak_runs_missing di tiap PersonalCall.
+
+    HARUS dipanggil SESUDAH update_personal_timeline: hitungannya berjalan mundur
+    dari entry terakhir, dan entry run ini baru ada di timeline setelah update
+    itu. Dipanggil sebelum update, setiap streak akan kurang satu.
+
+    Mutasi ini TIDAK mengubah snapshot yang sudah masuk riwayat --
+    create_personal_entry memakai asdict(), jadi entry hari ini menyimpan salinan
+    lepas tanpa field streak. Itu disengaja: angka streak menggambarkan keadaan
+    SAAT dibaca, dan menuliskannya ke dalam catatan yang sudah jadi berarti
+    mengarang bahwa nilai itu diketahui saat snapshot dibuat.
+
+    Alasan hitungan ini ada di backend, bukan cuma di frontend (yang sudah punya
+    actionStreak() di format.js): frontend hanya memegang riwayat ticker yang
+    kartunya sedang dibuka, jadi tidak bisa menjawab "dari 312 pick hari ini,
+    mana yang baru". Kedua sisi memakai definisi yang sama persis, termasuk alias
+    action -- lihat ACTION_ALIASES/same_action di personal_contracts.py.
+    """
+    from .personal_contracts import same_action
+
+    if dates is None:
+        dates = run_dates(timelines)
+
+    for call_set in call_sets:
+        timeline = timelines.get(call_set.ticker) or {}
+        entries = sorted(timeline.get("entries", []), key=lambda e: e.get("analyzed_at") or "")
+        if not entries:
+            continue
+        last_date = (entries[-1].get("analyzed_at") or "")[:10]
+
+        for module in ("multibagger", "quality_compound", "speculative"):
+            call = getattr(call_set, module, None)
+            if call is None:
+                continue
+            runs = 0
+            since = None
+            for entry in reversed(entries):
+                snapshot = (entry.get("personal_call_set") or {}).get(module) or {}
+                if not same_action(module, snapshot.get("action"), call.action):
+                    break
+                since = entry.get("analyzed_at")
+                runs += 1
+            if not since:
+                continue
+            call.streak_runs = runs
+            call.streak_since = since
+            call.streak_runs_missing = max(
+                0, len([d for d in dates if since[:10] <= d <= last_date]) - runs
+            )
+    return call_sets
+
+
 def load_personal_history(history_file: str | Path) -> dict[str, dict]:
     """{ticker: {ticker, total_entries, first_entry_date, last_entry_date,
     entries: [...]}} -- entries dibiarkan dict, tidak direkonstruksi balik ke

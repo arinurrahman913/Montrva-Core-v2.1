@@ -69,6 +69,7 @@ try:
     from alphaforge.personal import (  # noqa: E402
         load_holdings, build_personal_call_sets,
         load_personal_history, update_personal_timeline, save_personal_history,
+        annotate_action_streaks,
         evaluate_due_entries,
     )
     # Diimpor dari modulnya langsung (bukan lewat alphaforge.personal.__init__)
@@ -356,6 +357,25 @@ def _run() -> int:
 
                 personal_timelines = load_personal_history(DATA_DIR / "personal" / "personal_history.json")
                 personal_timelines = update_personal_timeline(personal_timelines, personal_call_sets)
+
+                # Umur tiap call (sudah berapa run action ini bertahan) -- HARUS
+                # sesudah update_personal_timeline, karena hitungannya berjalan
+                # mundur dari entry run ini. Memutasi call_sets, bukan timeline:
+                # snapshot yang sudah masuk riwayat sengaja tidak ikut berubah
+                # (lihat docstring annotate_action_streaks).
+                annotate_action_streaks(personal_call_sets, personal_timelines)
+                _p_streaks = [
+                    c.streak_runs
+                    for cs in personal_call_sets
+                    for c in (cs.multibagger, cs.quality_compound, cs.speculative)
+                    if c.streak_runs
+                ]
+                if _p_streaks:
+                    log.info(
+                        f"Personal: umur call terisi di {len(_p_streaks)} lens-call "
+                        f"(baru run ini: {sum(1 for r in _p_streaks if r == 1)}, "
+                        f"terpanjang: {max(_p_streaks)} run)"
+                    )
 
                 # Evaluasi outcome untuk entry lama yang sudah jatuh tempo --
                 # disetujui pengguna 2026-07-27, BEDA dari Historical publik

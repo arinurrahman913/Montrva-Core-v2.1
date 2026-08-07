@@ -12,6 +12,7 @@ from .personal_historical import (
     load_personal_history,
     update_personal_timeline,
     save_personal_history,
+    annotate_action_streaks,
     due_for_review,
 )
 from .personal_evaluation import evaluate_due_entries
@@ -21,5 +22,5 @@ __all__ = [
     "load_holdings", "build_personal_call",
     "build_personal_call_set", "build_personal_call_sets",
     "load_personal_history", "update_personal_timeline", "save_personal_history",
-    "due_for_review", "evaluate_due_entries",
+    "annotate_action_streaks", "due_for_review", "evaluate_due_entries",
 ]
