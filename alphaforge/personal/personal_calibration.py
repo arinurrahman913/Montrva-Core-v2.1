@@ -38,6 +38,7 @@ import statistics
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
+from .personal_contracts import ACTION_ALIASES
 from .personal_evaluation import MODULES
 from .personal_historical import call_due_date, run_dates
 
@@ -164,6 +165,67 @@ def _slice_by(rows: list[dict], dimension: str, keyfn) -> list[dict]:
     for k, rs in buckets.items():
         out.append({"dimension": dimension, "key": k, **_summarize(rs)})
     return sorted(out, key=lambda d: -d["n"])
+
+
+# Berapa ticker yang namanya ikut disebut per daftar. Ada batasnya karena
+# rotasi awal bisa ratusan (30 Jul: 567 nama baru sekaligus) dan berkas ini
+# dikirim utuh ke browser tiap halaman Agregator Pribadi dibuka. Jumlah
+# penuhnya tetap dibawa terpisah, jadi yang hilang cuma nama-namanya.
+ROTATION_NAME_CAP = 60
+
+
+def _rotation(timelines: dict[str, dict]) -> dict | None:
+    """Apa yang BERGANTI di daftar pick antara run terakhir dan run sebelumnya.
+
+    Ada karena lensa Spekulatif terukur sangat lengket — 85–98% pick tiap run
+    sama dengan run sebelumnya — jadi "312 disiagakan hari ini" nyaris tidak
+    membawa informasi baru dibanding kemarin, sementara "27 nama baru" membawa
+    seluruhnya. Umur per call (streak_runs) menjawab ini satu kartu pada satu
+    waktu; blok ini menjawabnya untuk seluruh populasi sekaligus.
+
+    Bukan bagian dari rapor kalibrasi, dan sengaja tidak berpura-pura jadi
+    bagiannya. Ikut menumpang di calibration.json karena sumber datanya sama
+    persis (seluruh riwayat) dan halaman yang memakainya sudah mengambil berkas
+    ini — berkas + endpoint + skrip bangun sendiri untuk tujuh angka dan dua
+    daftar cuma menambah tempat untuk lupa.
+
+    None kalau riwayatnya belum punya dua run untuk dibandingkan.
+    """
+    per_date: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    for ticker, timeline in timelines.items():
+        for entry in timeline.get("entries", []):
+            at = (entry.get("analyzed_at") or "")[:10]
+            if not at:
+                continue
+            call_set = entry.get("personal_call_set") or {}
+            for module in MODULES:
+                action = (call_set.get(module) or {}).get("action")
+                if action and action in ACTION_ALIASES.get(module, frozenset()):
+                    per_date[at][module].add(ticker)
+
+    dates = sorted(per_date)
+    if len(dates) < 2:
+        return None
+    latest, previous = dates[-1], dates[-2]
+
+    modules = {}
+    for module in MODULES:
+        now, before = per_date[latest][module], per_date[previous][module]
+        new, dropped = sorted(now - before), sorted(before - now)
+        modules[module] = {
+            "picks": len(now),
+            "new": len(new),
+            "continuing": len(now & before),
+            "dropped": len(dropped),
+            # Bagian dari pick hari ini yang sudah ada kemarin. Angka inilah yang
+            # membuat "banyaknya pick" tidak terbaca sebagai "banyaknya temuan".
+            "carryover_pct": round(len(now & before) / len(now) * 100, 1) if now else None,
+            "new_tickers": new[:ROTATION_NAME_CAP],
+            "dropped_tickers": dropped[:ROTATION_NAME_CAP],
+            "names_truncated": len(new) > ROTATION_NAME_CAP or len(dropped) > ROTATION_NAME_CAP,
+        }
+
+    return {"latest_run": latest, "previous_run": previous, "modules": modules}
 
 
 def _not_yet_evaluable(timelines: dict[str, dict], evaluated: list[dict], today: date) -> list[dict]:
@@ -313,5 +375,6 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
         # Dipakai kartu tesis hidup (ThesisProof), bukan halaman rapor.
         "base_rates": _base_rates(rows, not_yet),
         "run_dates": run_dates(timelines),
+        "rotation": _rotation(timelines),
         "mechanical_tuning": _mechanical_tuning(rows, slices, overall),
     }

@@ -274,6 +274,53 @@ function CrossLensConcentrationNote({ picksByLens }) {
   )
 }
 
+// Apa yang BERGANTI di daftar pick sejak run sebelumnya. Halaman ini cuma
+// menampilkan top-3 per lensa, jadi tanpa blok ini tidak ada satu pun tempat
+// yang bisa menjawab "dari 312 yang disiagakan hari ini, mana yang baru" --
+// dan itu pertanyaan yang menentukan, karena 85-98% pick tiap run sama dengan
+// run sebelumnya. Angkanya dari calibration.json (blok `rotation`), yang sudah
+// diambil halaman ini untuk base rate; tidak ada fetch tambahan.
+function RotationNote({ calibration }) {
+  const rot = calibration?.rotation
+  const [open, setOpen] = useState(null)
+  if (!rot) return null
+  const rows = LENSES.map((m) => [m, rot.modules?.[m]]).filter(([, d]) => d && d.picks > 0)
+  if (rows.length === 0) return null
+
+  return (
+    <div style={{ fontSize: 11, color: 'var(--dim)', background: 'var(--panel-2, rgba(255,255,255,.03))', border: '1px solid var(--rule)', padding: '9px 11px', borderRadius: 7, marginBottom: 12, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 5 }}>
+        Rotasi sejak run {rot.previous_run}
+      </div>
+      {rows.map(([module, d]) => (
+        <div key={module}>
+          <strong style={{ color: 'var(--text)' }}>{LENS_TITLES[module].split(' —')[0]}</strong>{': '}
+          {d.picks} pick · <strong style={{ color: 'var(--accent)' }}>{d.new} baru</strong> ·{' '}
+          {d.continuing} lanjutan{d.carryover_pct != null && ` (${d.carryover_pct}% terbawa)`} · {d.dropped} keluar{' '}
+          {d.new > 0 && (
+            <button
+              onClick={() => setOpen(open === module ? null : module)}
+              style={{ marginLeft: 8, fontSize: 10, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+            >
+              {open === module ? 'sembunyikan' : 'lihat yang baru'}
+            </button>
+          )}
+          {open === module && (
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--faint)', margin: '3px 0 6px', wordBreak: 'break-word' }}>
+              {d.new_tickers.join(' · ')}
+              {d.names_truncated && ` … (${d.new} total, nama dibatasi)`}
+            </div>
+          )}
+        </div>
+      ))}
+      <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 5 }}>
+        Pick yang terbawa bukan temuan baru — lensa membaca ukuran yang bergerak lambat (volatilitas, return 1 tahun,
+        kepemilikan institusi kuartalan), jadi daftarnya memang lengket. Umur tiap tesis ada di kartunya.
+      </div>
+    </div>
+  )
+}
+
 // Seri di batas potong diungkap, bukan disembunyikan: judul "Action Terkuat
 // per Lensa" bikin pembaca wajar mengira 3 kartu ini pemenang mutlak, padahal
 // live 2026-07-31 Quality punya 60 ticker yang skor tesisnya SAMA PERSIS
@@ -320,6 +367,7 @@ function TopPicksSection({ callSets, historyData, onSelectTicker, calibration })
       </p>
       <SectorConcentrationNote tickers={allTickers} />
       <CrossLensConcentrationNote picksByLens={picksByLens} />
+      <RotationNote calibration={calibration} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
         {picksByLens.map(({ module, picks, tie }) => (
           <div key={module}>
