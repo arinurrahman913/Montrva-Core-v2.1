@@ -135,6 +135,103 @@ const DELIBERATELY_NOT_DONE = [
   ['Tidak ada angka yang tidak bisa ditelusuri', 'setiap persen di halaman ini bisa dilacak balik ke outcome tersimpan; tidak ada model yang "belajar" di luar itu.'],
 ]
 
+// "Hit rate 34%" tidak berarti apa pun tanpa titik nol. Blok ini memasang
+// titik nol itu — dan sengaja DUA, bukan satu: pembanding acak saja terlalu
+// lemah. Lensa Spekulatif memilih 93% ticker berkatalis <=7 hari sementara
+// universe cuma 26%, jadi keunggulannya atas acak bisa jadi cuma "memilih
+// perusahaan yang lapor lusa" — sesuatu yang ditiru satu baris pencarian
+// kalender tanpa faktor skor sama sekali. Kalau lensa cuma SETARA dengan
+// kalender, faktor-faktor skornya tidak menambah apa pun.
+const ARM_LABEL = {
+  lensa: ['Lensa Spekulatif', 'seleksi penuh: volatilitas, return 1th, kepemilikan institusi, gerbang katalis'],
+  kalender: ['Saringan kalender', 'satu baris: "katalis ≤N hari dari entry". Tanpa skor apa pun.'],
+  acak: ['Acak', 'kontrol kewarasan. Kalau kalender tidak unggul dari ini, rekonstruksinya yang rusak.'],
+}
+const VERDICT_COLOR = { unggul: 'var(--good)', kalah: 'var(--bad)', setara: 'var(--warn)' }
+
+function Baselines({ b }) {
+  // Ketiadaan ditampilkan, bukan disembunyikan — rapor tanpa pembanding lebih
+  // jujur kalau ia mengatakan bahwa pembandingnya belum ada.
+  if (!b) {
+    return (
+      <div style={{ padding: '12px 14px', margin: '18px 0 12px', background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
+        <div style={{ fontSize: 12, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>
+          Dibandingkan apa?
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.6 }}>
+          Belum pernah diukur. Angka mana pun di halaman ini tidak bisa dibaca sebagai baik atau buruk
+          sampai ada pembandingnya — jalankan <code style={{ fontFamily: 'var(--mono)' }}>python scripts/build_baselines.py</code>.
+        </div>
+      </div>
+    )
+  }
+  const stale = b.stale_days
+  return (
+    <div style={{ padding: '12px 14px', margin: '18px 0 12px', background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
+      <div style={{ fontSize: 12, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4 }}>
+        Dibandingkan apa?
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--faint)', marginBottom: 10 }}>
+        {b.metric} · {b.windows} jendela · kalender pakai ≤{b.naive_max_days} hari
+        {stale != null && (
+          <span style={{ color: stale > 14 ? 'var(--warn)' : 'var(--faint)' }}>
+            {' '}· diukur {stale === 0 ? 'hari ini' : `${stale} hari lalu`}
+            {stale > 14 ? ' (sudah basi — ukur ulang)' : ''}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gap: 7, marginBottom: 11 }}>
+        {['lensa', 'kalender', 'acak'].map((k) => {
+          const a = b.arms?.[k]
+          if (!a) return null
+          const [label, why] = ARM_LABEL[k]
+          return (
+            <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 11.5 }}>
+              <span style={{ fontFamily: 'var(--mono)', minWidth: 62, textAlign: 'right', color: 'var(--text)' }}>
+                {a.rate_pct == null ? '—' : `${a.rate_pct}%`}
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--faint)', minWidth: 74, fontSize: 10 }}>
+                ±{a.stderr_pp}pp · n={a.n}
+              </span>
+              <span>
+                <strong style={{ color: 'var(--text)' }}>{label}</strong>
+                <span style={{ color: 'var(--faint)' }}> — {why}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'grid', gap: 5, paddingTop: 10, borderTop: '1px solid var(--rule)' }}>
+        {(b.comparisons || []).map((c) => (
+          <div key={c.pair} style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'baseline' }}>
+            <span style={{ fontFamily: 'var(--mono)', minWidth: 128, color: 'var(--dim)' }}>{c.pair}</span>
+            {c.verdict === 'tak_terukur' ? (
+              <span style={{ color: 'var(--faint)' }}>tak terukur</span>
+            ) : (
+              <>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--text)', minWidth: 52 }}>
+                  {c.diff_pp >= 0 ? '+' : ''}{c.diff_pp}pp
+                </span>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--faint)', fontSize: 10 }}>
+                  SK95% {c.ci95_lo_pp >= 0 ? '+' : ''}{c.ci95_lo_pp} .. {c.ci95_hi_pp >= 0 ? '+' : ''}{c.ci95_hi_pp}
+                </span>
+                <strong style={{ color: VERDICT_COLOR[c.verdict] || 'var(--dim)', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.04em' }}>
+                  {c.verdict}
+                </strong>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      {b.note && (
+        <div style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.55, marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--rule)' }}>
+          {b.note}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MechanicalTuning({ mt }) {
   return (
     <div style={{ padding: '12px 14px', margin: '18px 0 12px', background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
@@ -278,6 +375,9 @@ export default function PersonalCalibrationView() {
         <SliceTable key={d.dimension} dimension={d.dimension} rows={d.rows} />
       ))}
 
+      {/* Sengaja SEBELUM MechanicalTuning: pembaca harus melihat titik nolnya
+          dulu, baru membaca syarat kapan angka boleh mengubah sistem. */}
+      <Baselines b={data.baselines} />
       {data.mechanical_tuning && <MechanicalTuning mt={data.mechanical_tuning} />}
 
       <p className="narrative" style={{ margin: '4px 0 0', color: 'var(--faint)', fontSize: 11, lineHeight: 1.7 }}>

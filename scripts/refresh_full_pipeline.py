@@ -520,7 +520,13 @@ def _run() -> int:
         # Best-effort seperti sisa blok pribadi ini: gagal di sini tidak boleh
         # membuang riwayat & call sets yang sudah ditulis di atas.
         try:
-            calibration = build_calibration(personal_timelines)
+            # baselines.json dibangun terpisah (scripts/build_baselines.py) --
+            # pengukurannya membuka bar harga ribuan ticker, belasan menit yang
+            # tidak boleh menempel ke run ini. Kalau belum pernah dibangun,
+            # blok "baselines" di rapor jadi None, bukan angka karangan.
+            calibration = build_calibration(
+                personal_timelines, baselines_path=personal_dir / "baselines.json"
+            )
             _atomic_write(personal_dir / "calibration.json", calibration)
             _cal = calibration["overall"]
             log.info(

@@ -34,9 +34,11 @@ ulang tanpa menjalankan pipeline 3-4 jam.
 """
 from __future__ import annotations
 
+import json
 import statistics
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from .personal_contracts import ACTION_ALIASES
 from .personal_evaluation import MODULES
@@ -336,7 +338,51 @@ def _mechanical_tuning(rows: list[dict], slices: list[dict], overall: dict) -> d
     return {"allowed": all(c["met"] for c in conditions), "conditions": conditions}
 
 
-def build_calibration(timelines: dict[str, dict], today: date | None = None) -> dict:
+def _baselines(baselines_path: Path | None) -> dict | None:
+    """Pembanding dari `scripts/build_baselines.py`, dibaca apa adanya.
+
+    Kenapa dibaca dari berkas alih-alih dihitung di sini: pengukurannya harus
+    membuka bar harga ribuan ticker (~100 berkas/menit di mesin ini), belasan
+    menit yang tidak boleh menempel ke tiap run pipeline 3 jam. Konsekuensinya
+    angka ini bisa BASI relatif terhadap sisa rapor -- karena itu
+    `generated_at`-nya dibawa apa adanya dan `stale_days` dihitung, supaya
+    kebasiannya terlihat pembaca alih-alih diam-diam dipercaya.
+
+    None kalau berkasnya belum pernah dibangun. Itu keadaan yang sah dan
+    sengaja TIDAK diisi angka pengganti: rapor tanpa pembanding lebih jujur
+    daripada rapor dengan pembanding karangan.
+    """
+    if baselines_path is None or not baselines_path.exists():
+        return None
+    try:
+        payload = json.loads(baselines_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    gen = payload.get("generated_at")
+    stale = None
+    if gen:
+        try:
+            stale = (datetime.now(timezone.utc) - datetime.fromisoformat(gen)).days
+        except ValueError:
+            stale = None
+    return {
+        "generated_at": gen,
+        "stale_days": stale,
+        "metric": payload.get("metric"),
+        "naive_max_days": payload.get("naive_max_days"),
+        "windows": payload.get("windows"),
+        "arms": payload.get("arms"),
+        "comparisons": payload.get("comparisons"),
+        "note": payload.get("note"),
+    }
+
+
+def build_calibration(
+    timelines: dict[str, dict],
+    today: date | None = None,
+    baselines_path: Path | None = None,
+) -> dict:
     today = today or datetime.now(timezone.utc).date()
     all_rows = collect_theses(timelines)
     rows = [r for r in all_rows if r["classification"] in DIRECTIONAL]
@@ -372,6 +418,14 @@ def build_calibration(timelines: dict[str, dict], today: date | None = None) -> 
         "miss_reasons": dict(sorted(miss_reasons.items(), key=lambda kv: -kv[1])),
         "slices": slices,
         "not_yet_evaluable": not_yet,
+        # "Dibandingkan APA?" -- pertanyaan yang selama ini tidak dijawab rapor
+        # ini sama sekali. Hit rate 34% tidak berarti apa pun tanpa titik nol,
+        # dan pembanding ACAK saja ternyata terlalu lemah: lensa Spekulatif
+        # memilih 93% ticker berkatalis <=7 hari sementara universe cuma 26%,
+        # jadi keunggulannya atas acak bisa jadi cuma "memilih perusahaan yang
+        # lapor lusa" -- sesuatu yang ditiru satu baris pencarian kalender.
+        # None kalau build_baselines.py belum pernah dijalankan.
+        "baselines": _baselines(baselines_path),
         # Dipakai kartu tesis hidup (ThesisProof), bukan halaman rapor.
         "base_rates": _base_rates(rows, not_yet),
         "run_dates": run_dates(timelines),

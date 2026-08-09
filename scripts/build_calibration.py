@@ -36,7 +36,7 @@ def main() -> int:
     timelines = json.loads(history_path.read_text(encoding="utf-8"))
     timelines = timelines.get("timelines", timelines)
 
-    report = build_calibration(timelines)
+    report = build_calibration(timelines, baselines_path=PERSONAL_DIR / "baselines.json")
     out = PERSONAL_DIR / "calibration.json"
     write_text_atomic(out, dumps_safe(report, indent=2, ensure_ascii=False))
 
