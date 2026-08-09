@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from alphaforge import runlock  # noqa: E402
+from backend import big_json  # noqa: E402
 from alphaforge.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
 from alphaforge.layer2.sources.sector_map import (  # noqa: E402
     KNOWN_SECTORS, load_sector_map_meta as sector_map_meta
@@ -95,6 +96,97 @@ def _index_by_ticker(items: list[dict]) -> dict[str, dict]:
     return {item["ticker"]: item for item in items if "ticker" in item}
 
 
+# Dua stage file yang TIDAK ikut _stage_cache. Diukur 2026-08-08: keduanya
+# 848 MB dari 970 MB yang dimuat _warm_cache, dan mengembang jadi ~2,9 GB dari
+# 3,32 GB yang ditahan backend seumur hidup prosesnya -- di mesin 7,47 GB itu
+# memaksa committed 9,21 GB dan swap terus-menerus. Tidak ada pembacanya yang
+# butuh seluruh isi tinggal di memori: lihat docstring backend/big_json.py.
+_BIG_STAGES: dict[str, callable] = {
+    "evidence": big_json.build_evidence_index,
+    "historical": big_json.build_historical_index,
+}
+
+# name -> (mtime, RecordIndex). ~50 byte per ticker, jadi ~0,4 MB berdua.
+_index_cache: dict[str, tuple[float, big_json.RecordIndex]] = {}
+
+# name -> (mtime, hasil ringkas). Ringkasan populasi dibangun sekali per versi
+# berkas dengan melewati record satu per satu, lalu yang disimpan cuma
+# hasilnya yang kecil -- bukan sumbernya.
+_derived_cache: dict[str, tuple[float, object]] = {}
+
+
+def _get_index(name: str) -> big_json.RecordIndex | None:
+    """Indeks offset untuk stage besar, None kalau pemindaian penanda gagal.
+
+    None BUKAN kondisi error -- pemanggil jatuh ke _get_stage() (json.load
+    penuh, perilaku lama). Itu memakan memori seperti sebelumnya tapi tetap
+    benar; lihat big_json.py soal kenapa pemindaiannya sengaja bisa menyerah.
+    """
+    path = DATA_DIR / STAGE_FILES[name]
+    if not path.exists():
+        return None
+
+    mtime = path.stat().st_mtime
+    cached = _index_cache.get(name)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    index = _BIG_STAGES[name](path)
+    if index is None:
+        print(f"[big_json] indeks '{name}' gagal dibangun -- fallback json.load penuh",
+              file=sys.stderr)
+        return None
+    _index_cache[name] = (mtime, index)
+    return index
+
+
+def _get_big_record(name: str, ticker: str, fallback_key: str | None) -> dict | None:
+    """Satu record dari stage besar tanpa memuat sisanya.
+
+    `fallback_key` menentukan bentuk jalur cadangan: None untuk berkas yang
+    top-level-nya sudah dict berkunci ticker (historical), atau nama array
+    (mis. "packages") untuk yang isinya list.
+    """
+    index = _get_index(name)
+    if index is not None:
+        return index.get(ticker)
+
+    data = _get_stage(name)
+    if fallback_key is None:
+        return data.get(ticker)
+    return _index_by_ticker(data.get(fallback_key, [])).get(ticker)
+
+
+def _get_derived(name: str, build):
+    """Hasil `build(iterable_of_records)` yang di-cache per-mtime.
+
+    Iterable-nya menghasilkan record satu per satu (dari indeks) sehingga
+    puncak memorinya satu record. Kalau indeksnya tidak ada, jatuh ke parse
+    penuh -- sama seperti _get_big_record.
+    """
+    path = DATA_DIR / STAGE_FILES[name]
+    if not path.exists():
+        return build(iter(()))
+
+    mtime = path.stat().st_mtime
+    cached = _derived_cache.get(name)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    index = _get_index(name)
+    if index is not None:
+        result = build(index.iter_records())
+    else:
+        data = _get_stage(name)
+        if name == "historical":
+            result = build(iter(data.items()))
+        else:
+            result = build((p.get("ticker"), p) for p in data.get("packages", []))
+
+    _derived_cache[name] = (mtime, result)
+    return result
+
+
 def _get_price_target_store() -> dict[str, list[dict]]:
     """Small ticker->[snapshot] file, appended to daily by
     price_target.sync_price_target_history() during a pipeline run — kept
@@ -150,13 +242,24 @@ def _compress_response(response):
 def get_stage(stage: str):
     if stage not in STAGE_FILES:
         return jsonify({"error": f"unknown stage '{stage}'"}), 404
+    if stage in _BIG_STAGES:
+        # evidence.json 250 MB / historical_timeline.json 598 MB. Rute ini
+        # akan mem-parse DAN menyerialkan ulang seluruh berkas untuk satu
+        # respons -- puncak memorinya berkali lipat isi berkasnya sendiri.
+        # Tidak ada view yang memanggilnya (api.js mendefinisikan
+        # api.evidence/api.historical, tidak ada pemakainya; keduanya sudah
+        # pindah ke /summary sejak audit C6), jadi ini ditutup alih-alih
+        # dibiarkan jadi cara termudah menjatuhkan backend.
+        return jsonify({
+            "error": f"stage '{stage}' terlalu besar untuk dikirim utuh",
+            "gunakan": [f"/api/{stage}/summary", "/api/ticker/<ticker>"],
+        }), 413
     return jsonify(_get_stage(stage))
 
 
 @app.get("/api/ticker/<ticker>")
 def get_ticker_detail(ticker: str):
     ticker = ticker.upper()
-    evidence = _index_by_ticker(_get_stage("evidence").get("packages", []))
     knowledge = _index_by_ticker(_get_stage("knowledge").get("profiles", []))
     catalyst = _index_by_ticker(_get_stage("catalyst").get("catalyst_sets", []))
     peer = _index_by_ticker(_get_stage("peer").get("comparisons", []))
@@ -164,9 +267,11 @@ def get_ticker_detail(ticker: str):
     risk = _index_by_ticker(_get_stage("risk").get("assessments", []))
     reasoning = _index_by_ticker(_get_stage("reasoning").get("reasoning_outputs", []))
     aggregator = _index_by_ticker(_get_stage("aggregator").get("recommendations", []))
-    historical = _get_stage("historical")
 
-    evidence_entry = evidence.get(ticker)
+    # Dua yang besar dibaca per-record lewat indeks offset, bukan diambil dari
+    # dict populasi yang menahan 4.054 record lain yang tidak diminta.
+    evidence_entry = _get_big_record("evidence", ticker, "packages")
+    historical_entry = _get_big_record("historical", ticker, None)
     pt_history = _get_price_target_store().get(ticker)
     if evidence_entry and pt_history and evidence_entry.get("analyst_estimates"):
         # Shallow-copy so we never mutate the shared, mtime-cached evidence
@@ -187,7 +292,7 @@ def get_ticker_detail(ticker: str):
         "risk": risk.get(ticker),
         "reasoning": reasoning.get(ticker),
         "aggregator": aggregator.get(ticker),
-        "historical": historical.get(ticker),
+        "historical": historical_entry,
     })
 
 
@@ -216,8 +321,7 @@ def get_ticker_ai_narrative(ticker: str):
     if not profile:
         return jsonify({"narrative": None, "available": False, "error": "no knowledge profile"}), 404
 
-    evidence = _index_by_ticker(_get_stage("evidence").get("packages", []))
-    evidence_entry = evidence.get(ticker)
+    evidence_entry = _get_big_record("evidence", ticker, "packages")
     if not evidence_entry:
         return jsonify({"narrative": None, "available": False, "error": "no evidence package"}), 404
 
@@ -578,9 +682,15 @@ def get_evidence_summary():
     tetap disertakan (dipakai EvidenceView.jsx sourceStatus()/computeSourceStats()).
     Detail lengkap 1 ticker (utuh, termasuk array) tetap lewat /api/ticker/<t>
     yang cuma index 1 ticker, bukan seluruh populasi."""
-    pkgs = _get_stage("evidence").get("packages", [])
+    return jsonify(_get_derived("evidence", _build_evidence_summary))
+
+
+def _build_evidence_summary(records) -> dict:
+    """Dipanggil sekali per versi evidence.json (di-cache per mtime), dengan
+    record yang mengalir satu per satu -- jadi 4.054 paket tidak pernah ada
+    di memori berbarengan hanya untuk dibuang 99% field-nya."""
     rows = []
-    for p in pkgs:
+    for _ticker, p in records:
         pm = p.get("price_market") or {}
         fd = p.get("fundamental") or {}
         io = p.get("institutional_ownership") or {}
@@ -618,7 +728,7 @@ def get_evidence_summary():
                 "metadata": sf.get("metadata"),
             },
         })
-    return jsonify({"packages": rows, "total": len(rows)})
+    return {"packages": rows, "total": len(rows)}
 
 
 @app.get("/api/historical/summary")
@@ -640,15 +750,27 @@ def get_historical_summary():
     di browser dari array `entries` penuh. Detail 1 ticker (utuh, termasuk
     entries) tetap lewat /api/ticker/<t>, yang cuma index 1 ticker.
 
-    Catatan: ini tidak mengurangi memori yang ditahan _stage_cache (masih
-    parse penuh sekali di sini) -- itu bagian C3 yang lebih struktural
-    (pertumbuhan historical_timeline.json sendiri tidak dibatasi, dan
-    _warm_cache memuat semua stage file penuh saat startup). Endpoint ini
-    menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang merupakan risiko
-    paling akut (satu klik nav bisa membuat request lain menggantung)."""
-    timelines = _get_stage("historical")
+    Endpoint ini menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang
+    merupakan risiko paling akut (satu klik nav bisa membuat request lain
+    menggantung).
+
+    [DIPERBARUI 2026-08-08] Catatan lama di sini menulis bahwa endpoint ini
+    "tidak mengurangi memori yang ditahan _stage_cache (masih parse penuh
+    sekali di sini)" -- itu sudah TIDAK berlaku: historical masuk _BIG_STAGES,
+    jadi ringkasannya dibangun dengan mengalirkan record satu per satu lewat
+    indeks offset dan yang di-cache cuma hasilnya (~150 byte/ticker). Dua
+    klaim lain di catatan itu perlu dipisah: `_warm_cache` memang tidak lagi
+    memuat berkas ini penuh, TAPI pertumbuhan historical_timeline.json sendiri
+    masih belum tertangani (RETENTION_DAYS=730 di historical.py, 97% tiap
+    entry adalah aggregator_output) -- itu tetap pekerjaan terbuka."""
+    return jsonify(_get_derived("historical", _build_historical_summary))
+
+
+def _build_historical_summary(records) -> dict:
+    """Sama pola dengan _build_evidence_summary: mengalir per ticker, hasilnya
+    yang kecil (~150 byte/ticker) yang disimpan, bukan sumbernya."""
     rows = []
-    for ticker, t in timelines.items():
+    for ticker, t in records:
         entries = t.get("entries") or []
         last = entries[-1] if entries else None
         rows.append({
@@ -658,7 +780,7 @@ def get_historical_summary():
             "last_halted": (last.get("aggregator_output") or {}).get("halted") if last else None,
             "has_outcome": any(e.get("outcome") is not None for e in entries),
         })
-    return jsonify({"tickers": rows, "total": len(rows)})
+    return {"tickers": rows, "total": len(rows)}
 
 
 # Semua stage file yang dijaga gerbang all-or-nothing DAN punya wrapper
@@ -698,7 +820,14 @@ def get_consistency():
     di-deploy."""
     session_ids: dict[str, str | None] = {}
     for name in CONSISTENCY_CHECKED_STAGES:
-        session_ids[name] = _get_stage(name).get("session_id")
+        if name in _BIG_STAGES:
+            # Satu field dari kepala berkas. Lewat _get_stage() ini akan
+            # mem-parse evidence.json 250 MB dan menahannya di _stage_cache --
+            # membatalkan seluruh penghematan _BIG_STAGES setiap kali halaman
+            # dimuat, karena frontend memanggil endpoint ini rutin.
+            session_ids[name] = big_json.read_session_id(DATA_DIR / STAGE_FILES[name])
+        else:
+            session_ids[name] = _get_stage(name).get("session_id")
 
     seen = {sid for sid in session_ids.values() if sid is not None}
     consistent = len(seen) <= 1
@@ -749,13 +878,26 @@ def serve_frontend(path: str = ""):
     return send_from_directory(FRONTEND_DIST, "index.html")
 
 
+# Didefinisikan di sini (bukan di sebelah _BIG_STAGES) karena kedua builder-nya
+# baru ada setelah route-nya dideklarasikan di atas.
+_BIG_SUMMARY_BUILDERS = {
+    "evidence": _build_evidence_summary,
+    "historical": _build_historical_summary,
+}
+
+
 def _warm_cache() -> None:
-    """Pre-load every stage file into _stage_cache BEFORE app.run() starts
-    accepting connections, instead of leaving the cold-load cost
-    (evidence.json alone is 337MB at full-market scale) to whichever
+    """Pre-load stage files into _stage_cache BEFORE app.run() starts
+    accepting connections, instead of leaving the cold-load cost to whichever
     request happens to arrive first -- that request was the dashboard's
     ticker-detail modal hitting a 7s+ "Memuat detail..." stall after every
     restart (dashboard perf notes 2026-07-26).
+
+    Sejak 2026-08-08 dua stage TERBESAR dikecualikan dari pemuatan penuh itu
+    (lihat _BIG_STAGES): yang dihangatkan cuma indeks offset + ringkasannya,
+    isinya dibaca per-record saat diminta. Alasan angkanya ada di
+    backend/big_json.py. Sisa docstring ini berlaku untuk 12 stage lain, yang
+    totalnya ~122 MB dan memang murah ditahan.
 
     Deliberately SYNCHRONOUS (called before app.run(), not spun off in a
     background thread) -- a background-thread version was tried first and
@@ -773,6 +915,8 @@ def _warm_cache() -> None:
     than taking down the whole warm-up pass."""
     t0 = time.time()
     for name in STAGE_FILES:
+        if name in _BIG_STAGES:
+            continue
         try:
             _get_stage(name)
         except Exception as exc:  # noqa: BLE001
@@ -781,6 +925,22 @@ def _warm_cache() -> None:
         _get_price_target_store()
     except Exception as exc:  # noqa: BLE001
         print(f"[warm_cache] gagal load price_target_store: {exc}", file=sys.stderr)
+
+    # Dua stage besar: yang dihangatkan indeks offset-nya (~0,4 MB) plus
+    # ringkasan populasinya, BUKAN isinya. Ringkasan sengaja ikut dibangun di
+    # sini dan bukan saat request pertama -- alasannya sama persis dengan
+    # docstring di atas soal GIL: membangunnya nanti berarti satu request
+    # menahan decoder JSON selama puluhan detik sambil request lain menunggu.
+    for name in _BIG_STAGES:
+        try:
+            index = _get_index(name)
+            n = len(index) if index is not None else 0
+            _get_derived(name, _BIG_SUMMARY_BUILDERS[name])
+            print(f"[warm_cache] '{name}': indeks {n} record + ringkasan siap "
+                  f"(isi berkas TIDAK ditahan di memori)", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warm_cache] gagal indeks/ringkasan '{name}': {exc}", file=sys.stderr)
+
     print(f"[warm_cache] selesai dalam {time.time() - t0:.1f}s", file=sys.stderr)
 
 
