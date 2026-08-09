@@ -1,4 +1,4 @@
-// S&P 500 vs Layer Score overlay — validate AlphaForge captures market moves.
+// S&P 500 vs Layer Score overlay — validate MONTRVA captures market moves.
 // Both normalized 0-100 untuk easy visual comparison.
 
 export default function Layer1PerformanceChart({ spxHistory, layerHistory }) {
@@ -77,7 +77,7 @@ export default function Layer1PerformanceChart({ spxHistory, layerHistory }) {
   return (
     <div className="chart-card">
       <div className="chart-title">S&P 500 vs Layer Score</div>
-      <div className="perf-subtitle">Validation: apakah AlphaForge memimpin atau mengonfirmasi perubahan market?</div>
+      <div className="perf-subtitle">Validation: apakah MONTRVA memimpin atau mengonfirmasi perubahan market?</div>
 
       <div style={{ marginTop: 14 }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }}>
@@ -133,7 +133,7 @@ export default function Layer1PerformanceChart({ spxHistory, layerHistory }) {
       </div>
 
       <div className="perf-note">
-        Overlap {n} hari. Keduanya normalized 0–100 untuk perbandingan fair. Interpretation: AlphaForge{' '}
+        Overlap {n} hari. Keduanya normalized 0–100 untuk perbandingan fair. Interpretation: MONTRVA{' '}
         {delta > 10 ? 'memimpin' : delta > -10 ? 'mengonfirmasi' : 'belum selaras dengan'} pergerakan S&P.
       </div>
 

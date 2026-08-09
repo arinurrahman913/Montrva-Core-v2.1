@@ -8,6 +8,13 @@
   --text:#E7E9EE; --dim:#98A2B8; --faint:#616B80;
   --accent:#22D3EE; --accent2:#818CF8; --warn:#FBBF7A; --bad:#FB7185; --good:#4ADE80;
   --gold:#e8b84b; --gold-hi:#f5cf6f; --cy:#4fd1e0; --cy-hi:#7fe6f0;
+  /* Emas MEREK, sengaja lebih redup & kurang jenuh dari --gold di atas.
+     Alasannya: --gold sudah BERTUGAS sebagai status (ThesisProof memakainya
+     untuk `on_track`, tombol Generate memakainya sebagai aksi utama). Kalau
+     blok identitas memakai rona yang sama persis, mata belajar bahwa emas
+     berarti dua hal berbeda. Dua token di bawah ini hanya untuk .brand-*
+     dan tidak boleh dipakai elemen fungsional. */
+  --gold-dim:#c9a24a; --gold-text:#8a7a52;
   --accent-glow:rgba(34,211,238,.16);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
@@ -42,10 +49,19 @@ a{color:inherit}
 
 /* SIDEBAR */
 .sidebar{width:256px;flex-shrink:0;background:linear-gradient(180deg,var(--panel),var(--ink));border-right:1px solid var(--rule);overflow-y:auto}
-.brand{padding:22px 18px;border-bottom:1px solid var(--rule)}
-.brand-name{font-family:var(--sans);font-weight:700;font-size:15px;letter-spacing:-.01em;color:var(--text)}
-.brand-name b{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.brand-sub{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:4px;letter-spacing:.03em}
+/* Emas SENGAJA dibatasi ke blok brand ini saja. Di dashboard warna sudah punya
+   arti (cyan/indigo = aksen, hijau/merah = vonis, kuning = peringatan); kalau
+   emas ikut menyebar ke elemen fungsional ia mulai bersaing dengan makna itu.
+   Di sini ia penanda identitas, bukan status. */
+.brand{padding:20px 18px 16px;border-bottom:1px solid var(--rule);text-align:center}
+.brand-mark{width:46px;height:46px;display:block;margin:0 auto}
+.brand-name{font-family:Georgia,'Times New Roman',serif;font-size:19px;font-weight:400;letter-spacing:.16em;color:var(--text);margin-top:8px;
+  /* letter-spacing menambah jarak SESUDAH huruf terakhir juga, jadi teks
+     ber-spasi lebar tampak bergeser ke kiri saat di-center. Digeser balik
+     setengah spasi supaya benar-benar terlihat di tengah. */
+  text-indent:.16em}
+.brand-rule{height:1px;background:var(--gold-dim);opacity:.35;margin:9px 22px 8px}
+.brand-sub{font-family:var(--mono);font-size:8.5px;color:var(--gold-text);letter-spacing:.14em;text-transform:uppercase;line-height:1.5;text-indent:.14em}
 .nav-group{padding:14px 10px;border-bottom:1px solid var(--rule)}
 .nav-group-title{padding:0 10px;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
 .nav-item{

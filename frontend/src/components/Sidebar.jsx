@@ -47,10 +47,20 @@ export default function Sidebar({ activeView, onSelect, personalEnabled }) {
   return (
     <div className="sidebar">
       <div className="brand">
-        <div className="brand-name">
-          AlphaForge <b>v2</b>
-        </div>
-        <div className="brand-sub">pipeline dashboard · data live</div>
+        {/* Monogram digambar inline sebagai SVG, bukan berkas gambar: ukurannya
+            ~600 byte, ikut warna tema lewat currentColor-nya sendiri, dan tetap
+            tajam di layar berapa pun DPR tanpa perlu varian @2x. Bentuk M/V di
+            sini PENDEKATAN dari logo — begitu ada berkas SVG aslinya, ganti isi
+            <svg> ini saja, sisa markup tidak perlu berubah. */}
+        <svg className="brand-mark" viewBox="0 0 60 60" role="img" aria-label="Monogram MONTRVA">
+          <circle cx="30" cy="30" r="26" fill="none" stroke="var(--gold-dim)" strokeWidth="1.4" />
+          <text x="29" y="41" textAnchor="middle" fontFamily="Georgia, serif" fontSize="31" fill="var(--gold)">M</text>
+          <text x="37" y="43" textAnchor="middle" fontFamily="Georgia, serif" fontSize="25" fill="var(--gold-dim)">V</text>
+        </svg>
+        <div className="brand-name">MONTRVA</div>
+        <div className="brand-rule" />
+        <div className="brand-sub">Market Intelligence</div>
+        <div className="brand-sub">&amp; Research</div>
       </div>
 
       {groups.map((group) => (
