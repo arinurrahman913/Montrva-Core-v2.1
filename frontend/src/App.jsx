@@ -32,7 +32,7 @@ const TITLES = {
   risk: ['Risk / Red Flags', 'Deteksi anomali governance, financial, momentum, valuation'],
   reasoning: ['Reasoning — 3 Lensa', 'Multibagger, Quality/Compound, Speculative — masing-masing kosakata stance sendiri (D-09)'],
   aggregator: ['Aggregator + Synthesis', '3 lensa berdampingan + peta kesepakatan/perbedaan — tanpa skor tunggal (D-04)'],
-  historical: ['Historical Tracking', 'Snapshot analisa utuh per hari (evaluasi outcome menyusul v2.1)'],
+  historical: ['Historical Tracking', 'Snapshot per hari: yang terakhir utuh, yang lebih tua ringkas (evaluasi outcome menyusul v2.1)'],
   personal_aggregator: ['Agregator Pribadi', 'Action + horizon per lens, dibaca dari stance Reasoning — tidak pernah dipublikasikan'],
   personal_historical: ['Riwayat Pribadi', 'Snapshot rekomendasi pribadi per hari — outcome dievaluasi otomatis begitu call jatuh tempo'],
   personal_calibration: ['Rapor Kalibrasi', 'Hit rate per irisan keputusan, dengan gerbang bukti — melaporkan juga apa yang belum bisa dinilai'],

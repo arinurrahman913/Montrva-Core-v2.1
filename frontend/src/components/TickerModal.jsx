@@ -9,6 +9,7 @@ import {
   outcomeClass, prettyOutcome,
   factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
   nextFilingDeadline, NEW_POSITION_SENTINEL, quarterWindow,
+  readHistoricalEntry,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
@@ -1427,35 +1428,56 @@ function ModalBody({ data, context, aiNarrative, personalData }) {
           <div className="msection-title">
             Historical Tracking ({historical.total_entries || historical.entries.length} snapshot)
           </div>
-          {historical.entries.slice().reverse().map((e, i) => {
-            const ao = e.aggregator_output || {}
-            const syn = ao.synthesis
-            return (
-              <div className="lens-box" key={i}>
-                <div className="lens-head">
-                  <span>{e.analyzed_at?.slice(0, 10) || '—'}</span>
-                  <span>
-                    {ao.halted ? (
-                      <span className="pill bad">halted</span>
-                    ) : syn?.full_convergence ? (
-                      <span className="pill ok">konvergen</span>
-                    ) : (
-                      <span className="pill neutral">divergen</span>
-                    )}
-                  </span>
-                </div>
-                {syn?.narrative && (
-                  <div className="factor" style={{ color: 'var(--dim)' }}>{syn.narrative}</div>
-                )}
-                <div className="factor" style={{ color: 'var(--faint)', fontSize: 11 }}>
-                  {e.outcome != null ? 'outcome tercatat' : 'outcome: menunggu evaluasi v2.1'}
-                </div>
-              </div>
-            )
-          })}
+          {historical.entries.slice().reverse().map((entry, i) => (
+            <HistoricalEntryRow key={i} entry={entry} />
+          ))}
         </div>
       )}
     </>
+  )
+}
+
+// Satu baris riwayat publik. Entry TERAKHIR menyimpan snapshot penuh (ada
+// narasi sintesisnya), entry lama cuma bentuk tipis — lihat
+// alphaforge/layer2/historical.py. Tiga stance ditampilkan untuk KEDUANYA:
+// data itu selama ini tersimpan penuh tapi tidak pernah ditampilkan, dan di
+// entry tipis justru itulah isi utamanya.
+function HistoricalEntryRow({ entry }) {
+  const e = readHistoricalEntry(entry)
+  if (!e) return null
+
+  return (
+    <div className="lens-box">
+      <div className="lens-head">
+        <span>{e.analyzedAt?.slice(0, 10) || '—'}</span>
+        <span>
+          {e.halted ? (
+            <span className="pill bad">halted</span>
+          ) : e.fullConvergence ? (
+            <span className="pill ok">konvergen</span>
+          ) : (
+            <span className="pill neutral">divergen</span>
+          )}
+        </span>
+      </div>
+      {e.lenses.length > 0 && (
+        <div className="factor" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {e.lenses.map((l) => (
+            <span key={l.module} className={`pill ${stanceClass(l.stance)}`} title={MODULE_LABELS[l.module] || l.module}>
+              {(MODULE_LABELS[l.module] || l.module)}: {prettyStance(l.stance)}
+              {l.thesis_score != null && ` ${fmtNum(l.thesis_score, 1)}`}
+            </span>
+          ))}
+        </div>
+      )}
+      {e.narrative && (
+        <div className="factor" style={{ color: 'var(--dim)' }}>{e.narrative}</div>
+      )}
+      <div className="factor" style={{ color: 'var(--faint)', fontSize: 11 }}>
+        {e.outcome != null ? 'outcome tercatat' : 'outcome: menunggu evaluasi v2.1'}
+        {e.thin && ' · snapshot ringkas (arsip)'}
+      </div>
+    </div>
   )
 }
 

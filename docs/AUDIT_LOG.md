@@ -603,6 +603,14 @@ penghitung/tanggal seumur hidup ticker itu dilacak (dipakai StatCards di
 dashboard), tidak ikut terpangkas — cuma buffer `entries` (snapshot penuh)
 yang dibatasi.
 
+**[2026-08-09] Retensi 730 hari ternyata TIDAK cukup jadi rem.** Batas itu
+diukur ulang: 13 hari = 570 MB, jadi 730 hari memproyeksikan ~31 GB dan
+pemangkasan pertamanya baru terjadi Juli 2028 — "dibatasi" secara teknis,
+tanpa efek dalam praktik. Yang menentukan ternyata isi entry, bukan cuma
+jumlahnya: 97,3% tiap entry adalah `aggregator_output`. Sekarang cuma entry
+TERAKHIR tiap ticker yang menyimpannya utuh, sisanya bentuk tipis, retensi
+365 hari (`historical.py::thin_entry`). Live: 570,7 MB → 57,0 MB.
+
 **Yang MASIH TERBUKA**: `_stage_cache` tetap menahan SELURUH file (termasuk
 469MB `historical_timeline.json` yang sekarang dibatasi tapi belum otomatis
 menyusut sampai retensi baru "menyusul" lewat run-run berikutnya) permanen di

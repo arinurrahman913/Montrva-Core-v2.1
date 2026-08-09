@@ -758,11 +758,14 @@ def get_historical_summary():
     "tidak mengurangi memori yang ditahan _stage_cache (masih parse penuh
     sekali di sini)" -- itu sudah TIDAK berlaku: historical masuk _BIG_STAGES,
     jadi ringkasannya dibangun dengan mengalirkan record satu per satu lewat
-    indeks offset dan yang di-cache cuma hasilnya (~150 byte/ticker). Dua
-    klaim lain di catatan itu perlu dipisah: `_warm_cache` memang tidak lagi
-    memuat berkas ini penuh, TAPI pertumbuhan historical_timeline.json sendiri
-    masih belum tertangani (RETENTION_DAYS=730 di historical.py, 97% tiap
-    entry adalah aggregator_output) -- itu tetap pekerjaan terbuka."""
+    indeks offset dan yang di-cache cuma hasilnya (~150 byte/ticker).
+
+    [DIPERBARUI 2026-08-09] Sisa pekerjaan terbuka yang disebut catatan di
+    atas -- pertumbuhan berkasnya sendiri -- sudah ditutup: cuma entry
+    TERAKHIR tiap ticker yang menyimpan `aggregator_output` penuh, sisanya
+    bentuk tipis, retensi 365 hari (alphaforge/layer2/historical.py). Berarti
+    endpoint ini TIDAK boleh lagi mengasumsikan tiap entry punya
+    `aggregator_output` -- lihat _build_historical_summary."""
     return jsonify(_get_derived("historical", _build_historical_summary))
 
 
@@ -777,10 +780,25 @@ def _build_historical_summary(records) -> dict:
             "ticker": ticker,
             "total_entries": t.get("total_entries", 0),
             "last_entry_date": t.get("last_entry_date"),
-            "last_halted": (last.get("aggregator_output") or {}).get("halted") if last else None,
+            "last_halted": _entry_halted(last),
             "has_outcome": any(e.get("outcome") is not None for e in entries),
         })
     return {"tickers": rows, "total": len(rows)}
+
+
+def _entry_halted(entry):
+    """`halted` dari entry historical, apa pun bentuknya.
+
+    Entry TERAKHIR tiap ticker selalu penuh, jadi baris ini secara praktis
+    selalu lewat cabang pertama -- cabang kedua ada supaya pembacaan tidak
+    diam-diam mengembalikan None kalau suatu saat yang dibaca entry tipis
+    (mis. ticker yang seluruh entry terbarunya sudah lewat retensi)."""
+    if not entry:
+        return None
+    ao = entry.get("aggregator_output")
+    if isinstance(ao, dict):
+        return ao.get("halted")
+    return entry.get("halted")
 
 
 # Semua stage file yang dijaga gerbang all-or-nothing DAN punya wrapper

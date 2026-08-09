@@ -4,6 +4,10 @@ __pycache__/
 venv/
 *_output.json
 dashboard/data/*.json
+# Salinan sebelum operasi sekali-jalan atas data tahap (mis.
+# scripts/compact_historical.py) — ratusan MB, dan `dashboard/data/*.json` di
+# atas tidak menangkapnya karena akhirannya bukan .json.
+dashboard/data/*.bak
 # Root reference snapshots — regenerated every pipeline run, and at full-market
 # scale evidence.json alone is ~275MB (way over GitHub's 100MB file limit).
 /evidence.json

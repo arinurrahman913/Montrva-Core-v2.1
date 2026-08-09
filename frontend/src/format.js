@@ -388,6 +388,58 @@ export function actionStreak(historyEntries, module, currentAction, runDates) {
 // ACTION_CATEGORY_MAGNITUDE di personal_contracts.py.
 export const MAGNITUDE_ACTIONS = new Set(['siaga_gerakan'])
 
+// Urutan field di dalam tiap elemen `lenses` pada entry historical TIPIS.
+// KEMBARAN dari THIN_LENS_FIELDS di alphaforge/layer2/historical_contracts.py
+// — dua-duanya harus berubah bersama. Bentuknya posisional karena nama kunci
+// yang diulang 3x per entry sepanjang setahun berharga ratusan MB; harganya
+// di sisi ini adalah satu fungsi baca di bawah, bukan urutan yang dihafal di
+// tempat pemakaian.
+export const THIN_LENS_FIELDS = ['module', 'stance', 'thesis_score', 'confidence_band']
+
+export function thinLens(lens) {
+  if (!Array.isArray(lens)) return null
+  return Object.fromEntries(THIN_LENS_FIELDS.map((k, i) => [k, lens[i]]))
+}
+
+// Satu entry historical dibaca seragam, apa pun bentuknya: entry TERAKHIR tiap
+// ticker menyimpan snapshot AggregatorOutput penuh, yang lebih tua cuma bentuk
+// tipis (lihat alphaforge/layer2/historical.py). Tanpa fungsi ini, pemakainya
+// harus tahu bentuk mana yang sedang dipegang — dan yang lupa akan menampilkan
+// "divergen" untuk SETIAP entry lama, karena `aggregator_output` yang tidak ada
+// membaca `undefined` sebagai "tidak konvergen".
+export function readHistoricalEntry(entry) {
+  if (!entry) return null
+  const ao = entry.aggregator_output
+  if (ao) {
+    const syn = ao.synthesis || null
+    return {
+      thin: false,
+      analyzedAt: entry.analyzed_at,
+      halted: ao.halted,
+      fullConvergence: syn ? syn.full_convergence : null,
+      narrative: syn ? syn.narrative : null,
+      surprise: syn ? syn.surprise : null,
+      lenses: (ao.module_outputs || []).map((m) => ({
+        module: m.module,
+        stance: m.stance,
+        thesis_score: m.thesis_score,
+        confidence_band: m.confidence ? m.confidence.band : null,
+      })),
+      outcome: entry.outcome,
+    }
+  }
+  return {
+    thin: true,
+    analyzedAt: entry.analyzed_at,
+    halted: entry.halted,
+    fullConvergence: entry.full_convergence,
+    narrative: null,
+    surprise: entry.surprise,
+    lenses: (entry.lenses || []).map(thinLens).filter(Boolean),
+    outcome: entry.outcome,
+  }
+}
+
 // Lebar "deru" khas saham ini, dalam persen, untuk jendela sepanjang
 // `windowBars` hari bursa. Cerminan window_sigma_pct() di
 // personal_evaluation.py: sigma harian dari bar SEBELUM entry (tidak pernah
