@@ -16,6 +16,101 @@ Status yang dipakai:
 
 ---
 
+## Audit #3 — 2026-08-10 (setelah commit `7334314`)
+
+Beda metode dari dua audit sebelumnya: ini **tidak** membaca kode mencari bug
+baru, melainkan menguji temuan lama terhadap **data produksi nyata** yang dulu
+belum tersedia. Sesi yang dipakai: `session-20260808T161830`, 4.054 ticker.
+
+Pemicunya satu baris komentar di `confidence.py` yang menunda validasi sampai
+"ada run produksi baru tersedia". Syarat itu sekarang terpenuhi, dan
+menjalankannya ternyata menutup dua temuan lama sekaligus membuka satu baru.
+
+### D1. Section `ownership` berbobot 0,15 tapi tidak memisahkan apa pun — TERBUKA
+`confidence.py::SECTION_WEIGHTS`
+
+Daya beda tiap section diukur dua arah: berapa ticker yang pindah band kalau
+section itu dipaksa ke 100 (data lengkap), dan kalau dipaksa ke 0 (hilang).
+
+| Section | Bobot | Naik band | Nilai unik | % di modus |
+|---|---:|---:|---:|---:|
+| financial_health | 0,20 | 23,3% | 10 | 23,8% |
+| valuation | 0,15 | 8,4% | 6 | 41,4% |
+| governance | 0,15 | 7,5% | 3 | 66,0% |
+| competitive_structure | 0,15 | 4,1% | 4 | 80,4% |
+| historical_trend | 0,15 | 3,8% | 8 | 70,4% |
+| competitive_momentum | 0,05 | 1,7% | 2 | 64,2% |
+| **ownership** | **0,15** | **0,2%** | **2** | **99,5%** |
+
+`ownership` memegang bobot yang sama dengan empat section lain, tapi 99,5%
+ticker mendapat nilai identik (100). Memaksanya ke 100 hanya mengubah band 8
+ticker dari 4.054. Secara efektif ia bukan penilai, melainkan konstanta
++14,9 poin yang ditambahkan ke semua orang.
+
+Ini bukan sekadar bobot yang mubazir. Inflasi seragam itulah yang membuat
+distribusi skor menumpuk di atas, dan itu pula yang memaksa ambang band
+dinaikkan ke 86 (lihat D2). Jadi satu section yang tidak mengukur apa-apa
+sedang ikut menentukan ambang untuk section yang benar-benar mengukur.
+
+**Butuh keputusan, bukan perbaikan sepihak** — sama kelasnya dengan A7/A8.
+Tiga arah yang mungkin: perketat ceknya supaya benar-benar bervariasi,
+turunkan bobotnya ke tingkat competitive_momentum, atau terima sebagai
+konstanta dan turunkan ambang band sebagai gantinya. Ketiganya menggeser skor
+seluruh universe, jadi tidak dikerjakan tanpa persetujuan.
+
+### D2. Kalibrasi ambang band 86/49 — SELESAI (divalidasi)
+`confidence.py::BAND_HIGH_THRESHOLD` / `BAND_MEDIUM_THRESHOLD`
+
+Komentar di kode menandai rescale 70/40 → 86/49 sebagai "belum divalidasi
+terhadap distribusi skor produksi nyata". Sekarang sudah, dan hasilnya
+membenarkan angkanya:
+
+- **Plafon benar-benar terangkat.** Risiko rescale meleset adalah tidak ada
+  ticker yang pernah mencapai 100. Terukur: 100 ticker persis di 100,00.
+- **Pemisahannya wajar.** high 46,5% / medium 48,0% / low 5,5%; median 85,1,
+  p25 71,1, p75 94,8. Ambang lama 70/40 pada skala baru memberi high 77,0% —
+  terlalu longgar untuk berguna.
+
+Komentar "belum divalidasi" di kode diganti dengan hasil pengukurannya.
+
+### D3. Sisa A8 (competitive_momentum mengayun 5 poin) — DITERIMA
+Diukur, bukan diperdebatkan: section ini memang biner (2 nilai unik, 35,8% di
+0), tapi dampak band-nya **terkecil dari semua section** — 1,7% naik band,
+12,7% total flip dua arah. Bagian A8 yang bernilai tinggi (pesan limiter yang
+menyesatkan) sudah dikerjakan. Sisanya tidak sepadan dengan risiko menggeser
+skor seluruh universe. Ditutup sebagai keterbatasan yang disadari.
+
+Catatan: limiter `competitive_momentum` tetap yang **paling sering terbit**
+(1.410 dari 4.054). Itu wajar dan bukan bug — 35,8% ticker memang punya
+kurang dari 2 kuartal berurutan di SEC EDGAR.
+
+### D4. Koreksi status C3 & C6 — status lamanya sudah basi
+Bagian "MASIH TERBUKA" di C3 dan C6 menyatakan `_stage_cache` masih menahan
+seluruh berkas termasuk `evidence.json` dan `historical_timeline.json`. **Itu
+berhenti benar sejak commit `52ed5ce`**, yang menambahkan `backend/big_json.py`
+dan memindahkan dua stage terbesar ke pembacaan per-record lewat indeks offset.
+
+Kondisi terukur hari ini:
+
+| | Sebelum `52ed5ce` | Sekarang |
+|---|---:|---:|
+| Ditahan `_stage_cache` | ~970 MB berkas → 3,32 GB RSS | ~124 MB berkas → 0,59 GB RSS |
+| `evidence.json` | ditahan penuh | indeks offset, 238,8 MB tidak ditahan |
+| `historical_timeline.json` | ditahan penuh | indeks offset, 57,0 MB tidak ditahan |
+
+Sisa yang benar-benar masih terbuka jauh lebih kecil dari yang tertulis:
+11 berkas stage lain (~124 MB, terbesar `final_recommendations.json` 38,3 MB)
+masih dimuat penuh saat startup tanpa lazy-loading atau eviction. Berkas-berkas
+itu tumbuh mengikuti ukuran universe, bukan waktu — jadi tidak ada proyeksi
+kegagalan seperti dulu.
+
+**Pelajaran untuk berkas ini sendiri**: status di audit log ikut menua. C3/C6
+sudah diperbaiki sebagian oleh commit yang tidak menyebut nomor temuannya,
+jadi statusnya tertinggal sembilan hari. Audit berikutnya sebaiknya mulai
+dengan memverifikasi status lama terhadap kode, bukan mempercayainya.
+
+---
+
 ## Audit #2 — 2026-07-30 (setelah commit `ca6bf5b`)
 
 Tiga agen paralel, semuanya read-only: (1) sumber data & concurrency,
@@ -611,7 +706,13 @@ jumlahnya: 97,3% tiap entry adalah `aggregator_output`. Sekarang cuma entry
 TERAKHIR tiap ticker yang menyimpannya utuh, sisanya bentuk tipis, retensi
 365 hari (`historical.py::thin_entry`). Live: 570,7 MB → 57,0 MB.
 
-**Yang MASIH TERBUKA**: `_stage_cache` tetap menahan SELURUH file (termasuk
+**[2026-08-10] Paragraf di bawah ini SUDAH BASI — lihat D4 di Audit #3.**
+Commit `52ed5ce` memindahkan `evidence.json` dan `historical_timeline.json`
+ke pembacaan per-record lewat indeks offset; keduanya tidak lagi ditahan
+`_stage_cache` (3,32 GB → 0,59 GB RSS). Sisa yang masih benar: 11 berkas
+stage lain (~124 MB) tetap dimuat penuh tanpa lazy-loading/eviction.
+
+**Yang MASIH TERBUKA** ~~per 2026-07-30~~: `_stage_cache` tetap menahan SELURUH file (termasuk
 469MB `historical_timeline.json` yang sekarang dibatasi tapi belum otomatis
 menyusut sampai retensi baru "menyusul" lewat run-run berikutnya) permanen di
 memori, dan `_warm_cache` masih memuat semua 13 stage file penuh saat
@@ -668,7 +769,8 @@ tiap 2,5 detik — ikut menggantung.
 ke endpoint ini. Menghilangkan biaya kirim+gzip 469MB PER REQUEST, yang
 merupakan risiko paling akut (satu klik nav menggantungkan request lain).
 
-**Belum diselesaikan sepenuhnya**: endpoint baru masih memanggil
+**Belum diselesaikan sepenuhnya** ~~per 2026-07-30~~ — **sudah selesai sejak
+`52ed5ce`, lihat D4 di Audit #3**: endpoint baru masih memanggil
 `_get_stage("historical")`, jadi backend tetap mem-parse dan menahan seluruh
 file di `_stage_cache` — cuma respons ke browser yang mengecil, bukan RSS
 Flask. Update: pertumbuhan filenya sendiri sekarang SUDAH dibatasi (retensi

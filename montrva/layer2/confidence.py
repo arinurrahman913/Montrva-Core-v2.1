@@ -81,12 +81,25 @@ CONSISTENCY_PENALTY_POINTS = 10.0
 # section (mis. sempurna di 4 section yang berubah tapi lemah di 3 section
 # yang tidak), pemetaan skor lama->baru TIDAK bijektif murni dari skor
 # gabungan saja (nilai per-section yang menentukan) -- lihat docstring
-# assess_confidence untuk perinciannya. Kalibrasi ini belum divalidasi
-# terhadap distribusi skor produksi nyata (tidak ada snapshot knowledge.json
-# di lingkungan pengembangan saat perbaikan ini dibuat); validasi ulang
-# begitu ada run produksi baru tersedia, sama seperti bobot/ambang lain di
-# modul ini yang sudah ditandai "kalibrasi awal, bukan angka final" (lihat
-# docstring modul).
+# assess_confidence untuk perinciannya.
+#
+# DIVALIDASI 2026-08-10 terhadap sesi produksi session-20260808T161830
+# (4.054 ticker), menutup catatan "belum divalidasi" yang menunggu snapshot
+# nyata. Dua hal yang diuji, dua-duanya lolos:
+#
+# 1. Plafon benar-benar terangkat. Kekhawatirannya: kalau rescale-nya meleset,
+#    tidak akan ada ticker yang mencapai 100. Terukur: 100 ticker persis di
+#    100,00, maksimum populasi 100,00. Rescale 81,381 -> 100 bekerja.
+# 2. Ambang 86/49 memisahkan populasi secara wajar: high 46,5% / medium 48,0%
+#    / low 5,5% (median 85,1, p25 71,1, p75 94,8). Sebagai pembanding, ambang
+#    lama 70/40 pada skala baru memberi high 77,0% -- terlalu longgar untuk
+#    berguna. Menaikkan ambang memang perlu, dan 86 adalah angka yang benar.
+#
+# YANG DITEMUKAN saat validasi, belum diputuskan: section `ownership` berbobot
+# 0,15 tapi hanya punya 2 nilai unik dengan 99,5% di 100 -- memaksanya ke 100
+# hanya mengubah band 8 ticker (0,2%), terendah dari 7 section. Praktis ia
+# konstanta +14,9 poin untuk semua orang, bukan pembeda; dan justru inflasi
+# seragam itulah yang menuntut ambang setinggi 86. Lihat AUDIT_LOG.md D1.
 BAND_HIGH_THRESHOLD = 86.0
 BAND_MEDIUM_THRESHOLD = 49.0
 
