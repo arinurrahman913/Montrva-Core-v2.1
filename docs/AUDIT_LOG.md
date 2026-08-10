@@ -26,7 +26,7 @@ Pemicunya satu baris komentar di `confidence.py` yang menunda validasi sampai
 "ada run produksi baru tersedia". Syarat itu sekarang terpenuhi, dan
 menjalankannya ternyata menutup dua temuan lama sekaligus membuka satu baru.
 
-### D1. Section `ownership` berbobot 0,15 tapi tidak memisahkan apa pun — TERBUKA
+### D1. Section `ownership` berbobot 0,15 tapi tidak memisahkan apa pun — SELESAI
 `confidence.py::SECTION_WEIGHTS`
 
 Daya beda tiap section diukur dua arah: berapa ticker yang pindah band kalau
@@ -52,11 +52,54 @@ distribusi skor menumpuk di atas, dan itu pula yang memaksa ambang band
 dinaikkan ke 86 (lihat D2). Jadi satu section yang tidak mengukur apa-apa
 sedang ikut menentukan ambang untuk section yang benar-benar mengukur.
 
-**Butuh keputusan, bukan perbaikan sepihak** — sama kelasnya dengan A7/A8.
-Tiga arah yang mungkin: perketat ceknya supaya benar-benar bervariasi,
-turunkan bobotnya ke tingkat competitive_momentum, atau terima sebagai
-konstanta dan turunkan ambang band sebagai gantinya. Ketiganya menggeser skor
-seluruh universe, jadi tidak dikerjakan tanpa persetujuan.
+**Keputusan pengguna**: perketat ceknya supaya section ini kembali mengukur —
+bukan menurunkan bobotnya atau menggeser ambang band, yang cuma menutupi
+gejalanya.
+
+**Perbaikan.** Ditambahkan komponen ketiga yang benar-benar bervariasi: berapa
+bagian pemegang institusi yang punya `pct_change`, yakni berapa banyak yang
+arah posisinya bisa dibaca — bukan sekadar ada. `Ownership` di
+`knowledge_contracts.py` sekarang membawa `holders_total` dan
+`holders_with_change_basis`, diisi `knowledge.py` dari `top_holders` milik
+Evidence (nol panggilan jaringan baru — datanya sudah ada di sana sejak
+`85c0426`).
+
+Dua keputusan rancangan, dua-duanya diukur dulu ke data nyata, bukan ditebak:
+
+1. **`holders_total` TIDAK jadi cek sendiri.** Yahoo memotong di ~10 pemegang
+   teratas, sehingga 97,3% ticker bernilai persis 10 — itu batas sumber, bukan
+   kualitas data. Memakainya akan mengulang persis masalah yang sedang
+   diperbaiki. Yang bermakna hanya rasionya.
+2. **Dinilai proporsional, bukan lolos/gagal.** Rasio di produksi tersebar
+   0,0–1,0 dengan median 0,8, jadi ambang boolean apa pun menggumpal lagi —
+   diuji: varian 5-cek bertingkat menaruh 85,4% ticker di satu nilai, hampir
+   sama buruknya dengan 99,5% yang mau diperbaiki. Alasannya sama persis
+   dengan `_ramp` di `reasoning.py`: terlalu sedikit nilai unik untuk
+   memeringkat apa pun. `SectionScore.filled` karena itu jadi `float`
+   (mis. 2,8/3) — enam section lain tetap bulat.
+
+**Terukur pada 4.054 ticker produksi**, memanggil fungsi barunya langsung
+(bukan mensimulasikan ulang rumusnya):
+
+| | Sebelum | Sesudah |
+|---|---:|---:|
+| Nilai unik | 2 | 27 |
+| Konsentrasi modus | 99,5% | 38,0% |
+| Pengaruh naik-band | 0,2% | 4,8% |
+
+4,8% menempatkannya sejajar `competitive_structure` (4,1%) dan
+`historical_trend` (3,8%) — proporsional dengan bobot 0,15 yang dipegangnya,
+yang sebelumnya tidak.
+
+Pergeseran band: high 1.886 → 1.795, medium 1.947 → 2.008, low 221 → 251.
+Delta `overall.score` per ticker terbatas di ±5,0 poin (median −1,01) — sesuai
+konstruksi, karena bobot section ini 0,15 dan komponen barunya 1 dari 3.
+
+**Belum terlihat sampai ada run penuh berikutnya.** Backend menyajikan
+`confidence_scores.json` dari disk lewat `_get_stage`, tidak pernah menghitung
+ulang saat request, jadi dashboard tidak berubah sampai pipeline dijalankan
+lagi. Pada data lama `holders_total` bernilai default 0 → ownership 66,7
+alih-alih 100; itu jalur yang sudah diuji tidak crash, bukan regresi.
 
 ### D2. Kalibrasi ambang band 86/49 — SELESAI (divalidasi)
 `confidence.py::BAND_HIGH_THRESHOLD` / `BAND_MEDIUM_THRESHOLD`

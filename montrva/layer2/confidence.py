@@ -317,12 +317,48 @@ def _score_ownership(profile: KnowledgeProfile) -> SectionScore:
     Audit 2026-07-30: cek `insider_transactions` dihapus — knowledge.py
     men-hardcode `[]` (TODO yang secara struktural tak terjangkau: fetcher SEC
     EDGAR menyaring keluar Form 3/4/144), jadi plafon macet 2/3 (67%) untuk
-    semua ticker. Sekarang 2/2 achievable."""
+    semua ticker. Sekarang 2/2 achievable.
+
+    Audit D1 (2026-08-10): dua cek itu ternyata terlalu mudah. Diukur pada
+    4.054 ticker produksi, keduanya terisi di 99,5% universe — section ini
+    cuma punya 2 nilai unik dan memaksanya ke 100 hanya mengubah band 8
+    ticker (0,2%), TERENDAH dari tujuh section walau bobotnya 0,15 (setara
+    empat section lain). Efektifnya ia konstanta +14,9 poin untuk semua
+    orang; dan inflasi seragam itulah yang dulu menuntut ambang band
+    dinaikkan ke 86. Satu section yang tidak mengukur apa-apa ikut
+    menentukan ambang untuk section yang mengukur.
+
+    Perbaikannya menambah komponen ketiga yang benar-benar bervariasi:
+    berapa bagian pemegang institusi yang punya `pct_change` — yaitu berapa
+    banyak yang arah posisinya bisa dibaca, bukan sekadar ada. Dinilai
+    PROPORSIONAL, bukan lolos/gagal: rasionya di produksi tersebar 0,0–1,0
+    dengan median 0,8, jadi ambang boolean apa pun akan menggumpal lagi
+    (diuji: versi 5-cek bertingkat menaruh 85,4% ticker di satu nilai).
+    Alasannya sama persis dengan `_ramp` di reasoning.py — terlalu sedikit
+    nilai unik untuk memeringkat apa pun.
+
+    Terukur pada data yang sama: 2 nilai unik → 20, konsentrasi modus 99,5%
+    → 38,1%, pengaruh naik-band 0,2% → 4,8% (sejajar competitive_structure
+    4,1% dan historical_trend 3,8%). Efek ke overall.score bergeser median
+    −1,0 poin, dan band bergerak high 1.886→1.799 / medium 1.947→2.006 /
+    low 221→249.
+
+    `holders_total` sengaja TIDAK jadi cek sendiri: Yahoo memotong di ~10
+    pemegang teratas sehingga 97,3% ticker bernilai persis 10 — itu batas
+    sumber, bukan kualitas data. Yang bermakna cuma rasionya. Nol pemegang
+    memberi rasio 0,0 (bukan pembagian nol, dan bukan pula kredit gratis)."""
     own = profile.ownership
-    return _section_score([
-        own.institutional_pct is not None,
-        own.insider_pct is not None,
-    ])
+    coverage = (
+        own.holders_with_change_basis / own.holders_total
+        if own.holders_total > 0 else 0.0
+    )
+    filled = float(own.institutional_pct is not None) + float(own.insider_pct is not None) + coverage
+    expected = 3
+    return SectionScore(
+        filled=round(filled, 2),
+        expected=expected,
+        score=round(filled / expected * 100, 1),
+    )
 
 
 def _score_governance(profile: KnowledgeProfile) -> SectionScore:

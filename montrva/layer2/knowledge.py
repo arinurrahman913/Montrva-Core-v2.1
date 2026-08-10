@@ -206,7 +206,15 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         # (audit 2026-07-29), bukan karena datanya memang jarang ada.
         insider_pct=evidence.institutional_ownership.insider_percentage,
         insider_transactions=[],  # TODO: dari news/SEC filings
-        insider_filing_activity_30d=evidence.institutional_activity.buy_count_30d  # Form 4 filings count
+        insider_filing_activity_30d=evidence.institutional_activity.buy_count_30d,  # Form 4 filings count
+        # Cakupan pemegang institusi -- lihat komentar di Ownership
+        # (knowledge_contracts.py) soal kenapa yang dipakai rasionya, bukan
+        # holders_total sendiri.
+        holders_total=len(evidence.institutional_ownership.top_holders),
+        holders_with_change_basis=sum(
+            1 for h in evidence.institutional_ownership.top_holders
+            if h.pct_change is not None
+        ),
     )
 
     # 6. Valuasi

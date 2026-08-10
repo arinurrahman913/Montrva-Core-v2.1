@@ -133,6 +133,21 @@ class Ownership:
     insider_transactions: list[dict] = field(default_factory=list)  # List of {date, type: "buy"|"sell", amount_usd, exec_name}
     insider_filing_activity_30d: int = 0  # Form 4 filings dalam 30 hari terakhir (indicator of insider involvement)
 
+    # Cakupan data pemegang institusi, diturunkan dari
+    # InstitutionalOwnership.top_holders di Evidence. Ada di sini SEMATA untuk
+    # Confidence (audit D1, 2026-08-10): dua field persentase di atas terisi di
+    # 99,5% universe, jadi section ownership praktis konstanta 100 dan bobot
+    # 0,15-nya tidak memisahkan apa pun. Dua angka ini yang benar-benar
+    # bervariasi -- pct_change per pemegang hilang jauh lebih sering daripada
+    # persentase agregat.
+    #
+    # holders_total SENGAJA tidak dipakai sebagai sinyal sendiri: Yahoo
+    # memotong di 10 pemegang teratas, jadi 97,3% ticker bernilai persis 10 --
+    # itu batas sumber, bukan kualitas data. Yang berarti adalah RASIO
+    # with_change_basis/total.
+    holders_total: int = 0  # jumlah pemegang yang dikembalikan sumber (dipotong ~10 oleh Yahoo)
+    holders_with_change_basis: int = 0  # di antaranya, yang punya pct_change (bisa dibaca arahnya)
+
 
 @dataclass
 class PriceTargetMetrics:

@@ -24,8 +24,16 @@ class OverallConfidence:
 
 @dataclass
 class SectionScore:
-    """Kelengkapan + skor satu bagian Knowledge (financial_health, valuation, dll)."""
-    filled: int
+    """Kelengkapan + skor satu bagian Knowledge (financial_health, valuation, dll).
+
+    `filled` PECAHAN, bukan selalu bulat. Enam dari tujuh section memakai cek
+    boolean sehingga nilainya selalu bulat; `ownership` punya satu komponen
+    yang dinilai proporsional (rasio cakupan pemegang institusi), jadi bisa
+    mis. 2,8 dari 3. Ditampilkan apa adanya di limiter dan TickerModal --
+    "2,8/3" memang lebih informatif daripada dibulatkan jadi 3/3 yang lalu
+    bertentangan dengan score-nya sendiri yang 93,3.
+    """
+    filled: float
     expected: int
     score: float  # 0-100 = filled/expected*100
 
