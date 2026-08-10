@@ -1,0 +1,1328 @@
+<title>MONTRVA — Cara Kerja Platform</title>
+
+<style>
+  :root {
+    --ink:        #12151a;
+    --ink-soft:   #3a4048;
+    --paper:      #f6f3ec;
+    --paper-2:    #efebe1;
+    --rule:       #d8d2c4;
+    --rule-soft:  #e6e1d5;
+    --stone:      #6e6a60;
+    --gold:       #8a6d17;
+    --gold-mark:  #b08d2e;
+    --bull:       #2e6f52;
+    --bear:       #9c3a31;
+    --warn:       #a8761c;
+    --void:       #7a7568;
+    --code-bg:    #eae5d9;
+    --card:       #fffdf8;
+    --shadow:     0 1px 2px rgba(18,21,26,.05), 0 8px 24px -16px rgba(18,21,26,.25);
+
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:        #e9e5da;
+      --ink-soft:   #b3ada0;
+      --paper:      #12151a;
+      --paper-2:    #171b21;
+      --rule:       #2c323a;
+      --rule-soft:  #232830;
+      --stone:      #8d8779;
+      --gold:       #d9bc63;
+      --gold-mark:  #d9bc63;
+      --bull:       #66b78d;
+      --bear:       #d97a6e;
+      --warn:       #d9a54a;
+      --void:       #8d8779;
+      --code-bg:    #1c2129;
+      --card:       #161a20;
+      --shadow:     0 1px 2px rgba(0,0,0,.3), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:        #e9e5da;
+    --ink-soft:   #b3ada0;
+    --paper:      #12151a;
+    --paper-2:    #171b21;
+    --rule:       #2c323a;
+    --rule-soft:  #232830;
+    --stone:      #8d8779;
+    --gold:       #d9bc63;
+    --gold-mark:  #d9bc63;
+    --bull:       #66b78d;
+    --bear:       #d97a6e;
+    --warn:       #d9a54a;
+    --void:       #8d8779;
+    --code-bg:    #1c2129;
+    --card:       #161a20;
+    --shadow:     0 1px 2px rgba(0,0,0,.3), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+  :root[data-theme="light"] {
+    --ink:        #12151a;
+    --ink-soft:   #3a4048;
+    --paper:      #f6f3ec;
+    --paper-2:    #efebe1;
+    --rule:       #d8d2c4;
+    --rule-soft:  #e6e1d5;
+    --stone:      #6e6a60;
+    --gold:       #8a6d17;
+    --gold-mark:  #b08d2e;
+    --bull:       #2e6f52;
+    --bear:       #9c3a31;
+    --warn:       #a8761c;
+    --void:       #7a7568;
+    --code-bg:    #eae5d9;
+    --card:       #fffdf8;
+    --shadow:     0 1px 2px rgba(18,21,26,.05), 0 8px 24px -16px rgba(18,21,26,.25);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: 1220px;
+    margin: 0 auto;
+    padding: 0 24px 120px;
+  }
+
+  @media (min-width: 1080px) {
+    .shell {
+      grid-template-columns: 216px minmax(0, 1fr);
+      gap: 56px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 48px;
+  }
+  .wordmark {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    letter-spacing: .14em;
+    line-height: 1;
+    margin: 0;
+    font-weight: 400;
+    text-wrap: balance;
+  }
+  .wordmark .m { color: var(--gold-mark); }
+  .masthead .tagline {
+    font-size: .72rem;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--stone);
+    margin: 14px 0 0;
+  }
+  .masthead .deck {
+    font-family: var(--serif);
+    font-size: 1.22rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 28px 0 0;
+  }
+  .masthead .provenance {
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--stone);
+    margin: 26px 0 0;
+    line-height: 1.8;
+  }
+
+  /* ---------- index rail ---------- */
+
+  .rail { display: none; }
+  @media (min-width: 1080px) {
+    .rail {
+      display: block;
+      position: sticky;
+      top: 32px;
+      align-self: start;
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+      font-size: .82rem;
+      line-height: 1.5;
+      padding-bottom: 24px;
+    }
+  }
+  .rail h2 {
+    font-size: .68rem;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--stone);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .rail ol { list-style: none; margin: 0; padding: 0; }
+  .rail li { margin-bottom: 9px; }
+  .rail a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    display: block;
+    border-left: 2px solid var(--rule-soft);
+    padding-left: 12px;
+    transition: border-color .15s, color .15s;
+  }
+  .rail a:hover, .rail a:focus-visible {
+    color: var(--ink);
+    border-left-color: var(--gold-mark);
+  }
+  .rail .sub { padding-left: 24px; font-size: .78rem; }
+
+  /* ---------- body ---------- */
+
+  main { min-width: 0; }
+
+  section { margin-bottom: 76px; scroll-margin-top: 24px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 10px;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: clamp(1.7rem, 3.4vw, 2.1rem);
+    line-height: 1.2;
+    font-weight: 400;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-size: 1.24rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 44px 0 12px;
+    text-wrap: balance;
+  }
+  h4 {
+    font-size: .78rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--stone);
+    font-weight: 600;
+    margin: 30px 0 10px;
+  }
+
+  p { margin: 0 0 18px; max-width: 68ch; }
+  ul, ol { max-width: 68ch; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+
+  strong { font-weight: 600; }
+  em { font-style: italic; color: var(--ink-soft); }
+
+  code {
+    font-family: var(--mono);
+    font-size: .855em;
+    background: var(--code-bg);
+    padding: .1em .38em;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--gold); }
+
+  .lede {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    line-height: 1.62;
+    color: var(--ink-soft);
+    max-width: 64ch;
+  }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    border-left: 3px solid var(--gold-mark);
+    background: var(--paper-2);
+    padding: 16px 20px;
+    margin: 26px 0;
+    max-width: 68ch;
+    border-radius: 0 4px 4px 0;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .note.caveat { border-left-color: var(--warn); }
+  .note.caveat .label { color: var(--warn); }
+
+  /* ---------- tables ---------- */
+
+  .table-wrap {
+    overflow-x: auto;
+    margin: 22px 0 28px;
+    border: 1px solid var(--rule-soft);
+    border-radius: 5px;
+    background: var(--card);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .875rem;
+    min-width: 520px;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: .78rem;
+    color: var(--stone);
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--stone);
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--paper-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num, .tnum {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  td.num { text-align: right; }
+  th.num { text-align: right; }
+  td.name { font-weight: 600; }
+  .bar-cell { width: 130px; }
+  .bar {
+    display: block;
+    height: 7px;
+    background: var(--gold-mark);
+    border-radius: 1px;
+    opacity: .8;
+  }
+
+  .pos { color: var(--bull); }
+  .neg { color: var(--bear); }
+  .und { color: var(--void); }
+
+  /* ---------- stage cards ---------- */
+
+  .stages { display: grid; gap: 2px; margin: 28px 0 8px; }
+  .stage {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 18px;
+    padding: 20px 20px 20px 4px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .stage:last-child { border-bottom: none; }
+  .stage .idx {
+    font-family: var(--mono);
+    font-size: .82rem;
+    color: var(--gold-mark);
+    padding-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage h3 { margin: 0 0 6px; font-size: 1.08rem; }
+  .stage p { margin: 0 0 10px; font-size: .935rem; }
+  .stage p:last-child { margin-bottom: 0; }
+  .stage .io {
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--stone);
+    line-height: 1.75;
+  }
+  .stage .io b { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---------- figures ---------- */
+
+  figure {
+    margin: 32px 0;
+    padding: 0;
+  }
+  figure svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    color: var(--ink-soft);
+  }
+  .fig-scroll { overflow-x: auto; }
+  .fig-scroll svg { min-width: 560px; }
+  figcaption {
+    font-size: .82rem;
+    color: var(--stone);
+    margin-top: 14px;
+    line-height: 1.6;
+    max-width: 64ch;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: .76rem;
+    color: var(--stone);
+    margin: 14px 0 0;
+    font-family: var(--mono);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 22px; height: 0; border-top: 2px solid currentColor; display: inline-block; }
+  .swatch.dash { border-top-style: dashed; }
+
+  /* ---------- formula ---------- */
+
+  .formula {
+    font-family: var(--mono);
+    font-size: .875rem;
+    background: var(--code-bg);
+    border-radius: 5px;
+    padding: 18px 20px;
+    margin: 22px 0;
+    overflow-x: auto;
+    line-height: 1.85;
+    font-variant-numeric: tabular-nums;
+  }
+  .formula .cmt { color: var(--stone); }
+
+  hr.rule {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 0 0 44px;
+  }
+
+  .stance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+    margin: 24px 0 30px;
+  }
+  .stance-card {
+    border: 1px solid var(--rule-soft);
+    border-radius: 5px;
+    padding: 16px 18px;
+    background: var(--card);
+  }
+  .stance-card h4 { margin: 0 0 10px; color: var(--ink); }
+  .stance-card ul { margin: 0; padding-left: 18px; font-size: .86rem; }
+  .stance-card li { margin-bottom: 5px; }
+  .stance-card .vocab {
+    font-family: var(--mono);
+    font-size: .78rem;
+  }
+
+  :focus-visible { outline: 2px solid var(--gold-mark); outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <h1 class="wordmark"><span class="m">M</span>ONTRVA</h1>
+    <p class="tagline">Market Intelligence &amp; Research</p>
+    <p class="deck">Sebuah pipeline dua lapis yang membaca kondisi pasar makro, lalu menilai tiap saham lewat tiga lensa yang sengaja dibiarkan tidak sepakat — dan menolak meleburnya jadi satu angka.</p>
+    <p class="provenance">
+      Dokumen ini dibaca dari kode, bukan dari spec.<br>
+      Sumber: <code>montrva-core-v2.1</code> @ <code>4d7fdba</code> &middot; 10 Agustus 2026
+    </p>
+  </header>
+
+  <nav class="rail" aria-label="Daftar isi">
+    <h2>Isi</h2>
+    <ol>
+      <li><a href="#tesis">Tesis arsitekturnya</a></li>
+      <li><a href="#peta">Peta besar</a></li>
+      <li><a href="#layer1">Layer 1 — Konteks pasar</a></li>
+      <li><a href="#layer2">Layer 2 — Rantai per saham</a></li>
+      <li><a href="#ramp">Mesin skor: dead-band ramp</a></li>
+      <li><a href="#lensa">Tiga lensa &amp; parameternya</a>
+        <ol>
+          <li class="sub"><a href="#quality">Quality / Compound</a></li>
+          <li class="sub"><a href="#multibagger">Multibagger</a></li>
+          <li class="sub"><a href="#speculative">Speculative</a></li>
+        </ol>
+      </li>
+      <li><a href="#confidence">Confidence</a></li>
+      <li><a href="#risk">Risk &amp; gerbang halt</a></li>
+      <li><a href="#sintesis">Sintesis &amp; surprise</a></li>
+      <li><a href="#operasional">Operasional</a></li>
+      <li><a href="#jujur">Batas yang diakui</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="tesis">
+      <p class="eyebrow">Titik awal</p>
+      <h2>Satu keputusan arsitektur yang membentuk sisanya</h2>
+      <p class="lede">Hampir semua sistem screening saham berakhir di satu angka: skor, peringkat, atau vonis beli/jual. MONTRVA dilarang melakukannya — dan larangan itu bukan gaya, melainkan hal yang menentukan bentuk setengah bagian belakang pipeline-nya.</p>
+
+      <p>Tiga modul penalaran — <strong>Multibagger</strong>, <strong>Quality/Compound</strong>, dan <strong>Speculative</strong> — berjalan atas profil saham yang sama, dengan akses field yang berbeda dan kosakata kesimpulan yang berbeda. Ketiganya tidak dirata-rata. Tahap Aggregator secara eksplisit tidak boleh mengeluarkan field <code>verdict</code>, <code>score</code>, maupun <code>rank</code>; yang keluar adalah ketiga pandangan berdampingan plus satu lapis <em>sintesis</em> yang menunjukkan di mana mereka sepakat dan di mana mereka bertabrakan.</p>
+
+      <p>Konsekuensinya terasa di mana-mana. Tiap lensa punya kosakata stance-nya sendiri (bukan enum <code>buy</code>/<code>sell</code> bersama). Confidence sintesis diambil dari modul <em>terendah</em>, bukan rata-rata. Dan ada satu perhitungan yang mustahil dilakukan per-saham — <em>surprise</em> — yang memaksa pipeline berhenti sejenak dan melihat seluruh populasi sesi dulu.</p>
+
+      <div class="note">
+        <span class="label">Cara membaca dokumen ini</span>
+        <p>Angka yang muncul di sini adalah konstanta yang benar-benar ada di kode per commit <code>4d7fdba</code>, bukan angka dari dokumen spec. Di beberapa tempat kode dan spec berbeda; kalau begitu, yang ditulis di sini adalah perilaku kode.</p>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="peta">
+      <p class="eyebrow">Alur</p>
+      <h2>Peta besar</h2>
+      <p>Satu run penuh menjalankan 14 tahap berurutan. Sebagian besar murni per-saham dan independen; dua tempat memutus pola itu, dan keduanya ditandai di diagram: <strong>gerbang halt</strong> setelah Risk, dan <strong>barrier populasi</strong> sebelum sintesis.</p>
+
+      <figure class="fig-scroll">
+        <svg viewBox="0 0 900 1190" role="img" aria-label="Diagram alur pipeline MONTRVA: 14 tahap dari universe NASDAQ dan NYSE sampai historical timeline, dengan gerbang halt setelah Risk dan barrier populasi sebelum Aggregator" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+            <marker id="ar-halt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c3a31"/>
+            </marker>
+          </defs>
+
+          <g font-family="ui-monospace, Consolas, monospace" font-size="12" fill="currentColor">
+
+            <!-- source -->
+            <rect x="300" y="18" width="320" height="38" rx="19" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity=".7"/>
+            <text x="460" y="42" text-anchor="middle" opacity=".85">NASDAQ Trader symbol directory</text>
+            <line x1="460" y1="56" x2="460" y2="88" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+            <text x="470" y="76" font-size="11" opacity=".7">~5.200 simbol</text>
+
+            <!-- 01 screening -->
+            <rect x="300" y="90" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="112" font-size="11" opacity=".6">01</text>
+            <text x="344" y="112" font-weight="600">Screening</text>
+            <text x="344" y="128" font-size="11" opacity=".72">likuiditas · harga · market cap · flag</text>
+            <line x1="460" y1="136" x2="460" y2="166" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+            <text x="470" y="156" font-size="11" opacity=".7">price_cache</text>
+
+            <!-- 02 layer 1 -->
+            <rect x="300" y="168" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="190" font-size="11" opacity=".6">02</text>
+            <text x="344" y="190" font-weight="600">Layer 1 — Market Context</text>
+            <text x="344" y="206" font-size="11" opacity=".72">13 komponen makro → Layer Score</text>
+            <line x1="460" y1="214" x2="460" y2="244" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 03 evidence -->
+            <rect x="300" y="246" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="268" font-size="11" opacity=".6">03</text>
+            <text x="344" y="268" font-weight="600">Evidence</text>
+            <text x="344" y="284" font-size="11" opacity=".72">Yahoo ×3 · Finnhub · SEC EDGAR ×2</text>
+            <line x1="460" y1="292" x2="460" y2="322" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 04 knowledge -->
+            <rect x="300" y="324" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="346" font-size="11" opacity=".6">04</text>
+            <text x="344" y="346" font-weight="600">Knowledge</text>
+            <text x="344" y="362" font-size="11" opacity=".72">7 seksi terstruktur, tanpa penilaian</text>
+            <line x1="460" y1="370" x2="460" y2="400" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 05 catalyst -->
+            <rect x="300" y="402" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="424" font-size="11" opacity=".6">05</text>
+            <text x="344" y="424" font-weight="600">Catalyst</text>
+            <text x="344" y="440" font-size="11" opacity=".72">horizon 90 hari · nol fetch baru</text>
+            <line x1="460" y1="448" x2="460" y2="478" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 06 inst flow -->
+            <rect x="300" y="480" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="502" font-size="11" opacity=".6">06</text>
+            <text x="344" y="502" font-weight="600">Institutional Flow</text>
+            <text x="344" y="518" font-size="11" opacity=".72">agregasi populasi atas 13F Yahoo</text>
+            <line x1="460" y1="526" x2="460" y2="556" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 07 peer -->
+            <rect x="300" y="558" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="580" font-size="11" opacity=".6">07</text>
+            <text x="344" y="580" font-weight="600">Peer Comparison</text>
+            <text x="344" y="596" font-size="11" opacity=".72">persentil dalam kelompok sebanding</text>
+            <line x1="460" y1="604" x2="460" y2="634" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 08 confidence -->
+            <rect x="300" y="636" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="658" font-size="11" opacity=".6">08</text>
+            <text x="344" y="658" font-weight="600">Confidence</text>
+            <text x="344" y="674" font-size="11" opacity=".72">7 seksi berbobot − 4 penalti</text>
+            <line x1="460" y1="682" x2="460" y2="712" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 09 risk -->
+            <rect x="300" y="714" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="736" font-size="11" opacity=".6">09</text>
+            <text x="344" y="736" font-weight="600">Risk / Red Flags</text>
+            <text x="344" y="752" font-size="11" opacity=".72">7 flag · severity tinggi / ekstrem</text>
+            <line x1="460" y1="760" x2="460" y2="782" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- gate -->
+            <polygon points="460,782 556,822 460,862 364,822" fill="none" stroke="#9c3a31" stroke-width="1.4"/>
+            <text x="460" y="818" text-anchor="middle" font-size="11" fill="#9c3a31">ekstrem</text>
+            <text x="460" y="832" text-anchor="middle" font-size="11" fill="#9c3a31">triggered?</text>
+
+            <!-- halt branch -->
+            <line x1="556" y1="822" x2="700" y2="822" stroke="#9c3a31" stroke-width="1.3" marker-end="url(#ar-halt)"/>
+            <text x="628" y="814" text-anchor="middle" font-size="11" fill="#9c3a31">ya</text>
+            <rect x="702" y="800" width="150" height="44" rx="4" fill="none" stroke="#9c3a31" stroke-width="1.3"/>
+            <text x="777" y="820" text-anchor="middle" font-size="11" fill="#9c3a31">halted —</text>
+            <text x="777" y="834" text-anchor="middle" font-size="11" fill="#9c3a31">reasoning dilewati</text>
+
+            <line x1="460" y1="862" x2="460" y2="888" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+            <text x="470" y="880" font-size="11" opacity=".7">tidak</text>
+
+            <!-- 10 reasoning -->
+            <rect x="300" y="890" width="320" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="912" font-size="11" opacity=".6">10</text>
+            <text x="344" y="912" font-weight="600">Reasoning — 3 lensa independen</text>
+            <line x1="344" y1="922" x2="604" y2="922" stroke="currentColor" stroke-width=".6" opacity=".35"/>
+            <text x="352" y="940" font-size="10.5" opacity=".8">Multibagger</text>
+            <text x="452" y="940" font-size="10.5" opacity=".8">Quality</text>
+            <text x="536" y="940" font-size="10.5" opacity=".8">Speculative</text>
+
+            <line x1="460" y1="956" x2="460" y2="982" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- barrier -->
+            <line x1="250" y1="990" x2="670" y2="990" stroke="#b08d2e" stroke-width="1.6" stroke-dasharray="7 4"/>
+            <text x="676" y="986" font-size="11" fill="#b08d2e">barrier populasi</text>
+            <text x="676" y="1000" font-size="10.5" fill="#b08d2e" opacity=".85">P(kombinasi stance)</text>
+            <line x1="460" y1="990" x2="460" y2="1014" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 11 aggregator -->
+            <rect x="300" y="1016" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="1038" font-size="11" opacity=".6">11</text>
+            <text x="344" y="1038" font-weight="600">Aggregator + Synthesis</text>
+            <text x="344" y="1054" font-size="11" opacity=".72">tanpa verdict · tanpa skor tunggal</text>
+            <line x1="460" y1="1062" x2="460" y2="1092" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+
+            <!-- 12 historical -->
+            <rect x="300" y="1094" width="320" height="46" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="316" y="1116" font-size="11" opacity=".6">12</text>
+            <text x="344" y="1116" font-weight="600">Historical Timeline</text>
+            <text x="344" y="1132" font-size="11" opacity=".72">snapshot utuh, dedup per hari UTC</text>
+
+            <!-- dashed dependencies, left lane -->
+            <path d="M 300 191 L 208 191 L 208 659 L 296 659" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity=".55" marker-end="url(#ar)"/>
+            <text x="214" y="430" font-size="10.5" opacity=".6" transform="rotate(-90 214 430)" text-anchor="middle">komponen degraded → context_penalty</text>
+
+            <path d="M 300 202 L 150 202 L 150 924 L 296 924" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity=".55" marker-end="url(#ar)"/>
+            <text x="142" y="560" font-size="10.5" opacity=".6" transform="rotate(-90 142 560)" text-anchor="middle">context_used</text>
+
+            <!-- dashed dependencies, right lane -->
+            <path d="M 620 425 L 690 425 L 690 906 L 624 906" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity=".55" marker-end="url(#ar)"/>
+            <text x="698" y="660" font-size="10.5" opacity=".6" transform="rotate(-90 698 660)" text-anchor="middle">has_catalyst</text>
+
+            <path d="M 620 581 L 744 581 L 744 940 L 624 940" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity=".55" marker-end="url(#ar)"/>
+            <text x="752" y="760" font-size="10.5" opacity=".6" transform="rotate(-90 752 760)" text-anchor="middle">peer key_metrics</text>
+          </g>
+        </svg>
+        <figcaption>Garis penuh adalah urutan eksekusi; garis putus-putus adalah ketergantungan data yang melompati tahap. Layer 1 dihitung <em>awal</em> — bukan akhir — justru supaya Confidence tahu komponen makro mana yang sedang rusak saat profil disusun.</figcaption>
+      </figure>
+
+      <div class="legend">
+        <span><i class="swatch"></i> urutan eksekusi</span>
+        <span><i class="swatch dash"></i> ketergantungan data</span>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="layer1">
+      <p class="eyebrow">Lapisan pertama</p>
+      <h2>Konteks pasar: 13 komponen jadi satu angka</h2>
+      <p>Layer 1 tidak melihat saham sama sekali. Ia membaca kondisi makro dari FRED dan Yahoo, menilai tiap komponen 0–100, lalu menggabungkannya jadi <strong>Layer Score</strong> — rata-rata tertimbang dengan bobot yang jumlahnya persis 1,0.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Bobot kontribusi ke Layer Score · <code>montrva/layer1/pipeline.py</code> · formula v1.1.0</caption>
+          <thead>
+            <tr>
+              <th>Komponen</th>
+              <th class="num">Bobot</th>
+              <th class="bar-cell"></th>
+              <th class="num">Cadence</th>
+              <th>Sumber inti</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">Market Regime</td><td class="num">0,135</td><td><i class="bar" style="width:100%"></i></td><td class="num">1 hr</td><td>agregasi sinyal internal</td></tr>
+            <tr><td class="name">Business Cycle Stage</td><td class="num">0,108</td><td><i class="bar" style="width:80%"></i></td><td class="num">30 hr</td><td>FRED <code>INDPRO</code></td></tr>
+            <tr><td class="name">Credit Spread</td><td class="num">0,100</td><td><i class="bar" style="width:74%"></i></td><td class="num">1 hr</td><td>FRED <code>BAMLH0A0HYM2</code></td></tr>
+            <tr><td class="name">Yield Curve</td><td class="num">0,090</td><td><i class="bar" style="width:67%"></i></td><td class="num">1 hr</td><td>FRED <code>DGS2</code>, <code>DGS10</code></td></tr>
+            <tr><td class="name">Volatility Index</td><td class="num">0,090</td><td><i class="bar" style="width:67%"></i></td><td class="num">1 hr</td><td>Yahoo <code>^VIX</code></td></tr>
+            <tr><td class="name">Market Breadth</td><td class="num">0,090</td><td><i class="bar" style="width:67%"></i></td><td class="num">1 hr</td><td>konstituen indeks</td></tr>
+            <tr><td class="name">Liquidity Conditions</td><td class="num">0,090</td><td><i class="bar" style="width:67%"></i></td><td class="num">7 hr</td><td>FRED <code>WALCL</code>, <code>M2SL</code></td></tr>
+            <tr><td class="name">Sector Rotation</td><td class="num">0,072</td><td><i class="bar" style="width:53%"></i></td><td class="num">1 hr</td><td>11 sector ETF</td></tr>
+            <tr><td class="name">Money Flow</td><td class="num">0,063</td><td><i class="bar" style="width:47%"></i></td><td class="num">1 hr</td><td>volume &amp; arah ETF</td></tr>
+            <tr><td class="name">Currency (DXY)</td><td class="num">0,063</td><td><i class="bar" style="width:47%"></i></td><td class="num">1 hr</td><td>Yahoo indeks dolar</td></tr>
+            <tr><td class="name">Commodity Signals</td><td class="num">0,045</td><td><i class="bar" style="width:33%"></i></td><td class="num">1 hr</td><td>emas, minyak, tembaga</td></tr>
+            <tr><td class="name">Macro Calendar</td><td class="num">0,027</td><td><i class="bar" style="width:20%"></i></td><td class="num">—</td><td>jadwal rilis (forward-looking)</td></tr>
+            <tr><td class="name">Market Sentiment</td><td class="num">0,027</td><td><i class="bar" style="width:20%"></i></td><td class="num">1 hr</td><td>composite VIX + breadth</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Dua bobot pantas dijelaskan. <strong>Market Sentiment</strong> sengaja kecil karena secara struktur ia sudah composite dari Volatility Index dan Market Breadth — dua-duanya sudah ditimbang sendiri; bobot besar di sini akan menghitung sinyal yang sama dua kali. <strong>Credit Spread</strong> ditambahkan belakangan sebagai leading indicator risk-appetite; 12 bobot lama diskalakan ×0,90 dengan proporsi relatif dipertahankan, lalu sisa 0,10 diberikan padanya.</p>
+
+      <h3>Renormalisasi, bukan default diam-diam</h3>
+      <p>Kalau ada komponen yang gagal ambil data, bobotnya tidak diam-diam menyeret skor ke nilai netral. Bobot komponen yang <code>ok</code> dijumlahkan ulang, lalu dipakai sebagai penyebut:</p>
+
+      <div class="formula">
+final_score = Σ(score<sub>i</sub> × bobot<sub>i</sub>) / Σ(bobot<sub>i</sub>)   <span class="cmt">← hanya komponen berstatus ok</span>
+
+<span class="cmt">kalau tidak ada satu pun komponen ok → 50,0 (netral, bukan 0)</span>
+      </div>
+
+      <p>Hasilnya dilaporkan apa adanya: <code>excluded</code> berisi nama komponen yang dibuang, dan <code>reasoning</code> menyebut berapa bobot total yang tersisa. Jadi Layer Score 62 dari 13 komponen dan Layer Score 62 dari 9 komponen bisa dibedakan pembacanya.</p>
+
+      <h3>Band regime</h3>
+      <div class="table-wrap">
+        <table>
+          <caption>Empat zona, selaras dengan latar belakang grafik tren di dashboard</caption>
+          <thead><tr><th class="num">Layer Score</th><th>Band</th><th>Implikasi untuk screening</th></tr></thead>
+          <tbody>
+            <tr><td class="num">&lt; 35</td><td class="name">Risk-Off</td><td>defensif dan sangat selektif</td></tr>
+            <tr><td class="num">35 – 49,9</td><td class="name">Neutral</td><td>tetap selektif</td></tr>
+            <tr><td class="num">50 – 65</td><td class="name">Neutral Positive</td><td>selektif sambil menunggu konfirmasi arah</td></tr>
+            <tr><td class="num">&gt; 65</td><td class="name">Risk-On</td><td>mendukung screening lebih agresif</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kebaruan data</h3>
+      <p>Tiap komponen punya <em>cadence</em> — seberapa sering sumbernya wajar update. Umur data dinilai relatif terhadap cadence-nya sendiri, jadi data bulanan tidak dihukum dengan penggaris data harian:</p>
+      <div class="formula">
+fresh       ≤ 1,5 × cadence
+acceptable  ≤ 3,0 × cadence
+stale       selebihnya          <span class="cmt">macro_calendar dikecualikan — forward-looking, bukan data yang menua</span>
+      </div>
+      <p>Acuan umurnya adalah tanggal evidence <em>terbaru</em> milik komponen itu. Untuk komponen bercadence campuran seperti Liquidity Conditions (WALCL mingguan + M2SL bulanan), acuan otomatis jatuh ke seri yang lebih sering update tanpa perlu hardcode.</p>
+
+      <h3>Driver dan drag</h3>
+      <p>Executive summary di dashboard bukan kalimat bebas. Ia dirakit dari band regime plus dua komponen ekstrem, dipilih dengan ukuran yang sama:</p>
+      <div class="formula">
+driver = max( (score − 50) × bobot )     <span class="cmt">penarik terkuat ke atas</span>
+drag   = min( (score − 50) × bobot )     <span class="cmt">penekan terkuat ke bawah</span>
+
+<span class="cmt">disebut dalam narasi hanya kalau simpangannya &gt; 2 poin dari netral</span>
+      </div>
+      <p>Kalau tidak ada yang lewat ambang 2 poin itu, narasinya berbunyi "sinyal antar-komponen relatif seimbang" — bukan mengarang driver yang sebenarnya datar.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="layer2">
+      <p class="eyebrow">Lapisan kedua</p>
+      <h2>Rantai per saham</h2>
+      <p>Dua belas tahap, dijalankan berurutan karena tiap tahap memakan keluaran tahap sebelumnya. Yang berikut adalah apa yang tiap tahap lakukan dan parameter yang mengendalikannya.</p>
+
+      <div class="stages">
+
+        <div class="stage">
+          <div class="idx">01</div>
+          <div>
+            <h3>Screening</h3>
+            <p>Memangkas ~5.200 simbol NASDAQ + NYSE jadi kandidat yang layak dianalisis. Sumber daftarnya adalah <em>symbol directory</em> NASDAQ Trader — gratis, publik, tanpa API key. Harga diambil per batch, bukan per saham.</p>
+            <p class="io"><b>Hard exclude</b> — dolar volume rata-rata &lt; $300.000 · harga &lt; $0,50 · riwayat harga &lt; 20 hari · market cap &lt; $30 juta<br>
+            <b>Soft flag</b> — <code>recent_ipo</code> (&lt; 252 hari perdagangan) · <code>low_liquidity</code> (&lt; $1 juta) · <code>adr</code> (heuristik teks nama sekuritas) · tier ukuran<br>
+            <b>Tier market cap</b> — micro &lt; $300jt · small &lt; $2M · mid &lt; $10M · large &lt; $100M · mega selebihnya<br>
+            <b>Batching</b> — 50 ticker/batch · jeda 2,0 dtk · 2 retry · backoff 5 dtk<br>
+            <b>Cache</b> — harga 6 jam · <code>.info</code> 24 jam</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">02</div>
+          <div>
+            <h3>Layer 1 — Market Context</h3>
+            <p>Dijalankan di sini, bukan di akhir. Ia hanya butuh <code>price_cache</code> dari Screening, jadi memindahkannya ke depan tidak menambah dependensi apa pun — tapi memungkinkan Confidence tahu komponen makro mana yang <em>degraded</em> saat menilai kualitas data tiap saham.</p>
+            <p class="io"><b>Keluar</b> — <code>MarketContextPackage</code>: 13 <code>ComponentReading</code> + <code>LayerScore</code> + <code>spx_history</code> 90 hari</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">03</div>
+          <div>
+            <h3>Evidence</h3>
+            <p>Tahap termahal. Mengumpulkan fakta mentah per saham dari enam panggilan jaringan, dijalankan paralel antar-saham tapi di-throttle per sumber. Tidak ada penilaian apa pun di sini — hanya pengumpulan.</p>
+            <p class="io"><b>Sumber</b> — Yahoo <code>fast_info</code>, <code>history</code>, <code>.info</code> (dipakai bersama, cache 24 jam) · Yahoo <code>institutional_holders</code> · Finnhub berita · SEC EDGAR peta ticker + XBRL facts + submissions<br>
+            <b>Throttle</b> — Finnhub interval minimum 1,05 dtk/panggilan · SEC 0,15 dtk (tracker dibagi antara <code>sec_edgar</code> dan <code>sec_parser</code>, karena keduanya menembak host yang sama)<br>
+            <b>Boundary guard</b> — semua field numerik <code>.info</code> lewat <code>_safe_float()</code>: string non-numerik, <code>inf</code>, dan <code>nan</code> jadi <code>None</code></p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">04</div>
+          <div>
+            <h3>Knowledge</h3>
+            <p>Menstrukturkan Evidence jadi tujuh seksi yang bisa dirujuk modul penalaran. Batas tegasnya: <em>tidak ada penilaian kualitatif di sini</em> — menghitung margin boleh, menyebut margin itu "bagus" tidak.</p>
+            <p class="io"><b>Tujuh seksi</b> — identitas &amp; klasifikasi · kesehatan finansial · struktur kompetitif · momentum kompetitif · tren historis · kepemilikan · valuasi · governance &amp; filing<br>
+            <b>Metadata</b> — <code>missing_fields</code> berisi jalur field bertitik, bukan sekadar hitungan, karena inilah yang jadi <code>knowledge_gaps</code> di Reasoning</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">05</div>
+          <div>
+            <h3>Catalyst</h3>
+            <p>Mendeteksi peristiwa terjadwal dalam 90 hari ke depan. <strong>Nol panggilan jaringan baru</strong> — datanya diperah dari <code>.info</code> Yahoo yang sudah di-cache Evidence.</p>
+            <p class="io"><b>Horizon</b> — 90 hari<br>
+            <b>Turunan</b> — <code>earningsTimestamp</code> → jadwal laba (<code>scheduled</code> kalau pasti, <code>expected</code> kalau <code>isEarningsDateEstimate</code>) · ex-dividend → kategori <code>other</code><br>
+            <b>Riwayat</b> — satu snapshot tidak cukup untuk tahu <em>delayed</em>/<em>completed</em>/<em>cancelled</em>, jadi tiap run dibandingkan dengan state kemarin</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">06</div>
+          <div>
+            <h3>Institutional Flow</h3>
+            <p>Agregasi tingkat populasi atas data pemegang institusi yang sudah ada di Evidence. Nol fetch baru, nol perhitungan ulang dari Knowledge.</p>
+            <p class="io"><b>Ambang</b> — minimal 5 pemegang untuk masuk peringkat · nilai pemegang teratas ≥ $500 juta · minimal 3 pemegang untuk roll-up sektor<br>
+            <b>Sentinel</b> — Yahoo memakai <code>pctChange = 100,0</code> sebagai penanda "posisi baru" (tak bisa hitung % dari basis nol), bukan kenaikan 100% harfiah; ambang deteksinya <code>≥ 99,5</code></p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">07</div>
+          <div>
+            <h3>Peer Comparison</h3>
+            <p>Menempatkan tiap metrik pada persentil dalam kelompok sebandingnya. Ukuran kelompok dihitung dari peer yang benar-benar punya nilai untuk metrik itu — bukan dari jumlah anggota roster, yang dulu membuat "4 pembanding" padahal hanya 1 yang punya angka.</p>
+            <p class="io"><b>Keluar</b> — persentil per metrik + <code>low_sample_size</code> saat kelompoknya terlalu tipis untuk dipercaya</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">08</div>
+          <div>
+            <h3>Confidence</h3>
+            <p>Menilai seberapa layak data saham ini dipercaya — bukan seberapa bagus sahamnya. Rinciannya di <a href="#confidence">bagian tersendiri</a>.</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">09</div>
+          <div>
+            <h3>Risk / Red Flags</h3>
+            <p>Tujuh pemeriksaan bendera merah, dua tingkat keparahan. Satu di antaranya bisa menghentikan saham itu dari pipeline sepenuhnya. Rinciannya di <a href="#risk">bagian tersendiri</a>.</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">10</div>
+          <div>
+            <h3>Reasoning — tiga lensa</h3>
+            <p>Tiga modul independen, masing-masing dengan daftar field yang boleh diakses dan kosakata stance sendiri. Saham yang <code>halted</code> tidak masuk sini sama sekali. Rinciannya di <a href="#lensa">bagian tersendiri</a>.</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">11</div>
+          <div>
+            <h3>Aggregator + Synthesis</h3>
+            <p>Menyusun tiga keluaran berdampingan, mendiagnosis kesepakatan dan perbedaan, dan menghitung <em>surprise</em> terhadap seluruh populasi sesi. Tidak menghasilkan vonis. Rinciannya di <a href="#sintesis">bagian tersendiri</a>.</p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="idx">12</div>
+          <div>
+            <h3>Historical Timeline</h3>
+            <p>Menyimpan snapshot utuh <code>AggregatorOutput</code> per saham per hari. Rerun di hari UTC yang sama <em>menimpa</em>, tidak menambah — tanpa itu, satu klik Generate kedua akan menggandakan catatan dan mengembungkan hitungan.</p>
+            <p class="io"><b>Outcome</b> — sengaja dibiarkan kosong di jalur publik; evaluasi hasil menunggu bentuk yang belum diputuskan spec-nya</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="ramp">
+      <p class="eyebrow">Primitif skor</p>
+      <h2>Dead-band ramp: kenapa bukan sekadar ambang</h2>
+      <p>Semua faktor di ketiga lensa memakai satu fungsi yang sama. Memahaminya sekali cukup untuk membaca seluruh tabel parameter di bawah.</p>
+
+      <p>Versi lama tiap faktor adalah <em>step function</em>: lolos ambang dapat bobot penuh, tidak lolos dapat nol. Besaran metriknya terbuang — P/E 3 dan P/E 19,9 sama-sama menyumbang +12, sementara P/E 20,1 menyumbang 0. Karena skor lensa cuma penjumlahan segelintir bilangan bulat tetap, nilai yang bisa muncul jadi sangat sedikit: dari 4.056 saham, lensa Quality hanya menghasilkan 101 nilai unik dan Speculative hanya 24. Cukup untuk memilih stance, tidak cukup untuk memeringkat.</p>
+
+      <figure>
+        <svg viewBox="0 0 720 300" role="img" aria-label="Grafik fungsi dead-band ramp: sumbangan nol di dalam zona mati antara dead_lo dan dead_hi, lalu naik linier ke bobot penuh di full_below dan full_above" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="ui-monospace, Consolas, monospace" font-size="11.5" fill="currentColor">
+
+            <!-- axes -->
+            <line x1="70" y1="150" x2="670" y2="150" stroke="currentColor" stroke-width="1" opacity=".45" marker-end="url(#ar2)"/>
+            <line x1="70" y1="270" x2="70" y2="30" stroke="currentColor" stroke-width="1" opacity=".45" marker-end="url(#ar2)"/>
+            <text x="676" y="146" font-size="11" opacity=".7" text-anchor="end" dy="-14">nilai metrik →</text>
+            <text x="60" y="36" text-anchor="end" font-size="11" opacity=".7">sumbangan</text>
+
+            <!-- dead band shading -->
+            <rect x="250" y="40" width="200" height="220" fill="currentColor" opacity=".055"/>
+            <line x1="250" y1="40" x2="250" y2="260" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>
+            <line x1="450" y1="40" x2="450" y2="260" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>
+            <text x="350" y="168" text-anchor="middle" font-size="11" opacity=".65">zona mati</text>
+            <text x="350" y="183" text-anchor="middle" font-size="11" opacity=".65">sumbangan = 0</text>
+
+            <!-- ramp curve -->
+            <polyline points="120,230 250,150 450,150 620,70" fill="none" stroke="#b08d2e" stroke-width="2.4" stroke-linejoin="round"/>
+            <line x1="70" y1="230" x2="120" y2="230" stroke="#b08d2e" stroke-width="2.4"/>
+            <line x1="620" y1="70" x2="670" y2="70" stroke="#b08d2e" stroke-width="2.4"/>
+
+            <!-- clamp markers -->
+            <circle cx="120" cy="230" r="3.5" fill="#b08d2e"/>
+            <circle cx="620" cy="70" r="3.5" fill="#b08d2e"/>
+
+            <!-- weight guides -->
+            <line x1="70" y1="230" x2="120" y2="230" stroke="currentColor" stroke-width=".8" stroke-dasharray="2 3" opacity=".4"/>
+            <text x="126" y="246" font-size="11" fill="#b08d2e">weight_below (penuh)</text>
+            <text x="614" y="60" font-size="11" fill="#b08d2e" text-anchor="end">weight_above (penuh)</text>
+
+            <!-- x labels -->
+            <text x="120" y="285" text-anchor="middle" font-size="11" opacity=".8">full_below</text>
+            <text x="250" y="285" text-anchor="middle" font-size="11" opacity=".8">dead_lo</text>
+            <text x="450" y="285" text-anchor="middle" font-size="11" opacity=".8">dead_hi</text>
+            <text x="620" y="285" text-anchor="middle" font-size="11" opacity=".8">full_above</text>
+            <line x1="120" y1="150" x2="120" y2="276" stroke="currentColor" stroke-width=".7" opacity=".3"/>
+            <line x1="620" y1="150" x2="620" y2="276" stroke="currentColor" stroke-width=".7" opacity=".3"/>
+            <line x1="250" y1="260" x2="250" y2="276" stroke="currentColor" stroke-width=".7" opacity=".3"/>
+            <line x1="450" y1="260" x2="450" y2="276" stroke="currentColor" stroke-width=".7" opacity=".3"/>
+          </g>
+        </svg>
+        <figcaption>Ambang lama tidak dibuang — ia jadi <em>tepi</em> zona mati. Di luar zona itu sumbangan naik linier sampai bobot penuh. Saham yang cuma lewat tipis dari ambang berhenti memungut bobot penuh; yang benar-benar ekstrem tetap memungutnya.</figcaption>
+      </figure>
+
+      <p>Tiga sifat yang perlu diingat saat membaca tabel di bawah:</p>
+      <ul>
+        <li><strong>Arah tidak diasumsikan.</strong> <code>weight_below</code> dan <code>weight_above</code> membawa tandanya masing-masing, jadi fungsi yang sama melayani metrik "makin besar makin baik" (net margin) maupun kebalikannya (P/E, D/E).</li>
+        <li><strong>Sisi yang tidak punya cabang dibiarkan kosong.</strong> P/B, misalnya, hanya memberi imbalan saat murah — tidak pernah menghukum saat mahal. Sisi atasnya memang tidak ada, bukan dikarang.</li>
+        <li><strong>Data hilang menyumbang 0, bukan negatif.</strong> Field kosong berarti faktor itu tidak bersuara. Ketiadaan data ditangani Confidence dan <code>knowledge_gaps</code>, bukan dihukum di sini.</li>
+      </ul>
+
+      <p>Setelah semua faktor dijumlahkan, skor digeser dan dikunci:</p>
+      <div class="formula">
+score = clamp( Σ sumbangan_faktor + 50 , 0 , 100 )
+      </div>
+      <p>Jadi 50 adalah titik netral "tidak ada faktor yang bersuara", dan tiap faktor menggeser dari sana.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="lensa">
+      <p class="eyebrow">Inti sistem</p>
+      <h2>Tiga lensa dan parameternya</h2>
+      <p>Ketiga lensa membaca profil saham yang sama tapi lewat daftar field yang berbeda, dan menyimpulkan dengan kosakata yang berbeda. Tidak ada enum bersama seperti <code>buy</code>/<code>sell</code> — itu disengaja, karena enum bersama adalah jalan pintas menuju peleburan yang justru dilarang.</p>
+
+      <div class="stance-grid">
+        <div class="stance-card">
+          <h4>Multibagger</h4>
+          <p class="vocab">ruang_terbuka<br>ruang_sempit<br>ruang_tertutup<br>ruang_tak_terbaca</p>
+        </div>
+        <div class="stance-card">
+          <h4>Quality / Compound</h4>
+          <p class="vocab">compounding_kuat<br>compounding_rapuh<br>bukan_compounder<br>mesin_tak_terbaca</p>
+        </div>
+        <div class="stance-card">
+          <h4>Speculative</h4>
+          <p class="vocab">asimetri_berkatalis<br>asimetri_tanpa_katalis<br>tanpa_asimetri<br>asimetri_tak_terbaca</p>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="label">Ambang stance = 75, bukan 70</span>
+        <p>Angka ini terlihat sewenang-wenang tapi bukan. Lapisan personal memakai <code>&ge; 70</code> sebagai gerbang tier "high", dan tabel aksinya diindeks oleh stance <em>dan</em> tier sekaligus. Selama ambang stance juga 70, dua sel campuran tabel itu mustahil tercapai — "pita atas + tier medium" butuh skor <code>&ge;70</code> sekaligus <code>&lt;70</code>. Akibatnya aksi perantara tidak pernah muncul: terukur 0 dari 4.056 saham. Menaikkannya jadi 75 menghidupkan sel-sel itu. Speculative tidak ikut naik karena ambangnya 60 — sudah beda dari gerbang, jadi sel campurannya memang sudah hidup.</p>
+      </div>
+
+      <h3 id="quality">Quality / Compound</h3>
+      <p>Mencari mesin bisnis yang bisa menggandakan modal secara konsisten. Field yang boleh diakses: identitas, kesehatan finansial, tren historis, valuasi, governance.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Faktor lensa Quality · <code>run_quality_lens</code> · method v2.0</caption>
+          <thead>
+            <tr><th>Faktor</th><th class="num">Zona mati</th><th class="num">Penuh bawah</th><th class="num">Bobot bawah</th><th class="num">Penuh atas</th><th class="num">Bobot atas</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">Net margin</td><td class="num">0 – 5%</td><td class="num">−15%</td><td class="num neg">−15</td><td class="num">20%</td><td class="num pos">+15</td></tr>
+            <tr><td class="name">Current ratio</td><td class="num">1,0 – 1,5</td><td class="num">0,6</td><td class="num neg">−10</td><td class="num">3,5</td><td class="num pos">+10</td></tr>
+            <tr><td class="name">Debt / equity</td><td class="num">1,0 – 2,0</td><td class="num">0,2</td><td class="num pos">+10</td><td class="num">4,0</td><td class="num neg">−12</td></tr>
+            <tr><td class="name">Return 1 tahun</td><td class="num">−20 – 10%</td><td class="num">−50%</td><td class="num neg">−8</td><td class="num">60%</td><td class="num pos">+8</td></tr>
+            <tr><td class="name">P/E ratio</td><td class="num">20 – 50</td><td class="num">8</td><td class="num pos">+12</td><td class="num">100</td><td class="num neg">−8</td></tr>
+            <tr><td class="name">P/B ratio</td><td class="num">&gt; 2,0</td><td class="num">0,8</td><td class="num pos">+8</td><td class="num und">—</td><td class="num und">—</td></tr>
+            <tr><td class="name">P/E vs peer (persentil)</td><td class="num">30 – 85</td><td class="num">5</td><td class="num pos">+6</td><td class="num">97</td><td class="num neg">−6</td></tr>
+            <tr><td class="name">Upside analis</td><td class="num">−10 – 15%</td><td class="num">−30%</td><td class="num neg">−8</td><td class="num">50%</td><td class="num pos">+8</td></tr>
+            <tr><td class="name">Tren target 3 bulan</td><td class="num">−10 – 10%</td><td class="num">−30%</td><td class="num neg">−5</td><td class="num">30%</td><td class="num pos">+5</td></tr>
+            <tr><td class="name">Rasio EPS beat</td><td class="num">0,25 – 0,75</td><td class="num">0,0</td><td class="num neg">−6</td><td class="num">1,0</td><td class="num pos">+6</td></tr>
+            <tr><td class="name">Restatement</td><td class="num">0</td><td class="num und">—</td><td class="num und">—</td><td class="num">2</td><td class="num neg">−15</td></tr>
+            <tr><td class="name">Ganti auditor</td><td class="num">0</td><td class="num und">—</td><td class="num und">—</td><td class="num">2</td><td class="num neg">−8</td></tr>
+            <tr><td class="name">Confidence data</td><td class="num">&ge; 49</td><td class="num">20</td><td class="num neg">−10</td><td class="num und">—</td><td class="num und">—</td></tr>
+            <tr><td class="name">Jumlah flag berat</td><td class="num">0</td><td class="num und">—</td><td class="num und">—</td><td class="num">3</td><td class="num neg">−15</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula">
+skor ≥ 75  → compounding_kuat
+skor ≥ 45  → compounding_rapuh
+selain itu → bukan_compounder
+gap ≥ 4    → mesin_tak_terbaca   <span class="cmt">menimpa hasil di atas</span>
+      </div>
+
+      <h3 id="multibagger">Multibagger</h3>
+      <p>Mencari ruang tumbuh yang belum dihargai pasar. Field: identitas, struktur &amp; momentum kompetitif, tren historis, valuasi.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Faktor lensa Multibagger · <code>run_multibagger_lens</code></caption>
+          <thead>
+            <tr><th>Faktor</th><th class="num">Zona mati</th><th class="num">Penuh bawah</th><th class="num">Bobot bawah</th><th class="num">Penuh atas</th><th class="num">Bobot atas</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">Return 1 tahun</td><td class="num">&le; 20%</td><td class="num und">—</td><td class="num und">—</td><td class="num">60%</td><td class="num pos">+12</td></tr>
+            <tr><td class="name">Growth vs peer (persentil)</td><td class="num">&le; 80</td><td class="num und">—</td><td class="num und">—</td><td class="num">98</td><td class="num pos">+6</td></tr>
+            <tr><td class="name">Upside analis</td><td class="num">−10 – 15%</td><td class="num">−30%</td><td class="num neg">−8</td><td class="num">50%</td><td class="num pos">+8</td></tr>
+            <tr><td class="name">Tren target 3 bulan</td><td class="num">−10 – 10%</td><td class="num">−30%</td><td class="num neg">−5</td><td class="num">30%</td><td class="num pos">+5</td></tr>
+            <tr><td class="name">Rasio EPS beat</td><td class="num">0,25 – 0,75</td><td class="num">0,0</td><td class="num neg">−6</td><td class="num">1,0</td><td class="num pos">+6</td></tr>
+            <tr><td class="name">P/E ekstrem</td><td class="num">&le; 100</td><td class="num und">—</td><td class="num und">—</td><td class="num">250</td><td class="num neg">−10</td></tr>
+            <tr><td class="name">Confidence data</td><td class="num">&ge; 49</td><td class="num">20</td><td class="num neg">−12</td><td class="num und">—</td><td class="num und">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula">
+skor ≥ 75  → ruang_terbuka
+skor ≥ 45  → ruang_sempit
+selain itu → ruang_tertutup
+gap ≥ 3    → ruang_tak_terbaca
+      </div>
+      <p>Perhatikan asimetrinya: Multibagger memaafkan P/E tinggi sampai 100 sebelum menghukum, sementara Quality sudah mulai menghukum di atas 50. Dua lensa membaca angka yang sama dan menariknya ke arah berlawanan — itu bukan bug, itu justru gunanya.</p>
+
+      <h3 id="speculative">Speculative</h3>
+      <p>Mencari asimetri risiko-imbalan jangka pendek. Field paling sedikit: identitas, tren historis, kepemilikan.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Faktor lensa Speculative · <code>run_speculative_lens</code></caption>
+          <thead>
+            <tr><th>Faktor</th><th class="num">Zona mati</th><th class="num">Penuh bawah</th><th class="num">Bobot bawah</th><th class="num">Penuh atas</th><th class="num">Bobot atas</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">Volatilitas</td><td class="num">1,0 – 4,0</td><td class="num">0,5</td><td class="num neg">−5</td><td class="num">7,0</td><td class="num pos">+10</td></tr>
+            <tr><td class="name">Return 1 tahun</td><td class="num">−30 – 30%</td><td class="num">−60%</td><td class="num neg">−10</td><td class="num">100%</td><td class="num pos">+15</td></tr>
+            <tr><td class="name">Kepemilikan institusi</td><td class="num">10 – 70%</td><td class="num">2%</td><td class="num neg">−5</td><td class="num">95%</td><td class="num pos">+8</td></tr>
+            <tr><td class="name">Transaksi insider</td><td class="num">0</td><td class="num und">—</td><td class="num und">—</td><td class="num">3</td><td class="num pos">+10</td></tr>
+            <tr><td class="name">Aktivitas Form 4 (30 hr)</td><td class="num">&le; 1</td><td class="num und">—</td><td class="num und">—</td><td class="num">6</td><td class="num pos">+5</td></tr>
+            <tr><td class="name">Confidence tren historis</td><td class="num">&ge; 40</td><td class="num">10</td><td class="num neg">−15</td><td class="num und">—</td><td class="num und">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula">
+skor ≥ 60 &amp; ada katalis  → asimetri_berkatalis
+skor ≥ 60 tanpa katalis  → asimetri_tanpa_katalis
+selain itu               → tanpa_asimetri
+gap ≥ 2                  → asimetri_tak_terbaca
+      </div>
+
+      <div class="note">
+        <span class="label">Satu sinyal, satu suara</span>
+        <p>Hitungan Form 4 mentah dulu dinilai di ketiga lensa sekaligus. Satu sinyal lemah dan ambigu yang memberi suara tiga kali melanggar prinsip lensa independen — jadi pemakaiannya dicabut dari Quality dan Multibagger, dan yang tersisa di Speculative pun sengaja dikecilkan. Alasannya bukan sekadar kerapian: fetch Form 4 menghitung <em>setiap</em> pengajuan, termasuk grant, vesting RSU, dan exercise opsi, jadi ia tidak bisa membedakan pembelian pasar terbuka yang sesungguhnya. Menyebutnya "keyakinan insider" adalah klaim yang datanya tidak sanggup menopang.</p>
+      </div>
+
+      <h3>Confidence per modul</h3>
+      <p>Tiap lensa melaporkan keyakinannya sendiri, dan angka itu dijamin tidak pernah melampaui Confidence keseluruhan — karena selalu <em>mulai</em> dari sana lalu hanya dikurangi:</p>
+      <div class="formula">
+skor_modul = max( 0 , confidence_keseluruhan − 5 × jumlah_gap − penalti_flag )
+
+penalti_flag = 5 per flag triggered + 3 per flag undetermined,  <span class="cmt">dibatasi maksimum 15</span>
+
+band:  ≥ 86 high  ·  ≥ 49 medium  ·  selebihnya low
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="confidence">
+      <p class="eyebrow">Kualitas data</p>
+      <h2>Confidence: menilai datanya, bukan sahamnya</h2>
+      <p>Skor dasar adalah rata-rata tertimbang kelengkapan tujuh seksi Knowledge, lalu dikurangi empat jenis penalti.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Bobot seksi · <code>montrva/layer2/confidence.py</code> · method v2.0</caption>
+          <thead><tr><th>Seksi Knowledge</th><th class="num">Bobot</th><th class="bar-cell"></th></tr></thead>
+          <tbody>
+            <tr><td class="name">Financial health</td><td class="num">0,20</td><td><i class="bar" style="width:100%"></i></td></tr>
+            <tr><td class="name">Valuation</td><td class="num">0,15</td><td><i class="bar" style="width:75%"></i></td></tr>
+            <tr><td class="name">Historical trend</td><td class="num">0,15</td><td><i class="bar" style="width:75%"></i></td></tr>
+            <tr><td class="name">Competitive structure</td><td class="num">0,15</td><td><i class="bar" style="width:75%"></i></td></tr>
+            <tr><td class="name">Ownership</td><td class="num">0,15</td><td><i class="bar" style="width:75%"></i></td></tr>
+            <tr><td class="name">Governance</td><td class="num">0,15</td><td><i class="bar" style="width:75%"></i></td></tr>
+            <tr><td class="name">Competitive momentum</td><td class="num">0,05</td><td><i class="bar" style="width:25%"></i></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Empat penalti</caption>
+          <thead><tr><th>Penalti</th><th class="num">Poin</th><th>Pemicu</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Peer</td><td class="num">10</td><td>kelompok pembanding terlalu tipis untuk dipercaya</td></tr>
+            <tr><td class="name">Konteks</td><td class="num">5 / komponen<br>maks 15</td><td>komponen Layer 1 yang <code>degraded</code> saat profil disusun</td></tr>
+            <tr><td class="name">Kebaruan</td><td class="num">10</td><td>data fundamental lebih tua dari 91 hari (satu kuartal kalender)</td></tr>
+            <tr><td class="name">Konsistensi</td><td class="num">10</td><td>sumber-sumber saling bertentangan</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Flag dari Screening juga menurunkan seksi tertentu, bukan skor global — <code>no_institutional_data</code> memotong seksi <em>ownership</em>, <code>recent_ipo</code> memotong <em>historical trend</em>. Menghukum seksi yang relevan lebih informatif daripada memotong angka tunggal.</p>
+
+      <div class="formula">
+band:  ≥ 86 high  ·  ≥ 49 medium  ·  selebihnya low
+      </div>
+
+      <div class="note caveat">
+        <span class="label">Angka penalti belum dikalibrasi</span>
+        <p>Ketiga penalti bernilai 10 memakai magnitude yang sama sebagai titik awal yang konsisten, bukan sebagai angka final — spec-nya sendiri menyatakan kalibrasinya "didiskusikan lebih lanjut mendekati fase implementasi". Perlakukan sebagai placeholder yang jujur, bukan hasil tuning.</p>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="risk">
+      <p class="eyebrow">Gerbang</p>
+      <h2>Risk: tujuh bendera, dua tingkat, satu penghenti</h2>
+      <p>Tiap pemeriksaan menghasilkan salah satu dari dua status — <code>triggered</code> (terkonfirmasi dari data) atau <code>undetermined</code> (tidak bisa dipastikan). Bedanya penting: <em>undetermined</em> bukan "aman", melainkan "tidak tahu", dan diperlakukan berbeda di hilir.</p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Seluruh flag · <code>montrva/layer2/risk.py</code></caption>
+          <thead>
+            <tr><th>flag_id</th><th>Kategori</th><th>Severity</th><th class="num">Ambang</th><th>Ketersediaan data</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name"><code>dilution_12m</code></td><td>dilution</td><td>tinggi</td><td class="num">+10% saham beredar / 12 bln</td><td>per-saham</td></tr>
+            <tr><td class="name"><code>auditor_change_3y</code></td><td>governance</td><td>tinggi</td><td class="num">&gt; 1 kali / 3 thn</td><td>per-saham</td></tr>
+            <tr><td class="name"><code>restatement_2y</code></td><td>accounting</td><td>tinggi</td><td class="num">jendela 2 thn</td><td>per-saham</td></tr>
+            <tr><td class="name"><code>delisting_notice_recent</code></td><td>listing status</td><td>tinggi</td><td class="num">jendela 1 thn</td><td>per-saham</td></tr>
+            <tr><td class="name"><code>litigation_material</code></td><td>litigation</td><td>tinggi</td><td class="num und">—</td><td class="und">tanpa sumber</td></tr>
+            <tr><td class="name"><code>insider_selling_90d</code></td><td>insider</td><td>tinggi</td><td class="num">$1 juta / 90 hari</td><td class="und">tanpa sumber</td></tr>
+            <tr><td class="name"><code>confirmed_fraud_or_delisting</code></td><td>listing status</td><td class="neg">ekstrem</td><td class="num">jendela 2 thn</td><td>per-saham</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Perbedaan "per-saham" versus "tanpa sumber" menentukan bagaimana flag <em>undetermined</em> diperlakukan oleh modul penalaran:</p>
+      <ul>
+        <li><strong>Per-saham</strong> — sumbernya ada, tapi untuk saham ini belum bisa dipastikan. Dampaknya <code>lowers_confidence</code>: ketidaktahuan yang spesifik memang layak menurunkan keyakinan.</li>
+        <li><strong>Tanpa sumber</strong> — tidak ada data untuk saham mana pun. Dampaknya <code>none</code>: dicatat, tapi tidak menurunkan confidence. Menghukum 4.000 saham dengan penalti seragam tidak membedakan apa pun — hanya menggeser semua angka ke bawah tanpa menambah informasi.</li>
+      </ul>
+
+      <h3>Gerbang halt</h3>
+      <p>Hanya severity <code>ekstrem</code> yang berstatus <code>triggered</code> yang menghentikan saham. Saham yang <code>halted</code> disaring keluar <em>sebelum</em> Reasoning berjalan — bukan ditandai setelahnya. Keluaran Aggregator-nya berisi <code>module_outputs</code> kosong dan <code>synthesis</code> null, tapi tetap membawa <code>risk_flags</code> lengkap supaya alasannya terbaca.</p>
+
+      <div class="note caveat">
+        <span class="label">Gerbang ini belum pernah menyala</span>
+        <p>Satu-satunya flag <code>ekstrem</code> adalah <code>confirmed_fraud_or_delisting</code>, dan Evidence hanya menyimpan <code>form_type</code> serta tanggal filing — tidak isinya. Jalur halt dibangun dan diuji lengkap, tapi dalam praktik selalu <code>undetermined</code>. Ini kondisi yang diketahui dan disengaja: jalurnya harus benar untuk saat datanya tersedia nanti, bukan dihapus karena hari ini belum terpakai.</p>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="sintesis">
+      <p class="eyebrow">Penutup rantai</p>
+      <h2>Sintesis: menahan diri dari memberi vonis</h2>
+      <p>Aggregator menyusun tiga <code>ModuleOutput</code> berdampingan dalam urutan tetap, lalu menambahkan satu lapis sintesis. Yang tidak ada — dan diverifikasi tidak ada — adalah field <code>verdict</code>, <code>score</code>, <code>rank</code>, atau <code>recommendation</code>, baik di keluaran maupun di dalam objek sintesisnya.</p>
+
+      <figure class="fig-scroll">
+        <svg viewBox="0 0 780 340" role="img" aria-label="Diagram sintesis: tiga lensa menghasilkan stance masing-masing, dikelompokkan jadi tier bullish, netral, dan bearish, lalu menghasilkan agreements dan divergences tanpa dilebur jadi satu skor" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="ui-monospace, Consolas, monospace" font-size="11.5" fill="currentColor">
+
+            <!-- three lenses -->
+            <rect x="30" y="24" width="180" height="52" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="120" y="46" text-anchor="middle" font-weight="600">Multibagger</text>
+            <text x="120" y="63" text-anchor="middle" font-size="11" opacity=".7">ruang_terbuka</text>
+
+            <rect x="30" y="94" width="180" height="52" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="120" y="116" text-anchor="middle" font-weight="600">Quality</text>
+            <text x="120" y="133" text-anchor="middle" font-size="11" opacity=".7">bukan_compounder</text>
+
+            <rect x="30" y="164" width="180" height="52" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="120" y="186" text-anchor="middle" font-weight="600">Speculative</text>
+            <text x="120" y="203" text-anchor="middle" font-size="11" opacity=".7">asimetri_tanpa_katalis</text>
+
+            <!-- tier mapping -->
+            <line x1="210" y1="50" x2="284" y2="50" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar3)"/>
+            <line x1="210" y1="120" x2="284" y2="190" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar3)"/>
+            <line x1="210" y1="190" x2="284" y2="120" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar3)"/>
+
+            <rect x="286" y="30" width="118" height="40" rx="4" fill="none" stroke="#2e6f52" stroke-width="1.3"/>
+            <text x="345" y="55" text-anchor="middle" fill="#2e6f52">bullish</text>
+
+            <rect x="286" y="100" width="118" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".6"/>
+            <text x="345" y="125" text-anchor="middle" opacity=".7">neutral</text>
+
+            <rect x="286" y="170" width="118" height="40" rx="4" fill="none" stroke="#9c3a31" stroke-width="1.3"/>
+            <text x="345" y="195" text-anchor="middle" fill="#9c3a31">bearish</text>
+
+            <!-- pairing -->
+            <path d="M 404 50 L 448 50 L 448 118 L 486 118" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar3)"/>
+            <path d="M 404 190 L 448 190 L 448 132 L 486 132" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar3)"/>
+            <text x="452" y="88" font-size="10.5" opacity=".65">tiap pasangan</text>
+
+            <rect x="488" y="98" width="252" height="54" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="614" y="119" text-anchor="middle" font-weight="600">divergences</text>
+            <text x="614" y="136" text-anchor="middle" font-size="10.5" opacity=".72">root_cause didiagnosis mekanis</text>
+
+            <rect x="488" y="24" width="252" height="54" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="614" y="45" text-anchor="middle" font-weight="600">agreements</text>
+            <text x="614" y="62" text-anchor="middle" font-size="10.5" opacity=".72">2+ modul, tier sama, metrik sama</text>
+
+            <!-- surprise + confidence -->
+            <rect x="488" y="172" width="252" height="54" rx="4" fill="none" stroke="#b08d2e" stroke-width="1.3"/>
+            <text x="614" y="193" text-anchor="middle" font-weight="600" fill="#b08d2e">surprise</text>
+            <text x="614" y="210" text-anchor="middle" font-size="10.5" fill="#b08d2e" opacity=".85">−log P(kombinasi | populasi sesi)</text>
+
+            <rect x="488" y="246" width="252" height="54" rx="4" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <text x="614" y="267" text-anchor="middle" font-weight="600">confidence</text>
+            <text x="614" y="284" text-anchor="middle" font-size="10.5" opacity=".72">= TERENDAH dari 3, bukan rata-rata</text>
+
+            <!-- forbidden -->
+            <rect x="30" y="256" width="380" height="56" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4" opacity=".5"/>
+            <text x="220" y="278" text-anchor="middle" opacity=".65">tidak ada verdict · score · rank</text>
+            <text x="220" y="296" text-anchor="middle" font-size="10.5" opacity=".55">tiga pandangan tetap terpisah sampai akhir</text>
+          </g>
+        </svg>
+        <figcaption>Tiap stance dipetakan ke satu dari tiga tier. Kesepakatan hanya dicatat kalau dua modul atau lebih berada di tier yang sama <em>dan</em> berbagi metrik yang sama — jadi klaimnya selalu tersitasi ke angka spesifik, bukan kesan umum.</figcaption>
+      </figure>
+
+      <h3>Diagnosis perbedaan</h3>
+      <p>Saat satu modul bullish dan satu bearish, akar perbedaannya ditentukan mekanis lewat urutan pemeriksaan tetap — bukan ditebak:</p>
+      <div class="formula">
+gap terbanyak ≥ 2                  → knowledge_gap      <span class="cmt">bedanya karena data hilang</span>
+dampak flag berbeda antar modul    → flag_response      <span class="cmt">bedanya karena reaksi ke red flag</span>
+tidak ada metrik yang beririsan    → different_fields   <span class="cmt">memang membaca hal berbeda</span>
+selain itu                         → different_weights  <span class="cmt">metrik sama, bobot beda</span>
+      </div>
+
+      <h3>Surprise dan barrier populasi</h3>
+      <p>Ini satu-satunya angka di seluruh pipeline yang mustahil dihitung per saham. Ia mengukur seberapa <em>tidak biasa</em> kombinasi tiga stance sebuah saham dibanding seluruh saham lain di sesi yang sama:</p>
+      <div class="formula">
+P(kombinasi) = jumlah saham dengan kombinasi stance identik / total saham sesi
+
+surprise     = −ln P(kombinasi)
+      </div>
+      <p>Karena frekuensinya dihitung dari populasi yang <em>termasuk saham itu sendiri</em>, nilai P selalu lebih besar dari nol — <code>−log(0) = ∞</code> tidak mungkin terjadi secara konstruksi.</p>
+      <p>Konsekuensi operasionalnya nyata: semua tahap sebelumnya murni per-saham dan bisa diproses satu per satu, tapi sintesis satu saham pun tidak bisa dihitung sebelum <em>seluruh</em> populasi selesai dinilai. Aggregator karena itu melakukan pass pertama untuk membangun baseline sebelum pass kedua menyusun keluaran. Di dashboard, saham diurutkan dari surprise tertinggi — yang paling menarik dilihat adalah yang paling tidak lazim, bukan yang skornya paling tinggi.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="operasional">
+      <p class="eyebrow">Menjalankan</p>
+      <h2>Operasional</h2>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Variabel lingkungan yang mengubah perilaku run</caption>
+          <thead><tr><th>Variabel</th><th class="num">Default</th><th>Efek</th></tr></thead>
+          <tbody>
+            <tr><td class="name"><code>SCREENING_LIMIT</code></td><td class="num">tidak dibatasi</td><td>batasi jumlah kandidat — untuk pengujian cepat</td></tr>
+            <tr><td class="name"><code>SCREENING_SECTOR</code></td><td class="num">semua</td><td>satu sektor GICS saja, memakai cache peta sektor</td></tr>
+            <tr><td class="name"><code>FINNHUB_MIN_INTERVAL_SECONDS</code></td><td class="num">1,05</td><td>throttle Finnhub per panggilan</td></tr>
+            <tr><td class="name"><code>SEC_MIN_INTERVAL_SECONDS</code></td><td class="num">0,15</td><td>throttle SEC EDGAR, dibagi antar dua modul</td></tr>
+            <tr><td class="name"><code>YF_BATCH_SIZE</code></td><td class="num">50</td><td>ukuran batch harga Yahoo di Screening</td></tr>
+            <tr><td class="name"><code>YF_BATCH_DELAY_SECONDS</code></td><td class="num">2,0</td><td>jeda antar batch</td></tr>
+            <tr><td class="name"><code>PORT</code></td><td class="num">5000</td><td>port Flask</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kunci eksklusif antar-proses</h3>
+      <p>Run penuh menulis sepuluh file tahap sekaligus di akhir. Dua run yang tumpang tindih bisa meninggalkan campuran dua sesi berbeda di <code>dashboard/data/</code> — dan itu tidak bisa ditutup dengan retry, karena kedua penulisan sama-sama "berhasil". Kuncinya sengaja dibuat sederhana:</p>
+      <ul>
+        <li><strong>Pendatang kedua langsung keluar, tidak mengantre.</strong> Untuk job terjadwal, mengantre justru salah — run berikutnya akan menumpuk di belakang run tiga jam.</li>
+        <li><strong>Kunci basi wajib ditangani.</strong> Kunci lebih tua dari 5 jam dianggap basi walaupun pid-nya masih hidup, karena pid bisa terpakai ulang setelah crash. Tanpa ini, satu crash mengunci sistem selamanya.</li>
+        <li><strong>Tanpa dependensi baru.</strong> Cek pid memakai <code>ctypes</code> di Windows, <code>os.kill(pid, 0)</code> di POSIX — bukan <code>psutil</code>.</li>
+      </ul>
+
+      <div class="note caveat">
+        <span class="label">Jangan klik Generate saat run manual berjalan</span>
+        <p>Tombol Generate di dashboard dan <code>refresh_full_pipeline.py</code> manual pernah berjalan bersamaan berkali-kali; dua pipeline menulis file cache yang sama pernah merusak 55 berkas. Kunci di atas menutup kasus file tahap, tapi kebiasaan yang aman tetap: satu run pada satu waktu.</p>
+      </div>
+
+      <h3>Menyalakan dashboard</h3>
+      <p>Jalur paling andal adalah <code>start-dashboard.bat</code> di akar repo — ia pindah ke folder repo dulu baru menjalankan Flask, jadi seluruh path relatif ke <code>dashboard/data/</code> dan <code>.cache/</code> terselesaikan dengan benar.</p>
+      <p><strong>Tunggu sekitar 50 detik setelah start.</strong> Backend memanaskan cache dengan membaca <code>evidence.json</code> berukuran 250 MB secara sinkron sebelum Flask mulai melayani. Membuka browser terlalu cepat akan terlihat seperti server mati, padahal sedang memuat. Isi berkasnya tidak ditahan di memori — yang dibangun hanya indeks per record dan ringkasannya.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="jujur">
+      <p class="eyebrow">Penutup</p>
+      <h2>Batas yang diakui</h2>
+      <p>Beberapa hal di sistem ini dibangun lengkap tapi belum punya data untuk dijalankan, dan beberapa angka masih placeholder. Mencatatnya di sini lebih berguna daripada menemukannya lagi enam bulan lagi.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Hal</th><th>Status sebenarnya</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Gerbang halt <code>ekstrem</code></td><td>dibangun dan diuji, tapi belum pernah menyala — Evidence hanya menyimpan <code>form_type</code> dan tanggal filing, bukan isinya</td></tr>
+            <tr><td class="name"><code>litigation_material</code>, <code>insider_selling_90d</code></td><td>selalu <code>undetermined</code>, ditandai <em>tanpa sumber</em> supaya tidak menghukum confidence secara seragam</td></tr>
+            <tr><td class="name">Bobot penalti Confidence</td><td>ketiganya bernilai 10 sebagai titik awal yang konsisten, belum hasil kalibrasi</td></tr>
+            <tr><td class="name">Bobot &amp; kriteria lensa</td><td>masih placeholder "didiskusikan sebelum implementasi" dari spec — angka di tabel ini adalah interpretasi awal, bukan hasil tuning terhadap outcome</td></tr>
+            <tr><td class="name">Katalis non-laba</td><td>hanya laba dan ex-dividend yang bisa diturunkan; produk, regulasi, dan rumor butuh penguraian berita yang belum ada</td></tr>
+            <tr><td class="name">Outcome Historical</td><td>sengaja kosong di jalur publik — bentuk evaluasinya belum diputuskan spec</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Yang membuat sistem ini bisa dipercaya bukan kelengkapannya, melainkan bahwa setiap lubang di atas <em>terlihat</em> dari keluarannya: <code>undetermined</code> berbeda dari aman, <code>excluded</code> menyebut komponen mana yang hilang, <code>knowledge_gaps</code> menyebut field mana yang kosong, dan confidence sintesis mengambil yang terendah agar satu modul yang buta tidak tersamarkan oleh dua yang melihat.</p>
+    </section>
+
+  </main>
+</div>
