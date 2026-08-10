@@ -229,7 +229,7 @@ def main() -> int:
     # kapitalisasi-tertimbang di jendela itu (efek keluasan pasar, tidak ada
     # hubungannya dengan seleksi). Cuma pembanding pada jendela yang sama yang
     # bisa memisahkan keduanya -- persis alasan seluruh skrip ini ada.
-    from alphaforge.personal.personal_evaluation import classify_v2, window_sigma_pct
+    from montrva.personal.personal_evaluation import classify_v2, window_sigma_pct
 
     def v2_tally(bars_map, tickers, ed, xd, bret):
         t = Counter()

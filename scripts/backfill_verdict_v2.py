@@ -26,8 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.personal.personal_evaluation import (  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.personal.personal_evaluation import (  # noqa: E402
     Z_TERBUKTI, classify_v2, window_sigma_pct,
 )
 

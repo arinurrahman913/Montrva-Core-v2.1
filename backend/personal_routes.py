@@ -4,7 +4,7 @@ Terpisah dari app.py (bukan Flask Blueprint, karena app.py sendiri tidak
 memakai pola Blueprint di mana pun -- lihat _get_stage/@app.get langsung di
 sana; register() di sini cuma menambahkan @app.get ke instance `app` yang
 sama dengan cara yang identik). Dipanggil app.py lewat try/except import
-supaya publish tanpa folder alphaforge/personal/ ATAU file ini tidak
+supaya publish tanpa folder montrva/personal/ ATAU file ini tidak
 mematikan sisa dashboard (lihat app.py).
 
 Semua endpoint di sini WAJIB tetap local-only (tidak diekspos ke internet) --
@@ -20,8 +20,8 @@ from pathlib import Path
 
 from flask import Response, jsonify, request
 
-from alphaforge.personal import due_for_review
-from alphaforge.personal.personal_contracts import ACTION_ALIASES
+from montrva.personal import due_for_review
+from montrva.personal.personal_contracts import ACTION_ALIASES
 
 _stage_cache: dict[str, tuple[float, dict]] = {}
 _derived_cache: dict[str, tuple[float, str, bytes]] = {}

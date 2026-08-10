@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dump_safe, dumps_safe  # noqa: E402
+from montrva.json_safe import dump_safe, dumps_safe  # noqa: E402
 
 EVIDENCE = ROOT / "dashboard" / "data" / "evidence.json"
 PRICE_CACHE = ROOT / ".cache" / "price_market_data"

@@ -2,7 +2,7 @@
 
 Cuma menyusun berdampingan, TIDAK menghitung skor/ranking/verdict gabungan
 (D-04 tetap berlaku di lapisan pribadi juga, lihat PersonalCallSet docstring).
-Sejajar dengan alphaforge.layer2.aggregator.run_aggregator, tapi jauh lebih
+Sejajar dengan montrva.layer2.aggregator.run_aggregator, tapi jauh lebih
 tipis karena tidak ada Synthesis (agreements/divergences) di sini -- itu
 fitur yang sengaja belum diminta untuk lapisan pribadi.
 """

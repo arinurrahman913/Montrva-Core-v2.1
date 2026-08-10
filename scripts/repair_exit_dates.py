@@ -48,9 +48,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.layer1.benchmark_history import load_benchmark_history  # noqa: E402
-from alphaforge.personal.personal_evaluation import (  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.layer1.benchmark_history import load_benchmark_history  # noqa: E402
+from montrva.personal.personal_evaluation import (  # noqa: E402
     diagnose_miss, exit_date_as_of, resolve_benchmark_pair,
 )
 

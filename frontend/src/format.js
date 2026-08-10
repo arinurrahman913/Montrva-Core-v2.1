@@ -1,4 +1,4 @@
-// Formatters ported from dashboard/alphaforge.html — keep behavior identical.
+// Formatters ported from dashboard/montrva.html — keep behavior identical.
 
 export function fmtPct(v, digits = 1) {
   return v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(digits)}%`
@@ -98,7 +98,7 @@ export function quarterLabelSet(dateStrs) {
 
 // Yahoo pakai pct_change = 100.0 sebagai sentinel "posisi baru" (tidak bisa
 // hitung % dari basis 0 saham), bukan literal +100%. Ambang yang sama dipakai
-// backend di alphaforge/layer2/institutional_flow.py — kalau salah satu
+// backend di montrva/layer2/institutional_flow.py — kalau salah satu
 // berubah, keduanya harus berubah bersama.
 export const NEW_POSITION_SENTINEL = 99.5
 
@@ -305,7 +305,7 @@ export const BEST_ACTION = {
   // menemukan saham yang akan bergerak besar (+15,5pp di atas acak, di luar
   // derau) tapi TIDAK terbukti menebak arahnya (+4,2pp, di dalam derau), jadi
   // action-nya berhenti mengklaim arah. Lihat ACTION_CATEGORY_MAGNITUDE di
-  // alphaforge/personal/personal_contracts.py untuk angka lengkapnya.
+  // montrva/personal/personal_contracts.py untuk angka lengkapnya.
   speculative: 'siaga_gerakan',
 }
 
@@ -389,7 +389,7 @@ export function actionStreak(historyEntries, module, currentAction, runDates) {
 export const MAGNITUDE_ACTIONS = new Set(['siaga_gerakan'])
 
 // Urutan field di dalam tiap elemen `lenses` pada entry historical TIPIS.
-// KEMBARAN dari THIN_LENS_FIELDS di alphaforge/layer2/historical_contracts.py
+// KEMBARAN dari THIN_LENS_FIELDS di montrva/layer2/historical_contracts.py
 // — dua-duanya harus berubah bersama. Bentuknya posisional karena nama kunci
 // yang diulang 3x per entry sepanjang setahun berharga ratusan MB; harganya
 // di sisi ini adalah satu fungsi baca di bawah, bukan urutan yang dihafal di
@@ -403,7 +403,7 @@ export function thinLens(lens) {
 
 // Satu entry historical dibaca seragam, apa pun bentuknya: entry TERAKHIR tiap
 // ticker menyimpan snapshot AggregatorOutput penuh, yang lebih tua cuma bentuk
-// tipis (lihat alphaforge/layer2/historical.py). Tanpa fungsi ini, pemakainya
+// tipis (lihat montrva/layer2/historical.py). Tanpa fungsi ini, pemakainya
 // harus tahu bentuk mana yang sedang dipegang — dan yang lupa akan menampilkan
 // "divergen" untuk SETIAP entry lama, karena `aggregator_output` yang tidak ada
 // membaca `undefined` sebagai "tidak konvergen".
@@ -566,7 +566,7 @@ export function horizonStatusInfo(status) {
   return HORIZON_STATUS_INFO[status] || null
 }
 
-// Sama persis dengan HORIZON_UPPER_DAYS di alphaforge/personal/
+// Sama persis dengan HORIZON_UPPER_DAYS di montrva/personal/
 // personal_reasoning.py -- dipakai FE buat highlight "layak ditinjau ulang"
 // per snapshot histori (bukan cuma per ticker seperti /api/personal/
 // due-for-review), tanpa perlu round-trip API tambahan per entry.
@@ -597,7 +597,7 @@ export function prettyOutcome(classification) {
 }
 
 // Sama persis dengan HORIZON_OUTCOME_THRESHOLD_PCT + ACTION_CATEGORY_ENTRY di
-// alphaforge/personal/personal_evaluation.py -- makin panjang horizon, makin
+// montrva/personal/personal_evaluation.py -- makin panjang horizon, makin
 // besar target return-nya (horizon pendek tidak boleh "menang" cuma karena
 // noise harian). Dipakai FE buat nunjukin target harga/return SEBELUM call
 // itu jatuh tempo -- backend baru menghitung classification ini SETELAH due.
@@ -627,7 +627,7 @@ export function horizonTargetPrice(startPrice, action, horizon) {
   return { thresholdPct, targetPrice: startPrice * (1 + thresholdPct / 100) }
 }
 
-// Sama persis dengan ANCHOR_BUFFER_DAYS + call_due_date() di alphaforge/
+// Sama persis dengan ANCHOR_BUFFER_DAYS + call_due_date() di montrva/
 // personal/personal_historical.py -- SATU-SATUNYA tempat "kapan sebuah call
 // jatuh tempo" boleh dihitung di frontend. Sebelum ini ada 2 salinan logika
 // yang beda (isEntryDueForReview + horizonProgress, dua-duanya cuma age vs

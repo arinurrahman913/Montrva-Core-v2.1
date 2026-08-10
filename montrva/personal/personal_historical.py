@@ -1,6 +1,6 @@
 """Personal historical — snapshot PersonalCallSet per hari per ticker.
 
-Pola SAMA PERSIS dengan alphaforge.layer2.historical (public): snapshot utuh,
+Pola SAMA PERSIS dengan montrva.layer2.historical (public): snapshot utuh,
 bukan ringkasan; `outcome` sengaja `None`, evaluasi ditunda (lihat draft §12).
 Historical publik sudah kena pelajaran pahit soal ini -- versi lamanya
 membangun evaluasi (record_outcome/compare_recommendations) sebelum bentuk

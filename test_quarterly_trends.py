@@ -1,7 +1,7 @@
 """Test #2 Financial Trends calculation dengan mock quarterly data."""
 
-from alphaforge.layer2.contracts import QuarterlyFundamental
-from alphaforge.layer2.knowledge_helpers import compute_financial_trends
+from montrva.layer2.contracts import QuarterlyFundamental
+from montrva.layer2.knowledge_helpers import compute_financial_trends
 
 # Mock quarterly data untuk AAPL-like company (4 recent quarters)
 # Most recent first

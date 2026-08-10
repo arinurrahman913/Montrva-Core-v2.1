@@ -1,7 +1,7 @@
 import Icon from './Icon'
 
 // Urutan + tampilan tetap dari 6 field EvidencePackage (kunci harus sama
-// dengan alphaforge/layer2/source_health.py SOURCES supaya `history` cocok).
+// dengan montrva/layer2/source_health.py SOURCES supaya `history` cocok).
 // cadence = seberapa sering data jenis ini SEHARUSNYA berubah (properti
 // dari jenis sumbernya sendiri, sama untuk semua ticker — bukan hasil
 // fetch), dipakai buat label freshness indicator di footer card.

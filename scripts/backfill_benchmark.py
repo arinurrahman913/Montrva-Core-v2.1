@@ -33,11 +33,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.layer1.benchmark_history import (  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.layer1.benchmark_history import (  # noqa: E402
     load_benchmark_history, sync_benchmark_history,
 )
-from alphaforge.personal.personal_evaluation import resolve_benchmark_pair  # noqa: E402
+from montrva.personal.personal_evaluation import resolve_benchmark_pair  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
 HISTORY_PATH = DATA_DIR / "personal" / "personal_history.json"

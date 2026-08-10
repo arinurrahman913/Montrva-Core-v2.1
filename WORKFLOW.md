@@ -1,4 +1,4 @@
-# AlphaForge v2 — Panduan Workflow & Cara Baca Dashboard
+# Montrva v2 — Panduan Workflow & Cara Baca Dashboard
 
 Panduan lengkap: cara menjalankan platform, refresh data, dan **membaca setiap bagian dashboard**. Semua perintah di bawah untuk **Windows PowerShell** (shell utama kamu).
 
@@ -18,7 +18,7 @@ Dashboard (React) **hanya membaca file JSON** hasil pipeline — tidak menghitun
 ## 2. Setup Awal (sekali saja)
 
 ```powershell
-# dari folder repo: H:\Project1\alphaforge-core-v2.1
+# dari folder repo: H:\Project1\montrva-core-v2.1
 pip install -r requirements.txt
 npm --prefix frontend install
 ```
@@ -40,11 +40,11 @@ Setelah itu **otomatis**: backend, CLI, dan scheduled task membaca `.env` sendir
 Backend nyala sendiri (tanpa jendela) tiap login Windows, lewat shortcut di Startup folder yang menjalankan `scripts/start-backend-hidden.vbs`. Jadi cukup buka `http://localhost:5000` kapan saja — tidak perlu klik apa pun.
 
 - **Mematikan sementara**: Task Manager → tab Details → hentikan `pythonw.exe` (yang jalanin backend).
-- **Menonaktifkan auto-start**: hapus shortcut `AlphaForge Dashboard` di Startup folder (tekan `Win+R` → ketik `shell:startup` → Enter → hapus shortcut-nya).
+- **Menonaktifkan auto-start**: hapus shortcut `Montrva Dashboard` di Startup folder (tekan `Win+R` → ketik `shell:startup` → Enter → hapus shortcut-nya).
 - **Menyalakan ulang manual**: dobel-klik `scripts/start-backend-hidden.vbs` (hidden) atau `start-dashboard.bat` (dengan jendela).
 
 ### Cara manual: dobel-klik `start-dashboard.bat`
-Setelah laptop dimatikan/restart, server dashboard ikut mati — dashboard tidak akan terbuka sampai dijalankan lagi. **Dobel-klik `start-dashboard.bat`** di root repo: backend nyala + browser otomatis kebuka di `http://localhost:5000` (mode produksi, cukup 1 proses). Biarkan jendela "AlphaForge Backend" terbuka selama dipakai; tutup jendela itu untuk mematikan. Refresh data cukup lewat tombol **Generate** di dashboard.
+Setelah laptop dimatikan/restart, server dashboard ikut mati — dashboard tidak akan terbuka sampai dijalankan lagi. **Dobel-klik `start-dashboard.bat`** di root repo: backend nyala + browser otomatis kebuka di `http://localhost:5000` (mode produksi, cukup 1 proses). Biarkan jendela "Montrva Backend" terbuka selama dipakai; tutup jendela itu untuk mematikan. Refresh data cukup lewat tombol **Generate** di dashboard.
 
 ### Mode dev (2 terminal) — kalau sedang ngoprek kode
 
@@ -93,7 +93,7 @@ Update komponen makro. `market_breadth` & `market_sentiment` ikut terisi dengan 
 
 ### B. Layer 1 lengkap 12/13 (butuh Screening dulu, ~beberapa menit)
 ```powershell
-python -m alphaforge.cli layer1 --with-screening --screening-limit 100 --out dashboard/data/layer1_context.json
+python -m montrva.cli layer1 --with-screening --screening-limit 100 --out dashboard/data/layer1_context.json
 ```
 Mengisi `market_breadth`. `market_sentiment` sudah `ok` otomatis (CFTC+FINRA); untuk 13/13 penuh termasuk AAII, lengkapi input manual dulu (§5.7).
 
@@ -105,8 +105,8 @@ Menjalankan Screening → Evidence → … → Aggregator + Layer 1 lengkap. Ber
 
 ### Menjalankan stage tertentu manual
 ```powershell
-python -m alphaforge.cli screening --limit 100 --out dashboard/data/screening.json
-python -m alphaforge.cli evidence  --screening-out dashboard/data/screening.json --out dashboard/data/evidence.json
+python -m montrva.cli screening --limit 100 --out dashboard/data/screening.json
+python -m montrva.cli evidence  --screening-out dashboard/data/screening.json --out dashboard/data/evidence.json
 # stage lain: knowledge, peer, confidence, risk, reasoning, aggregator
 ```
 
@@ -201,7 +201,7 @@ File `sentiment_manual.json` sudah di-gitignore. Data AAII kadaluarsa (>30 hari)
 
 - **REAL**: semua hero value, delta, mini-stats, narasi, skor → dari **FRED API** + **Yahoo Finance**, per waktu generate.
 - **DEKORATIF**: garis sparkline di kartu (mengikuti arah saja, bukan time-series 30-hari asli).
-- **Proksi** (tercatat di data): `business_cycle` pakai Industrial Production (bukan ISM PMI); `money_flow` proksi volume+harga; `market_breadth` universe Screening sendiri (bukan S&P 500); `market_sentiment` `ok` pada ≥3/6 input — 4 otomatis (VIX, breadth, CFTC COT, FINRA short-volume) + 2 manual opsional (put/call, AAII) (§5.7). **Catatan proksi FINRA**: short-volume konsolidasi termasuk hedging market-maker (bukan murni taruhan bearish), jadi kalibrasinya kasar & bisa di-tune di `alphaforge/layer1/sources/sentiment.py` (`FINRA_NEUTRAL_SHORT_PCT`, `FINRA_SLOPE`). Nilai put/call manual adalah snapshot sekali-isi — perbarui sesekali kalau ingin tetap aktual.
+- **Proksi** (tercatat di data): `business_cycle` pakai Industrial Production (bukan ISM PMI); `money_flow` proksi volume+harga; `market_breadth` universe Screening sendiri (bukan S&P 500); `market_sentiment` `ok` pada ≥3/6 input — 4 otomatis (VIX, breadth, CFTC COT, FINRA short-volume) + 2 manual opsional (put/call, AAII) (§5.7). **Catatan proksi FINRA**: short-volume konsolidasi termasuk hedging market-maker (bukan murni taruhan bearish), jadi kalibrasinya kasar & bisa di-tune di `montrva/layer1/sources/sentiment.py` (`FINRA_NEUTRAL_SHORT_PCT`, `FINRA_SLOPE`). Nilai put/call manual adalah snapshot sekali-isi — perbarui sesekali kalau ingin tetap aktual.
 - **Snapshot**, bukan live-stream — update hanya saat pipeline dijalankan ulang.
 
 ---

@@ -1,4 +1,4 @@
-# AlphaForge v2: Complete Fund Manager Guide
+# Montrva v2: Complete Fund Manager Guide
 
 **Platform untuk Investment Decision Intelligence**
 
@@ -6,7 +6,7 @@
 
 ## 📍 Pengenalan Cepat untuk Fund Manager
 
-AlphaForge v2 adalah sistem analisis investasi yang mengintegrasikan:
+Montrva v2 adalah sistem analisis investasi yang mengintegrasikan:
 - **Macro Market Context** (bagaimana kondisi pasar keseluruhan)
 - **Individual Stock Analysis** (karakteristik & kesehatan setiap saham)
 - **Comparative & Risk Assessment** (posisi relatif & warning signs)
@@ -422,7 +422,7 @@ Platform tracks:
 
 ---
 
-## 🚀 How to Use AlphaForge as Fund Manager
+## 🚀 How to Use Montrva as Fund Manager
 
 ### Step 1: Check Layer 1 (Macro Context)
 - Navigate to **Market > Layer 1 — Context**
@@ -553,7 +553,7 @@ Use the **Reasoning — 3 Lensa** page:
 
 ## 🔄 Integration with Your Fund Process
 
-**AlphaForge should be:**
+**Montrva should be:**
 - ✅ First pass filter (is this worth analyzing further?)
 - ✅ Data aggregation (all relevant facts in one place)
 - ✅ Devil's advocate (bull case + bear case forces balanced thinking)
@@ -570,7 +570,7 @@ Use the **Reasoning — 3 Lensa** page:
 
 ---
 
-## 📞 Questions to Ask When Evaluating a Stock in AlphaForge
+## 📞 Questions to Ask When Evaluating a Stock in Montrva
 
 ### Pre-Purchase:
 1. **Layer 1:** Is macro environment favorable for this thesis?
@@ -597,7 +597,7 @@ Use the **Reasoning — 3 Lensa** page:
 
 ---
 
-## Summary: AlphaForge Powers Fund Managers With
+## Summary: Montrva Powers Fund Managers With
 
 ✅ **Data Clarity:** All relevant facts aggregated, one place  
 ✅ **Macro Integration:** Stock-level analysis tied to market context  
@@ -611,4 +611,4 @@ Use the **Reasoning — 3 Lensa** page:
 
 ---
 
-*Version 1.0 | Created after comprehensive AlphaForge v2 analysis*
+*Version 1.0 | Created after comprehensive Montrva v2 analysis*

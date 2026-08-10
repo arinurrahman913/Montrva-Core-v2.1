@@ -1,4 +1,4 @@
-' Menjalankan backend AlphaForge tanpa jendela (pythonw), untuk auto-start
+' Menjalankan backend Montrva tanpa jendela (pythonw), untuk auto-start
 ' saat login Windows. Shortcut ke file ini ditaruh di Startup folder.
 ' Portable: menemukan root repo dari lokasi script ini (scripts/..).
 Set fso = CreateObject("Scripting.FileSystemObject")

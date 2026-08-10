@@ -1,4 +1,4 @@
-"""CLI: python -m alphaforge.cli <layer1|screening> [opsi]"""
+"""CLI: python -m montrva.cli <layer1|screening> [opsi]"""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ def _write(data: str, out: str | None) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="alphaforge")
+    parser = argparse.ArgumentParser(prog="montrva")
     sub = parser.add_subparsers(dest="command", required=True)
 
     layer1_parser = sub.add_parser("layer1", help="Hitung Market Context Package")

@@ -27,8 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.personal.personal_evaluation import diagnose_miss  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.personal.personal_evaluation import diagnose_miss  # noqa: E402
 
 HISTORY_PATH = ROOT / "dashboard" / "data" / "personal" / "personal_history.json"
 

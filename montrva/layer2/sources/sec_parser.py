@@ -25,7 +25,7 @@ import requests
 from ... import cache
 from ._retry import retry
 
-SEC_USER_AGENT = "AlphaForge Research research@alphaforge.local"
+SEC_USER_AGENT = "Montrva Research research@montrva.local"
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 

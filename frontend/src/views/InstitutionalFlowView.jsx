@@ -8,7 +8,7 @@ import { fmtMoney, fmtPct, nextFilingDeadline, quarterLabel, quarterLabelSet, qu
 // Halaman populasi: ke saham & sektor apa dana institusi bergerak, dibaca
 // dari institutional_flow.json (agregasi top_holders Evidence). Tidak ada
 // penilaian di sini — institusi menambah posisi BUKAN berarti sahamnya bagus.
-// Semua batas sumbernya ada di alphaforge/layer2/institutional_flow_contracts.py
+// Semua batas sumbernya ada di montrva/layer2/institutional_flow_contracts.py
 // dan diringkas di kartu catatan paling bawah halaman ini.
 
 const fmtDate = (iso) => {

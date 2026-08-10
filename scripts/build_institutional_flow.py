@@ -21,8 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.layer2.institutional_flow import run_institutional_flow  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.layer2.institutional_flow import run_institutional_flow  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
 

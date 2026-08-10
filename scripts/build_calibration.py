@@ -20,8 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe, write_text_atomic  # noqa: E402
-from alphaforge.personal.personal_calibration import build_calibration  # noqa: E402
+from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
+from montrva.personal.personal_calibration import build_calibration  # noqa: E402
 
 PERSONAL_DIR = ROOT / "dashboard" / "data" / "personal"
 

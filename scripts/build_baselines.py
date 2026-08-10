@@ -46,7 +46,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.personal.personal_evaluation import window_sigma_pct, Z_TERBUKTI  # noqa: E402
+from montrva.personal.personal_evaluation import window_sigma_pct, Z_TERBUKTI  # noqa: E402
 
 CACHE = ROOT / ".cache" / "price_history"
 DATA = ROOT / "dashboard" / "data"

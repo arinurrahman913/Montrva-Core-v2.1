@@ -54,8 +54,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dumps_safe  # noqa: E402
-from alphaforge.personal.personal_evaluation import (  # noqa: E402
+from montrva.json_safe import dumps_safe  # noqa: E402
+from montrva.personal.personal_evaluation import (  # noqa: E402
     ACTION_CATEGORY_ENTRY, _reconstruct_start_price, exit_date_as_of,
 )
 

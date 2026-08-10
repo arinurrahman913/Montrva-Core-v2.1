@@ -1439,7 +1439,7 @@ function ModalBody({ data, context, aiNarrative, personalData }) {
 
 // Satu baris riwayat publik. Entry TERAKHIR menyimpan snapshot penuh (ada
 // narasi sintesisnya), entry lama cuma bentuk tipis — lihat
-// alphaforge/layer2/historical.py. Tiga stance ditampilkan untuk KEDUANYA:
+// montrva/layer2/historical.py. Tiga stance ditampilkan untuk KEDUANYA:
 // data itu selama ini tersimpan penuh tapi tidak pernah ditampilkan, dan di
 // entry tipis justru itulah isi utamanya.
 function HistoricalEntryRow({ entry }) {

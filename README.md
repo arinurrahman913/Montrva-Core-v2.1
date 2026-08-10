@@ -1,12 +1,12 @@
-# AlphaForge Core v2
+# Montrva Core v2
 
-Implementasi kode AlphaForge v2 — dua mesin analisis saham, plus satu lapisan pribadi opsional di atasnya:
+Implementasi kode Montrva v2 — dua mesin analisis saham, plus satu lapisan pribadi opsional di atasnya:
 
 - **Layer 1 — Market Context Engine**: 13 komponen makro (yield curve, VIX, likuiditas, credit spread, dll) → satu skor kondisi pasar (`Layer Score`).
 - **Layer 2 — Stock Analysis Engine**: 10 tahap per saham (Screening → Evidence → Knowledge → Catalyst → Peer → Confidence → Risk → Reasoning → Aggregator → Historical), ~4.000 ticker per run.
-- **Lapisan Pribadi** (`alphaforge/personal/`, bisa dihapus utuh): mengubah temuan Layer 2 jadi *call* bernama, lalu menagih pertanggungjawabannya lewat vonis & rapor kalibrasi.
+- **Lapisan Pribadi** (`montrva/personal/`, bisa dihapus utuh): mengubah temuan Layer 2 jadi *call* bernama, lalu menagih pertanggungjawabannya lewat vonis & rapor kalibrasi.
 
-Spec/arsitektur lengkap (kenapa sistem ini dirancang begini) ada di repo terpisah [`alphaforge-v2-main`](https://github.com/arinurrahman913/alphaforge-v2). Repo ini adalah **implementasinya** — kalau spec dan kode berbeda, catat perbedaannya (ada beberapa yang didokumentasikan sengaja, lihat §Known Gaps), jangan langsung asumsikan salah satu paling benar.
+Spec/arsitektur lengkap (kenapa sistem ini dirancang begini) ada di repo terpisah [`montrva-v2-main`](https://github.com/arinurrahman913/montrva-v2). Repo ini adalah **implementasinya** — kalau spec dan kode berbeda, catat perbedaannya (ada beberapa yang didokumentasikan sengaja, lihat §Known Gaps), jangan langsung asumsikan salah satu paling benar.
 
 **Kalau kamu AI/kontributor baru:** baca §Arsitektur & §Data Contracts dulu sebelum menyentuh kode — bagian itu isinya "kenapa ini begini", bukan cuma "ini ada apa". Kalau yang akan kamu sentuh menyangkut backend atau berkas di `dashboard/data/`, **§Memori wajib dibaca juga** (berkasnya ratusan MB; memuatnya secara naif mengembalikan 2,7 GB RAM). Untuk **cara menjalankan sehari-hari** (refresh data, baca dashboard, troubleshooting), semuanya di [`WORKFLOW.md`](WORKFLOW.md) — jangan diduplikasi di sini.
 
@@ -19,22 +19,22 @@ Spec/arsitektur lengkap (kenapa sistem ini dirancang begini) ada di repo terpisa
 Tiga bagian yang jalan terpisah tapi saling terhubung lewat file JSON:
 
 ```
-alphaforge/          → mesin analisis murni (Python). Tidak tahu apa-apa soal web/dashboard.
+montrva/          → mesin analisis murni (Python). Tidak tahu apa-apa soal web/dashboard.
   layer1/             13 komponen Market Context + benchmark_history.py (deret ^GSPC lintas run)
   layer2/              tahap Stock Analysis (contracts.py per tahap + sources/ untuk fetch eksternal)
   personal/            lapisan pribadi OPSIONAL — lihat §Lapisan Pribadi. Kalau folder ini dihapus,
                        sisa sistem jalan utuh (backend mendeteksinya lewat PERSONAL_ENABLED).
-  cli.py               CLI untuk jalankan tiap tahap manual (python -m alphaforge.cli <stage>)
+  cli.py               CLI untuk jalankan tiap tahap manual (python -m montrva.cli <stage>)
   cache.py             cache lokal berbasis file (.cache/, gitignored, TTL per sumber)
   runlock.py           kunci eksklusif antar-proses — mencegah dua run menulis file tahap bersamaan
   json_safe.py         serialisasi JSON yang aman dari NaN/Infinity (lihat §Known Gaps)
 
 backend/app.py        → Flask, READ-ONLY. Cuma menyajikan dashboard/data/*.json sebagai API.
                          Tidak menghitung apa pun sendiri. Juga bisa TRIGGER refresh (subprocess ke
-                         scripts/) lewat tombol Generate, tapi computation-nya tetap di alphaforge/.
+                         scripts/) lewat tombol Generate, tapi computation-nya tetap di montrva/.
   big_json.py           akses per-record ke dua berkas terbesar tanpa menahannya di RAM —
                          WAJIB dibaca sebelum menambah pembaca stage baru, lihat §Memori.
-  personal_routes.py    route lapisan pribadi (didaftarkan cuma kalau alphaforge/personal/ ada).
+  personal_routes.py    route lapisan pribadi (didaftarkan cuma kalau montrva/personal/ ada).
 
 frontend/             → React + Vite. Baca API dari backend/app.py, render dashboard.
                          Build ke frontend/dist/ (tracked di git, di-serve langsung oleh Flask —
@@ -52,7 +52,7 @@ dashboard/data/*.json  → SUMBER KEBENARAN untuk apa yang ditampilkan dashboard
                          perlakukan sesuai (§Memori).
 ```
 
-**Alur data**: `alphaforge/` (compute) → tulis ke `dashboard/data/*.json` (lewat `scripts/refresh_*.py` atau `python -m alphaforge.cli <stage> --out ...`) → `backend/app.py` baca file itu → `frontend/` render. Tidak ada arah lain — dashboard **tidak pernah** menghitung ulang apa pun (Prinsip 2.1 di spec repo).
+**Alur data**: `montrva/` (compute) → tulis ke `dashboard/data/*.json` (lewat `scripts/refresh_*.py` atau `python -m montrva.cli <stage> --out ...`) → `backend/app.py` baca file itu → `frontend/` render. Tidak ada arah lain — dashboard **tidak pernah** menghitung ulang apa pun (Prinsip 2.1 di spec repo).
 
 ---
 
@@ -145,7 +145,7 @@ Halaman Knowledge di dashboard **tidak** menampilkan satu tabel flat 4000+ baris
 
 ---
 
-## Lapisan Pribadi (`alphaforge/personal/`, OPSIONAL)
+## Lapisan Pribadi (`montrva/personal/`, OPSIONAL)
 
 Layer 2 di atas berhenti di "apa yang terlihat" dan sengaja tidak pernah menyuruh berbuat apa-apa. Lapisan pribadi adalah yang mengubahnya jadi *call* bernama, lalu **menagih pertanggungjawabannya**. Ia hidup terpisah supaya bisa dihapus utuh untuk rilis publik: kalau folder ini tidak ada, `PERSONAL_ENABLED=False`, route-nya tidak didaftarkan, dan grup nav "Pribadi" hilang sendiri dari dashboard.
 
@@ -238,4 +238,4 @@ Beberapa disiplin lain yang terbukti berharga di repo ini dan layak diulang:
 
 ---
 
-© AlphaForge v2
+© Montrva v2

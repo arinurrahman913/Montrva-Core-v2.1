@@ -1,5 +1,5 @@
 """Refresh Layer 1 only — lightweight, meant to run every ~2h via Task
-Scheduler (task "AlphaForge-Layer1-Refresh"). Does NOT run Screening (no
+Scheduler (task "Montrva-Layer1-Refresh"). Does NOT run Screening (no
 network fan-out), but REUSES the price history the daily full pipeline already
 cached (.cache/price_history/, loaded via load_cached_price_cache — zero
 network) so market_breadth/market_sentiment stay populated instead of dropping
@@ -22,11 +22,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge import runlock  # noqa: E402
-from alphaforge.json_safe import dumps_safe  # noqa: E402
-from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
-from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
-from alphaforge.layer2.screening import load_cached_price_cache  # noqa: E402
+from montrva import runlock  # noqa: E402
+from montrva.json_safe import dumps_safe  # noqa: E402
+from montrva.layer1 import historical as layer1_historical  # noqa: E402
+from montrva.layer1.pipeline import build_market_context_package  # noqa: E402
+from montrva.layer2.screening import load_cached_price_cache  # noqa: E402
 
 OUT_PATH = ROOT / "dashboard" / "data" / "layer1_context.json"
 HISTORY_PATH = ROOT / "dashboard" / "data" / "layer1_history.json"
@@ -56,7 +56,7 @@ def _passed_tickers() -> list[str] | None:
 
 
 def main() -> int:
-    # Job terjadwal (AlphaForge-Layer1-Refresh, tiap 2 jam) TIDAK boleh
+    # Job terjadwal (Montrva-Layer1-Refresh, tiap 2 jam) TIDAK boleh
     # menyela run pipeline penuh: 2026-08-01 keduanya beririsan, berebut cache
     # sector ETF yang sama, dan money_flow jatuh jadi `missing`. Keluar diam-
     # diam dengan exit 0 -- ini bukan kegagalan, cuma tidak ada yang perlu

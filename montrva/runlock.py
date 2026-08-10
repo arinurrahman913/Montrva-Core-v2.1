@@ -1,6 +1,6 @@
 """Kunci eksklusif antar-proses untuk run yang menulis cache & file tahap.
 
-Kenapa ada: 2026-08-01 job terjadwal `AlphaForge-Layer1-Refresh` (tiap 2 jam)
+Kenapa ada: 2026-08-01 job terjadwal `Montrva-Layer1-Refresh` (tiap 2 jam)
 menyala di tengah run `refresh_full_pipeline.py` manual. Keduanya menarik
 sector ETF yang sama ke direktori cache yang sama, `os.replace` kalah balapan,
 dan komponen `money_flow` jadi `missing` — Layer Score lalu dihitung dari 12

@@ -86,7 +86,7 @@ def set(namespace: str, key: str, data) -> None:
     `os.replace` itu sendiri: di Windows, rename ditolak (`WinError 5 Access
     is denied` / `WinError 32 sharing violation`) kalau file TUJUAN sedang
     dibuka proses lain. Terjadi nyata 2026-08-01 — job terjadwal
-    AlphaForge-Layer1-Refresh (tiap 2 jam) beririsan dengan run pipeline
+    Montrva-Layer1-Refresh (tiap 2 jam) beririsan dengan run pipeline
     manual, keduanya menarik sector ETF yang sama, dan `XLP_1y_1d` gagal
     di-rename.
 

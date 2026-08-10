@@ -2,10 +2,10 @@
 Confidence -> Risk -> Reasoning -> Aggregator -> Historical, plus Layer 1
 with a complete price_cache (so market_breadth/market_sentiment get a real
 reading too). Meant to run once/day via Task Scheduler (task
-"AlphaForge-FullPipeline-Refresh").
+"Montrva-FullPipeline-Refresh").
 
 Runs every stage in-process — calls the same run_*() functions directly,
-not 9 separate `python -m alphaforge.cli ...` subprocess invocations —
+not 9 separate `python -m montrva.cli ...` subprocess invocations —
 so there's no repeated interpreter startup and no JSON-serialize-then-
 deserialize round trip between stages.
 
@@ -40,42 +40,42 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge import runlock  # noqa: E402
-from alphaforge.json_safe import dump_safe  # noqa: E402
-from alphaforge.layer1 import historical as layer1_historical  # noqa: E402
-from alphaforge.layer1.pipeline import build_market_context_package  # noqa: E402
-from alphaforge.layer1.benchmark_history import sync_benchmark_history  # noqa: E402
-from alphaforge.layer2.screening import run_screening  # noqa: E402
-from alphaforge.layer2.evidence import run_evidence  # noqa: E402
-from alphaforge.layer2.price_target import sync_price_target_history, save_price_target_store  # noqa: E402
-from alphaforge.layer2.knowledge import run_knowledge  # noqa: E402
-from alphaforge.layer2.catalyst import run_catalyst  # noqa: E402
-from alphaforge.layer2.catalyst_history import sync_catalyst_history, save_catalyst_history_store  # noqa: E402
-from alphaforge.layer2.institutional_flow import run_institutional_flow  # noqa: E402
-from alphaforge.layer2.peer import run_peer_comparison  # noqa: E402
-from alphaforge.layer2.confidence import run_confidence  # noqa: E402
-from alphaforge.layer2.risk import run_risk_assessment  # noqa: E402
-from alphaforge.layer2.reasoning import run_reasoning_pipeline  # noqa: E402
-from alphaforge.layer2.aggregator import run_aggregator  # noqa: E402
-from alphaforge.layer2.historical import load_historical_timeline, update_timeline  # noqa: E402
-from alphaforge.layer2 import source_health  # noqa: E402
+from montrva import runlock  # noqa: E402
+from montrva.json_safe import dump_safe  # noqa: E402
+from montrva.layer1 import historical as layer1_historical  # noqa: E402
+from montrva.layer1.pipeline import build_market_context_package  # noqa: E402
+from montrva.layer1.benchmark_history import sync_benchmark_history  # noqa: E402
+from montrva.layer2.screening import run_screening  # noqa: E402
+from montrva.layer2.evidence import run_evidence  # noqa: E402
+from montrva.layer2.price_target import sync_price_target_history, save_price_target_store  # noqa: E402
+from montrva.layer2.knowledge import run_knowledge  # noqa: E402
+from montrva.layer2.catalyst import run_catalyst  # noqa: E402
+from montrva.layer2.catalyst_history import sync_catalyst_history, save_catalyst_history_store  # noqa: E402
+from montrva.layer2.institutional_flow import run_institutional_flow  # noqa: E402
+from montrva.layer2.peer import run_peer_comparison  # noqa: E402
+from montrva.layer2.confidence import run_confidence  # noqa: E402
+from montrva.layer2.risk import run_risk_assessment  # noqa: E402
+from montrva.layer2.reasoning import run_reasoning_pipeline  # noqa: E402
+from montrva.layer2.aggregator import run_aggregator  # noqa: E402
+from montrva.layer2.historical import load_historical_timeline, update_timeline  # noqa: E402
+from montrva.layer2 import source_health  # noqa: E402
 
-# Lapisan pribadi -- OPSIONAL secara desain (lihat alphaforge/personal/
+# Lapisan pribadi -- OPSIONAL secara desain (lihat montrva/personal/
 # __init__.py docstring). Kalau folder ini dihapus (mis. rilis publik),
 # pipeline publik di bawah harus tetap jalan utuh tanpa personal_calls/
 # personal_history sama sekali -- itulah yang membuat pemisahannya nyata,
 # bukan cuma klaim di dokumen.
 try:
-    from alphaforge.personal import (  # noqa: E402
+    from montrva.personal import (  # noqa: E402
         load_holdings, build_personal_call_sets,
         load_personal_history, update_personal_timeline, save_personal_history,
         annotate_action_streaks,
         evaluate_due_entries,
     )
-    # Diimpor dari modulnya langsung (bukan lewat alphaforge.personal.__init__)
+    # Diimpor dari modulnya langsung (bukan lewat montrva.personal.__init__)
     # supaya perbedaan import di sini ketahuan sebagai ImportError di tempat
     # ini juga -- ikut gerbang try/except yang sama dengan sisa lapisan pribadi.
-    from alphaforge.personal.personal_calibration import build_calibration  # noqa: E402
+    from montrva.personal.personal_calibration import build_calibration  # noqa: E402
     PERSONAL_ENABLED = True
 except ImportError:
     PERSONAL_ENABLED = False
@@ -93,7 +93,7 @@ _screening_limit_raw = os.environ.get("SCREENING_LIMIT")
 SCREENING_LIMIT = int(_screening_limit_raw) if _screening_limit_raw else None
 
 # SCREENING_SECTOR: filter ke satu sektor GICS (mis. "Technology") pakai
-# sector_map cache (lihat alphaforge/layer2/sources/sector_map.py +
+# sector_map cache (lihat montrva/layer2/sources/sector_map.py +
 # scripts/build_sector_map.py) — supaya screening harian tidak harus scan
 # seluruh universe kalau user cuma mau fokus satu sektor lewat dashboard.
 SCREENING_SECTOR = os.environ.get("SCREENING_SECTOR") or None
@@ -146,7 +146,7 @@ def _atomic_write(path: Path, data: dict) -> None:
     """Tulis JSON secara atomik (tmp + os.replace) dan hemat memori.
 
     Streaming lewat `dump_safe` (bukan merakit string raksasa lalu write_text)
-    — lihat docstring `alphaforge.json_safe.dump_safe` untuk kenapa: run
+    — lihat docstring `montrva.json_safe.dump_safe` untuk kenapa: run
     2026-07-30 mati MemoryError di titik tulis evidence.json.
     """
     tmp = path.with_name(path.name + ".tmp")
@@ -554,7 +554,7 @@ def _run() -> int:
 
 
 if __name__ == "__main__":
-    # Audit item C4: alphaforge/layer2/sources/_retry.py menjalankan tiap
+    # Audit item C4: montrva/layer2/sources/_retry.py menjalankan tiap
     # panggilan network lewat ThreadPoolExecutor global supaya bisa dibatasi
     # timeout -- tapi Python tidak punya cara membunuh thread yang sedang
     # jalan, jadi panggilan yang macet (pernah teramati: yfinance menggantung

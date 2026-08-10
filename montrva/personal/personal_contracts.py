@@ -1,9 +1,9 @@
 """Personal layer contracts — kosakata action/horizon per lens + validasi P1-P5.
 
 Ini BUKAN bagian dari kontrak publik (04_DATA_CONTRACTS.md) — spec lengkapnya
-hidup di dokumen privat, bukan di alphaforge-v2-main. Modul di sini boleh
-mengimpor dari alphaforge.layer1/layer2, tapi TIDAK ADA modul publik yang
-boleh mengimpor dari alphaforge.personal — arahnya satu arah, supaya folder
+hidup di dokumen privat, bukan di montrva-v2-main. Modul di sini boleh
+mengimpor dari montrva.layer1/layer2, tapi TIDAK ADA modul publik yang
+boleh mengimpor dari montrva.personal — arahnya satu arah, supaya folder
 ini bisa dihapus utuh tanpa merusak apa pun di luar dirinya sendiri.
 
 PersonalCall MEMBACA ModuleOutput (reasoning_contracts.py), tidak pernah

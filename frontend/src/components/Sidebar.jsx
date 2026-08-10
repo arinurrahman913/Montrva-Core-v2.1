@@ -29,7 +29,7 @@ const NAV_GROUPS = [
 ]
 
 // Grup terpisah, dirender cuma kalau personalEnabled (backend /api/
-// capabilities) -- rilis publik (folder alphaforge/personal/ dihapus)
+// capabilities) -- rilis publik (folder montrva/personal/ dihapus)
 // membuat capabilities.personal_enabled otomatis false, grup ini hilang
 // total tanpa menyentuh NAV_GROUPS publik di atas sama sekali.
 const PERSONAL_NAV_GROUP = {

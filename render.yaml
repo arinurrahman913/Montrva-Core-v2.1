@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: alphaforge-dashboard
+    name: montrva-dashboard
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt

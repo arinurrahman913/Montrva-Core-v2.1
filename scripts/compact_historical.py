@@ -3,7 +3,7 @@
 Berkas ini menyimpan snapshot AggregatorOutput UTUH per ticker per hari sejak
 awal: 570 MB untuk 13 hari, 97,3% di antaranya `aggregator_output`, dengan
 proyeksi ~31 GB pada retensi lama (730 hari). Aturan barunya ada di
-alphaforge/layer2/historical.py: entry TERAKHIR tiap ticker tetap penuh,
+montrva/layer2/historical.py: entry TERAKHIR tiap ticker tetap penuh,
 sisanya jadi bentuk tipis (`thin_entry`), retensi 365 hari.
 
 `update_timeline` sudah menerapkan aturan itu tiap run, jadi skrip ini
@@ -35,8 +35,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from alphaforge.json_safe import dump_safe  # noqa: E402
-from alphaforge.layer2.historical import RETENTION_DAYS, thin_entry  # noqa: E402
+from montrva.json_safe import dump_safe  # noqa: E402
+from montrva.layer2.historical import RETENTION_DAYS, thin_entry  # noqa: E402
 from backend import big_json  # noqa: E402
 
 TIMELINE_PATH = ROOT / "dashboard" / "data" / "historical_timeline.json"

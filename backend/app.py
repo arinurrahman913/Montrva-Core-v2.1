@@ -1,4 +1,4 @@
-"""Flask API + static server for the AlphaForge dashboard.
+"""Flask API + static server for the Montrva dashboard.
 
 Read-only: serves whatever the pipeline has already written to
 dashboard/data/*.json, plus the built React app in frontend/dist. Does not
@@ -30,20 +30,20 @@ from flask import Flask, jsonify, request, send_from_directory
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alphaforge import runlock  # noqa: E402
+from montrva import runlock  # noqa: E402
 from backend import big_json  # noqa: E402
-from alphaforge.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
-from alphaforge.layer2.sources.sector_map import (  # noqa: E402
+from montrva.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
+from montrva.layer2.sources.sector_map import (  # noqa: E402
     KNOWN_SECTORS, load_sector_map_meta as sector_map_meta
 )
-from alphaforge.layer2.ai_narrative import get_or_generate_narrative  # noqa: E402
+from montrva.layer2.ai_narrative import get_or_generate_narrative  # noqa: E402
 
 DATA_DIR = ROOT / "dashboard" / "data"
 # Sama dengan LOG_DIR di scripts/refresh_full_pipeline.py — log kegagalan
 # refresh ditulis ke sini (lihat _dump_failure_log).
 LOG_DIR = ROOT / "logs"
 
-# Lapisan pribadi -- OPSIONAL. Kalau alphaforge/personal/ atau
+# Lapisan pribadi -- OPSIONAL. Kalau montrva/personal/ atau
 # backend/personal_routes.py dihapus (rilis publik), import ini gagal dan
 # PERSONAL_ENABLED jadi False -- sisa route di bawah tidak terpengaruh sama
 # sekali. Frontend membaca PERSONAL_ENABLED lewat /api/capabilities untuk
@@ -763,7 +763,7 @@ def get_historical_summary():
     [DIPERBARUI 2026-08-09] Sisa pekerjaan terbuka yang disebut catatan di
     atas -- pertumbuhan berkasnya sendiri -- sudah ditutup: cuma entry
     TERAKHIR tiap ticker yang menyimpan `aggregator_output` penuh, sisanya
-    bentuk tipis, retensi 365 hari (alphaforge/layer2/historical.py). Berarti
+    bentuk tipis, retensi 365 hari (montrva/layer2/historical.py). Berarti
     endpoint ini TIDAK boleh lagi mengasumsikan tiap entry punya
     `aggregator_output` -- lihat _build_historical_summary."""
     return jsonify(_get_derived("historical", _build_historical_summary))
@@ -861,7 +861,7 @@ def get_consistency():
 def get_capabilities():
     """Dibaca frontend sekali di startup untuk tahu apakah grup nav
     "Pribadi" perlu ditampilkan (§8/§9 draft personal layer) -- rilis publik
-    (folder alphaforge/personal/ dihapus) otomatis membuat ini False, tanpa
+    (folder montrva/personal/ dihapus) otomatis membuat ini False, tanpa
     perlu env var atau config terpisah."""
     return jsonify({"personal_enabled": PERSONAL_ENABLED})
 

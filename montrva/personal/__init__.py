@@ -1,6 +1,6 @@
 """Personal layer -- action/horizon per lens + holdings + riwayat pribadi.
 
-TIDAK ADA modul di alphaforge/layer1 atau alphaforge/layer2 yang boleh
+TIDAK ADA modul di montrva/layer1 atau montrva/layer2 yang boleh
 mengimpor dari sini (arah satu arah, lihat personal_contracts.py docstring).
 Menghapus folder ini harus membuat sisa aplikasi tetap jalan utuh --- itu
 yang membuat pemisahan publik/pribadi nyata, bukan sekadar klaim.
