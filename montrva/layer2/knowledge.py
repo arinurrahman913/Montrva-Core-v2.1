@@ -11,6 +11,7 @@ Lihat 03_LAYER2_SPECS/03_KNOWLEDGE.md.
 from __future__ import annotations
 
 import sys
+import traceback
 from datetime import date, datetime, timezone
 
 # Jendela amandemen filing. Evidence sekarang menyimpan 3 tahun filing (lihat
@@ -210,9 +211,13 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         # Cakupan pemegang institusi -- lihat komentar di Ownership
         # (knowledge_contracts.py) soal kenapa yang dipakai rasionya, bukan
         # holders_total sendiri.
-        holders_total=len(evidence.institutional_ownership.top_holders),
+        # `or []`: top_holders bisa None (bukan cuma list kosong) kalau fetch
+        # Yahoo holders gagal sebagian -- `len(None)` meledak dan ticker itu
+        # hilang dari knowledge.json tanpa jejak, kelas bug yang sama dengan
+        # catatan close=None di knowledge_helpers.calculate_volatility.
+        holders_total=len(evidence.institutional_ownership.top_holders or []),
         holders_with_change_basis=sum(
-            1 for h in evidence.institutional_ownership.top_holders
+            1 for h in evidence.institutional_ownership.top_holders or []
             if h.pct_change is not None
         ),
     )
@@ -386,20 +391,23 @@ def _extract_sources(evidence: EvidencePackage) -> list[str]:
     """Extract source list dari Evidence metadata."""
     sources = set()
 
-    if evidence.price_market.metadata.status != "missing":
-        sources.add(evidence.price_market.metadata.source)
-    if evidence.fundamental.metadata.status != "missing":
-        sources.add(evidence.fundamental.metadata.source)
-    if evidence.institutional_ownership.metadata.status != "missing":
-        sources.add(evidence.institutional_ownership.metadata.source)
-    if evidence.institutional_activity.metadata.status != "missing":
-        sources.add(evidence.institutional_activity.metadata.source)
-    if evidence.news.metadata and evidence.news.metadata.status != "missing":
-        sources.add(evidence.news.metadata.source)
-    if evidence.sec_filings.metadata and evidence.sec_filings.metadata.status != "missing":
-        sources.add(evidence.sec_filings.metadata.source)
+    # metadata.source bisa None walau status != "missing" (sumber degraded yang
+    # tidak sempat menuliskan namanya). Menambahkan None ke set membuat
+    # sorted() di bawah meledak "'<' not supported between str and NoneType"
+    # -- satu ticker hilang total dari knowledge.json cuma karena nama sumber
+    # kosong, padahal datanya sendiri utuh.
+    def _add(meta) -> None:
+        if meta and meta.status != "missing" and meta.source:
+            sources.add(meta.source)
 
-    return sorted(list(sources))
+    _add(evidence.price_market.metadata)
+    _add(evidence.fundamental.metadata)
+    _add(evidence.institutional_ownership.metadata)
+    _add(evidence.institutional_activity.metadata)
+    _add(evidence.news.metadata)
+    _add(evidence.sec_filings.metadata)
+
+    return sorted(sources)
 
 
 def _generate_quality_notes(evidence: EvidencePackage, returns: dict, volatility: float | None) -> str | None:
@@ -441,7 +449,10 @@ def _compute_earnings_beat_streak(eps_surprise_history: list) -> str | None:
     earnings_history), bukan 8 -- lihat AnalystEstimatesBlock di frontend.
     Kuartal tanpa surprise_pct (None) tidak dihitung sebagai penyebut.
     """
-    valid = [e for e in eps_surprise_history if e.surprise_pct is not None]
+    # `or []`: pemanggil sudah menjaga analyst_estimates None, tapi ATRIBUT
+    # eps_surprise_history-nya sendiri masih bisa None kalau blok earnings
+    # history gagal difetch -- iterasi atas None meledak dan menelan ticker.
+    valid = [e for e in eps_surprise_history or [] if e.surprise_pct is not None]
     if not valid:
         return None
 
@@ -595,7 +606,15 @@ def run_knowledge(evidence_packages: list[EvidencePackage], screening_candidates
             profile = build_knowledge_for_ticker(evidence, candidate)
             profiles.append(profile)
         except Exception as e:
+            # Traceback IKUT dicetak, bukan cuma str(e). Run 2026-08-10
+            # kehilangan 8 ticker dengan pesan "'<=' not supported between
+            # NoneType and int" -- pesan itu sendiri tidak menyebut baris mana
+            # yang meledak, dan input pemicunya (evidence run itu) tidak
+            # pernah dipersist, jadi penyebabnya tidak bisa dilacak ulang
+            # sesudahnya. Satu baris traceback membuat kejadian berikutnya
+            # langsung bisa ditunjuk barisnya.
             print(f"Error building knowledge for {evidence.ticker}: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
 
     print(f"Knowledge complete: {len(profiles)} profiles", file=sys.stderr)
     return profiles
