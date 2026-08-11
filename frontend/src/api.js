@@ -72,6 +72,10 @@ export const api = {
   // itu ikut mengunduh riwayat 160 MB.
   personalHistoryPreviousPicks: () => getJSON('/api/personal/history/previous-picks'),
   personalDueForReview: () => getJSON('/api/personal/due-for-review'),
+  // ~4 KB, konstan sepanjang run — ACTION_TABLE + ambang tier, disajikan dari
+  // Python supaya panel "Jalur Keputusan" tidak perlu menyalin 72 sel aturan
+  // ke JS (lihat docstring endpoint-nya di backend/personal_routes.py).
+  personalActionTable: () => getJSON('/api/personal/action-table'),
   // ~10 KB (sudah teragregasi backend), BUKAN personalHistory yang 127 MB.
   personalCalibration: () => getJSON('/api/personal/calibration'),
   // Trigger refresh pipeline dari dashboard. Tidak throw pada 409 (sudah jalan).

@@ -174,6 +174,28 @@ def register(app, data_dir: Path) -> None:
             "history": history.get(ticker),
         })
 
+    @app.get("/api/personal/action-table")
+    def get_personal_action_table():
+        """ACTION_TABLE + ambang tier, disajikan LANGSUNG dari Python.
+
+        Panel "Jalur Keputusan" (TickerModal) menyorot sel yang menyala di
+        dalam grid aslinya, jadi ia butuh seluruh tabelnya -- bukan cuma
+        action yang sudah jadi. Tabelnya TIDAK diketik ulang di JS dengan
+        sengaja: gerbang tier yang sama sudah tersalin di tiga tempat
+        (personal_reasoning._thesis_score_tier, personal_calibration._score_tier,
+        ThesisProof.scoreTierKey) dan komentar di sana sendiri mencatat "tidak
+        ada yang menghubungkan mereka secara struktural". Menyalin 72 sel lagi
+        akan melipatgandakan kelas kesalahan itu -- kalau tabelnya berubah, UI
+        akan mengajarkan aturan yang sudah tidak dipakai tanpa satu pun test
+        yang gagal.
+        """
+        from montrva.personal.personal_reasoning import ACTION_TABLE, SCORE_TIER_BOUNDS
+
+        return jsonify({
+            "action_table": ACTION_TABLE,
+            "score_tier_bounds": SCORE_TIER_BOUNDS,
+        })
+
     @app.get("/api/personal/history")
     def get_personal_history():
         """Riwayat UTUH -- 160 MB. Sengaja dipertahankan (alat bantu & skrip

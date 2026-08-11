@@ -317,6 +317,13 @@ def summarize_risk(risk) -> tuple[int, int, list[str]]:
     return high, medium, types
 
 
+# Ambang tier, dinamai supaya angkanya punya SATU tempat tinggal. Panel
+# "Jalur Keputusan" di dashboard menampilkan jarak call ke ambang terdekat
+# ("skor 75, 5 poin dari medium") -- angka itu diambil dari sini lewat
+# /api/personal/action-table, bukan diketik ulang di JS.
+SCORE_TIER_BOUNDS = {"high": 70, "medium": 50}
+
+
 def _thesis_score_tier(thesis_score: float) -> str:
     """Ganti gerbang ACTION_TABLE per keputusan pengguna 2026-07-29: dulu
     dikunci ke confidence.band, tapi audit menemukan confidence.band=='high'
@@ -332,9 +339,9 @@ def _thesis_score_tier(thesis_score: float) -> str:
     live. confidence.band tetap dipakai terpisah di P4 (validate_personal_
     call) sebagai penjaga "data terlalu buruk buat dipercaya", bukan lagi
     sebagai penentu tingkat action."""
-    if thesis_score >= 70:
+    if thesis_score >= SCORE_TIER_BOUNDS["high"]:
         return "high"
-    if thesis_score >= 50:
+    if thesis_score >= SCORE_TIER_BOUNDS["medium"]:
         return "medium"
     return "low"
 

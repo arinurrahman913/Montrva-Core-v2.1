@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { RiskBadge } from './ThesisProof'
+import DecisionPath from './DecisionPath'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, trendSpanLabel, MODULE_LABELS,
@@ -536,10 +537,12 @@ function PercentileBar({ label, comp, groupSize, benchmark }) {
 }
 
 function PeerComparisonCard({ peer, aiNarrative }) {
+  // DI ATAS early return: ticker tanpa data peer memang ada (cabang di bawah),
+  // dan hook yang dipanggil bersyarat mengubah urutan hook antar render.
+  const [benchmark, setBenchmark] = useState('sector')
   if (!peer) return <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>Belum ada data peer comparison untuk ticker ini.</p>
 
   const pg = peer.peer_group || {}
-  const [benchmark, setBenchmark] = useState('sector')
 
   return (
     <div className="mcell">
@@ -917,6 +920,9 @@ function LensGrid({ reasoning }) {
 // pernah ada di nav (Sidebar.jsx) -- tapi komponen ini tetap defensif kalau
 // dipanggil manual/context lama.
 function PersonalCallCard({ module, call }) {
+  // DI ATAS early return: hook tidak boleh dipanggil bersyarat, dan lensa
+  // tanpa data (call == null) memang terjadi -- itu cabang pertama di bawah.
+  const [showPath, setShowPath] = useState(false)
   if (!call) {
     return (
       <div className="lens-card">
@@ -989,6 +995,23 @@ function PersonalCallCard({ module, call }) {
       <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
         Berdasarkan stance: {call.source_stance} (confidence {call.source_confidence?.toFixed(0) ?? '—'})
       </div>
+
+      {/* Kartu ini menampilkan HASIL; bagian di bawah menampilkan TURUNANNYA.
+          Ditutup secara default supaya kartu tetap ringkas — dan lazy: tabel
+          aksi baru diminta ke backend saat benar-benar dibuka, bukan 3x per
+          modal dibuka (satu per lensa). */}
+      <button
+        type="button"
+        onClick={() => setShowPath((v) => !v)}
+        style={{
+          marginTop: 8, width: '100%', textAlign: 'left', background: 'transparent',
+          border: '1px solid var(--rule)', borderRadius: 6, padding: '5px 8px',
+          fontSize: 10, color: 'var(--dim)', cursor: 'pointer',
+        }}
+      >
+        {showPath ? '▾' : '▸'} Jalur keputusan
+      </button>
+      {showPath && <DecisionPath module={module} call={call} />}
     </div>
   )
 }
