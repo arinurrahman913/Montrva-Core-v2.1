@@ -540,13 +540,15 @@ def _run() -> int:
     layer1_historical.append_entry(DATA_DIR / "layer1_history.json", layer1_pkg)
     source_health.append_entry(DATA_DIR / "source_health_history.json", evidence_packages)
 
-    # Root reference snapshots — tracked in git, matches the convention
-    # already established for evidence.json/knowledge.json/peer_results.json/
-    # screening.json at the repo root.
-    _atomic_write(ROOT / "screening.json", screening_data)
-    _atomic_write(ROOT / "evidence.json", evidence_data)
-    _atomic_write(ROOT / "knowledge.json", knowledge_data)
-    _atomic_write(ROOT / "peer_results.json", peer_data)
+    # Salinan root (screening/evidence/knowledge/peer_results.json) DIHAPUS
+    # 2026-08-11. Alasan yang tertulis di sini -- "tracked in git" -- sudah
+    # tidak benar sejak keempatnya masuk .gitignore (baris 13-16): tidak
+    # pernah ter-commit, dan `git ls-files` atas keempatnya kosong. Tidak ada
+    # konsumen yang tersisa: backend/app.py dan seluruh scripts/ membaca
+    # DATA_DIR (dashboard/data), montrva/cli.py menerima path eksplisit
+    # (--screening-out/--evidence-out/--out), dan WORKFLOW.md maupun README.md
+    # menunjuk dashboard/data. Yang tersisa cuma ongkosnya: ~275 MB tulisan
+    # duplikat tiap run, evidence.json (238 MB) dua kali.
 
     finished = datetime.now(timezone.utc)
     log.info(f"Full pipeline refresh complete in {(finished - started).total_seconds():.0f}s")
