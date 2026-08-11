@@ -213,6 +213,8 @@ File `sentiment_manual.json` sudah di-gitignore. Data AAII kadaluarsa (>30 hari)
 | Komponen FRED "missing" | File `.env` belum ada / key salah → `Copy-Item .env.example .env` lalu isi key, restart `python backend/app.py`. |
 | `market_breadth` missing | Cache harga masih kosong — jalankan full pipeline sekali (opsi C) untuk mengisinya. Setelah itu refresh cepat (opsi A) otomatis memakai ulang cache tsb. |
 | Dashboard kosong / error fetch | Pastikan backend (terminal 1) jalan di port 5000. |
+| `ERR_CONNECTION_REFUSED` di `localhost:5000` padahal auto-start aktif | Shortcut di Startup masih menunjuk path repo lama (mis. setelah folder di-rename). Cek: `Win+R` → `shell:startup` → klik kanan shortcut → Properties → pastikan Target/Start in mengarah ke folder repo saat ini. Kalau salah, hapus dan buat ulang shortcut ke `scripts/start-backend-hidden.vbs`. |
+| Port 5000 belum listening beberapa detik setelah start | Normal — startup backend butuh ~1–2 menit (import + load JSON). Tunggu, lalu refresh. Cek proses: `Get-Process pythonw`. |
 | Angka tidak berubah | Refresh data (bagian 4) lalu Ctrl+R di browser. |
 | Port bentrok | Ganti port backend: `$env:PORT="5001"` sebelum `python backend/app.py` (sesuaikan proxy di `frontend/vite.config.js`). |
 
