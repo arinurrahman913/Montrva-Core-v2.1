@@ -16,6 +16,106 @@ Status yang dipakai:
 
 ---
 
+## Audit #4 — 2026-08-12 (rentang `7334314..cd1bb1e`)
+
+Cakupannya kode yang berubah sejak Audit #3: rename Montrva, perbaikan D1
+(`9d8de3b`), penjaga Knowledge (`0f08bce`), pembuangan salinan root
+(`9f906ae`), panel Jalur Keputusan (`2350805`), blok Ditahan P4 (`b5315b8`),
+pembuangan timeline kosong (`a95d714`), gerbang kalibrasi per-lensa
+(`cd1bb1e`).
+
+Metodenya melanjutkan Audit #3 — menguji klaim terhadap data produksi, bukan
+membaca kode mencari bug. Sesi yang dipakai: run 2026-08-11, 4.059 profil.
+Dan justru perbaikan Audit #3 sendiri yang tidak lolos, persis seperti
+pelajaran yang sudah ditulis di bagian "Catatan untuk audit berikutnya":
+**setiap perbaikan besar sebaiknya diaudit ulang sebelum dianggap selesai.**
+
+### E1. Komponen ketiga `ownership` (D1) inert di produksi — TERBUKA
+`confidence.py::_score_ownership`, `knowledge.py`, `knowledge_contracts.py`
+
+D1 menambah komponen ketiga ke section `ownership` — rasio pemegang institusi
+yang punya `pct_change` — dengan alasan tertulis bahwa "rasionya di produksi
+tersebar 0,0–1,0 dengan median 0,8". Diukur ulang atas `knowledge.json` run
+2026-08-11:
+
+| | terukur |
+|---|---|
+| `holders_with_change_basis == holders_total` | **4.037 dari 4.037** ticker yang punya pemegang, nol pengecualian |
+| `holders_total == 0` | 22 ticker |
+| nilai unik rasio | **1** (semuanya 1,0), plus 0,0 untuk 22 ticker tadi |
+
+Jadi komponen itu cuma punya dua nilai, bukan sebaran. Section `ownership` di
+`confidence_scores.json` run yang sama: **4 nilai unik, modus 100,0 di 99,3%
+ticker** — dibanding 2 nilai / 99,5% sebelum D1. Pergeseran band yang
+dijanjikan juga tidak terjadi: `low` **tetap 221** (klaim: 221 → 249 di
+docstring, → 251 di badan commit), high 1.917, medium 1.921.
+
+Mekanismenya jelas begitu dilihat: `yahoo_evidence.py` mengisi `pct_change`
+untuk setiap baris yang Yahoo kembalikan sama sekali, jadi "punya pemegang"
+dan "punya dasar perubahan" adalah fakta yang sama. Dikonfirmasi sampel
+per-ticker lewat `/api/ticker/<t>`: AAPL/HAFN/AAL/CMRE/RVT semuanya 10 holder,
+nol `pct_change` null.
+
+Yang masih benar dari D1: `holders_total` memang tidak layak jadi cek sendiri
+(97,2% ticker bernilai persis 10 — batas potong Yahoo). Yang gugur: anggapan
+bahwa rasionya lebih bervariasi.
+
+**Kenapa TERBUKA, bukan langsung diperbaiki**: dengan data yang ada, section
+`ownership` tidak bisa dibuat memisahkan apa pun — pilihannya menurunkan bobot
+0,15-nya, membuang section-nya, atau menerima. Ketiganya menggeser band
+SELURUH universe, dan `SECTION_WEIGHTS` termasuk kenop yang tidak boleh
+disetel sepihak. Docstring `_score_ownership` sudah dikoreksi supaya berhenti
+mengklaim efek yang tidak terjadi; angkanya sendiri dibiarkan apa adanya.
+
+**Pelajaran yang generalisasi**: pengukuran yang membenarkan sebuah perbaikan
+harus diulang dari ARTEFAK PRODUKSI sesudah perbaikan itu jalan, bukan
+dipercaya dari skrip pengukur sebelum-perbaikan. Ini instans ke-6 kelas
+"pemeriksa vs format produsen" di proyek ini.
+
+### E2. Dua catatan angka yang berbeda untuk satu pengukuran — SELESAI
+`confidence.py` vs badan commit `9d8de3b`
+
+Docstring dan badan commit mencatat hasil BERBEDA untuk pengukuran yang sama:
+nilai unik 20 vs 27, modus 38,1% vs 38,0%, band `1.799/2.006/249` vs
+`1.795/2.008/251`. Tidak ada yang cocok dengan produksi (lihat E1). Dua catatan
+yang tidak bisa didamaikan untuk satu pengukuran itu sendiri pertanda
+pengukurannya tidak pernah dijalankan ulang atas hasil akhirnya. Docstring
+sekarang memuat angka produksi yang bisa dicek ulang; badan commit dibiarkan
+(sejarah tidak ditulis ulang), koreksinya ada di sini.
+
+### E3. Dimensi irisan gerbang per-lensa tidak konsisten — SELESAI
+`personal_calibration.py::_module_tuning`
+
+Gerbang per-lensa yang baru (`cd1bb1e`) menghitung irisannya atas 4 dimensi
+sementara gerbang global memakai 7. "tipe risk flag" ikut hilang tanpa alasan —
+padahal ia bisa lolos gerbang bukti, jadi mengeluarkannya membuat gerbang
+per-lensa lebih ketat dari yang dimaksudkan tanpa dicatat. Sekarang ikut
+dihitung; dua dimensi yang memang degenerate di dalam satu lensa ("modul" —
+satu bucket menyalin seluruh populasi lensa; "tanggal masuk" — tiap bucket
+berisi satu tanggal sehingga syarat >=5 tanggal mustahil) tetap dikecualikan,
+sekarang dengan alasannya tertulis. Vonis tidak berubah (speculative tetap
+`true`), cuma penyebutnya: 4 dari 6 → 7 dari 19.
+
+### Diperiksa dan bersih
+
+- `knowledge.py` penjaga `0f08bce` — ketiga penjaga (`top_holders or []`,
+  `eps_surprise_history or []`, `_add()` yang menolak `source` kosong) benar
+  dan `traceback.print_exc` tidak menelan pengecualian.
+- `9f906ae` — nol pembaca tersisa untuk salinan root; `git ls-files` atas
+  keempat berkas kosong, konsisten dengan klaim commit.
+- `/api/personal/action-table` + `SCORE_TIER_BOUNDS` — tabel benar-benar
+  disajikan dari Python, tidak diketik ulang di JS. Catatan: yang tersatukan
+  baru 2 dari 3 salinan ambang 70/50; `personal_calibration._score_tier` dan
+  `ThesisProof.scoreTierKey` masih hardcode (pra-ada, sudah didokumentasikan).
+- `TickerModal.jsx` — `PeerComparisonCard` memanggil `useState` setelah early
+  return; itu bug urutan hook nyata dan sudah diperbaiki di `2350805`.
+- `SectionScore.filled` jadi `float` — nol konsumen yang beraritmetika
+  atasnya; dua pemakainya (limiter string, TickerModal `N/M`) cuma menampilkan.
+- `historical.py::update_timeline` pembuangan record kosong — idempoten, dan
+  4.241 ticker berisi terbukti nol drift.
+
+---
+
 ## Audit #3 — 2026-08-10 (setelah commit `7334314`)
 
 Beda metode dari dua audit sebelumnya: ini **tidak** membaca kode mencari bug

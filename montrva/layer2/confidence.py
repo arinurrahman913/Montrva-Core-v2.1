@@ -328,25 +328,38 @@ def _score_ownership(profile: KnowledgeProfile) -> SectionScore:
     dinaikkan ke 86. Satu section yang tidak mengukur apa-apa ikut
     menentukan ambang untuk section yang mengukur.
 
-    Perbaikannya menambah komponen ketiga yang benar-benar bervariasi:
-    berapa bagian pemegang institusi yang punya `pct_change` — yaitu berapa
-    banyak yang arah posisinya bisa dibaca, bukan sekadar ada. Dinilai
-    PROPORSIONAL, bukan lolos/gagal: rasionya di produksi tersebar 0,0–1,0
-    dengan median 0,8, jadi ambang boolean apa pun akan menggumpal lagi
-    (diuji: versi 5-cek bertingkat menaruh 85,4% ticker di satu nilai).
-    Alasannya sama persis dengan `_ramp` di reasoning.py — terlalu sedikit
-    nilai unik untuk memeringkat apa pun.
+    Perbaikannya menambah komponen ketiga: berapa bagian pemegang institusi
+    yang punya `pct_change` — yaitu berapa banyak yang arah posisinya bisa
+    dibaca, bukan sekadar ada. Dinilai PROPORSIONAL, bukan lolos/gagal, dengan
+    alasan yang sama seperti `_ramp` di reasoning.py.
 
-    Terukur pada data yang sama: 2 nilai unik → 20, konsentrasi modus 99,5%
-    → 38,1%, pengaruh naik-band 0,2% → 4,8% (sejajar competitive_structure
-    4,1% dan historical_trend 3,8%). Efek ke overall.score bergeser median
-    −1,0 poin, dan band bergerak high 1.886→1.799 / medium 1.947→2.006 /
-    low 221→249.
+    AUDIT #4 (2026-08-12): KOMPONEN ITU TERNYATA INERT DI PRODUKSI, dan
+    catatan pengukuran yang dulu ditulis di sini TIDAK bisa direproduksi.
+    Diukur atas run 2026-08-11 (`knowledge.json`, 4.059 profil):
 
-    `holders_total` sengaja TIDAK jadi cek sendiri: Yahoo memotong di ~10
-    pemegang teratas sehingga 97,3% ticker bernilai persis 10 — itu batas
-    sumber, bukan kualitas data. Yang bermakna cuma rasionya. Nol pemegang
-    memberi rasio 0,0 (bukan pembagian nol, dan bukan pula kredit gratis)."""
+        holders_with_change_basis == holders_total  di 4.037 dari 4.037
+        ticker yang punya pemegang — NOL pengecualian. 22 sisanya
+        holders_total = 0. Rasio karena itu cuma bernilai 1,0 atau 0,0;
+        klaim lama "tersebar 0,0–1,0 dengan median 0,8" salah.
+
+    Akibatnya section ini masih hampir konstan: `confidence_scores.json` run
+    yang sama memberi 4 nilai unik dengan modus 100,0 di 99,3% ticker —
+    dibanding 2 nilai / 99,5% sebelum D1. Band yang dijanjikan bergeser juga
+    tidak terjadi: low tetap 221 (klaim lama: 221 → 249/251), high 1.917,
+    medium 1.921. Mekanismenya masuk akal begitu dilihat: Yahoo mengembalikan
+    `pctChange` untuk SETIAP baris yang ia kembalikan sama sekali, jadi
+    "punya pemegang" dan "punya dasar perubahan" adalah fakta yang sama.
+
+    Yang masih benar dari D1: `holders_total` memang tidak layak jadi cek
+    sendiri (97,2% ticker bernilai persis 10 — batas potong Yahoo, bukan
+    kualitas data). Yang gugur: anggapan bahwa RASIO-nya lebih bervariasi.
+    Dengan data yang ada sekarang, section `ownership` tidak bisa dibuat
+    memisahkan apa pun; yang tersisa keputusan kalibrasi atas bobot 0,15-nya,
+    dan itu kenop bersama — lihat AUDIT_LOG.md E1, sengaja TIDAK diputuskan
+    sepihak di sini.
+
+    Nol pemegang tetap memberi rasio 0,0 (bukan pembagian nol, dan bukan pula
+    kredit gratis) — itu 22 ticker yang benar-benar dibedakan section ini."""
     own = profile.ownership
     coverage = (
         own.holders_with_change_basis / own.holders_total

@@ -386,6 +386,13 @@ def _module_tuning(rows: list[dict], module: str) -> dict:
     irisan global seperti "tanggal masuk 2026-08-01" mencampur ketiga lensa,
     jadi memakainya di sini akan meloloskan lensa yang buktinya sendiri tipis
     dengan menumpang tesis lensa lain -- kebalikan dari maksud gerbang ini.
+
+    Dimensinya sama dengan build_calibration KECUALI dua yang degenerate di
+    sini: "modul" (di dalam satu lensa cuma ada satu bucket, jadi ia menyalin
+    ulang seluruh populasi lensa itu) dan "tanggal masuk" (tiap bucket
+    berisi persis satu tanggal, sehingga syarat >=MIN_ENTRY_DATES tanggal
+    TIDAK PERNAH bisa dipenuhi -- memasukkannya cuma menggelembungkan
+    penyebut "N dari M" dengan irisan yang mustahil lolos).
     """
     mrows = [r for r in rows if r["module"] == module]
     mslices = (
@@ -393,6 +400,7 @@ def _module_tuning(rows: list[dict], module: str) -> dict:
         + _slice_by(mrows, "action", lambda r: r["action"])
         + _slice_by(mrows, "stance", lambda r: r["stance"])
         + _slice_by(mrows, "tingkat skor tesis", lambda r: r["score_tier"])
+        + _slice_by(mrows, "tipe risk flag", lambda r: r["risk_flag_types"] or ["(tanpa flag)"])
     )
     evaluable = [s for s in mslices if s["evaluable"]]
     n_dates = len({r["entry_date"] for r in mrows if r["entry_date"]})
