@@ -239,6 +239,23 @@ def update_timeline(
         if len(timeline.entries) > 1:
             timeline.entries[:-1] = [thin_entry(e) for e in timeline.entries[:-1]]
 
+    # Record yang tidak pernah sekali pun berisi entry. Fungsi ini tidak bisa
+    # MEMBUATNYA -- kunci ticker cuma lahir di loop di atas, dan kelahirannya
+    # selalu langsung diikuti append + total_entries += 1 -- tapi juga tidak
+    # pernah MEMBUANGnya, sementara load/save mengedarkan setiap kunci apa
+    # adanya tiap run. Jadi sisa dari versi kode lama hidup selamanya: 4 ticker
+    # (AIFC/FLL/MCAH/SUMA, semuanya hard_excluded di Screening sejak lama) ikut
+    # terhitung di "4.245 ticker" dan tampil sebagai baris kosong bertanggal
+    # null di Historical, tanpa membawa satu bit informasi pun.
+    #
+    # Dibuang, bukan disembunyikan di lapisan tampilan: yang salah datanya,
+    # bukan cara membacanya. Kalau tickernya lolos screening lagi nanti, loop di
+    # atas membuat ulang kuncinya berikut entry pertamanya -- tidak ada yang
+    # hilang selain ketiadaan itu sendiri.
+    empty = [t for t, tl in timelines.items() if tl.total_entries == 0]
+    for ticker in empty:
+        del timelines[ticker]
+
     return timelines
 
 
