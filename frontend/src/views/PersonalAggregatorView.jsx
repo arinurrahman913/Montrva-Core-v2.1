@@ -390,11 +390,120 @@ function TopPicksSection({ callSets, prevPicks, onSelectTicker, calibration }) {
   )
 }
 
+// Call yang P4 turunkan dari action penuh ke versi bertahap. TIDAK disaring
+// ke no_holding: sel holding/quality_compound juga bisa turun (`tambah` ->
+// `tahan`, FULL_TO_GRADED_ACTION di personal_contracts.py). Run 2026-08-11
+// kebetulan nol holding, tapi menyaringnya berarti menyembunyikannya diam-diam
+// begitu holding pertama masuk -- persis kelas masalah yang blok ini perbaiki.
+//
+// Diranking pakai rankPersonalPicks yang SAMA dengan Top Pick di atas, bukan
+// sort sendiri: dua daftar di satu halaman yang urutannya dibentuk aturan
+// berbeda itu persis yang dulu bikin Agregator dan Riwayat menyebut top-3
+// berbeda untuk hari yang sama (lihat komentar panjang di format.js).
+function downgradedCalls(callSets, module) {
+  return rankPersonalPicks(
+    callSets
+      .map((cs) => ({ ticker: cs.ticker, call: cs[module] }))
+      .filter(({ call }) => call && call.action_downgraded_from),
+  )
+}
+
+// Sebelum blok ini, penurunan P4 tidak punya SATU PUN tempat tampil. Top Pick
+// menyaring lewat isBestAction() yang cuma menerima action penuh, jadi call
+// yang diturunkan tersingkir by construction; Riwayat Pribadi cuma memuat
+// ticker yang pernah masuk top-3; dan bagian pribadi tidak dirender di luar
+// PERSONAL_CONTEXTS. Akibatnya di run 2026-08-11: 6 ticker berskor tesis
+// 100,0 -- setinggi yang mungkin -- hilang total dari halaman ini, dan yang
+// hilang justru argumen terkuatnya.
+//
+// Baris ringkas, BUKAN PickCard: PickCard memanggil api.ticker() +
+// api.liveQuote() per kartu plus ThesisProof, jadi 43 kartu >100 permintaan
+// untuk daftar yang tugasnya cuma menjawab "kenapa ini tidak di atas".
+// Detail lengkapnya satu klik jauhnya di TickerModal, yang sudah punya panel
+// Jalur keputusan dengan langkah P4-nya.
+//
+// Tertutup default: 43 baris terbuka menenggelamkan 9 kartu top pick yang
+// jadi inti halaman.
+function DowngradedSection({ callSets, onSelectTicker }) {
+  const [open, setOpen] = useState(false)
+  const byLens = LENSES.map((module) => ({ module, rows: downgradedCalls(callSets, module) }))
+    .filter(({ rows }) => rows.length > 0)
+  const total = byLens.reduce((n, { rows }) => n + rows.length, 0)
+  if (total === 0) return null
+  const tickers = new Set(byLens.flatMap(({ rows }) => rows.map((r) => r.ticker)))
+
+  return (
+    <div style={{ border: '1px solid var(--rule)', borderRadius: 8, padding: '10px 12px', marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
+          Ditahan P4 — skornya lolos, datanya belum
+        </div>
+        <button
+          onClick={() => setOpen(!open)}
+          style={{ fontSize: 10.5, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', whiteSpace: 'nowrap' }}
+        >
+          {open ? 'sembunyikan' : `lihat ${total} call`}
+        </button>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--faint)', margin: '4px 0 0', lineHeight: 1.5 }}>
+        <strong style={{ color: 'var(--warn)' }}>{total} call</strong> di {tickers.size} ticker —{' '}
+        {byLens.map(({ module, rows }) => `${LENS_TITLES[module].split(' —')[0]} ${rows.length}`).join(' · ')}.
+        Action penuhnya diganti versi bertahap karena confidence lensa itu <code>low</code> (P4), jadi mereka
+        tersingkir dari Top Pick di atas — termasuk ticker berskor tesis tertinggi di seluruh universe.
+        Ini penahanan yang disengaja, bukan tesis yang lemah: yang tipis datanya, bukan argumennya.
+      </p>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {byLens.map(({ module, rows }) => (
+            <div key={module} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
+                {LENS_TITLES[module].split(' —')[0]} · {rows.length}
+              </div>
+              {rows.map(({ ticker, call }) => (
+                <div
+                  key={ticker}
+                  onClick={() => onSelectTicker(ticker)}
+                  title="Buka detail — Jalur keputusan di kartu lensa ini menunjukkan langkah P4-nya"
+                  style={{
+                    display: 'grid', gridTemplateColumns: 'minmax(62px,.7fr) minmax(58px,.6fr) minmax(58px,.6fr) minmax(0,2.2fr)',
+                    gap: 8, alignItems: 'baseline', padding: '5px 7px', cursor: 'pointer',
+                    borderTop: '1px solid var(--rule)', fontSize: 11,
+                  }}
+                >
+                  <span className="ticker" style={{ fontWeight: 600 }}>{ticker}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--dim)' }}>
+                    skor {call.thesis_score != null ? call.thesis_score.toFixed(0) : '—'}
+                  </span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--warn)' }}>
+                    data {call.source_confidence != null ? `${call.source_confidence.toFixed(0)}%` : '—'}
+                  </span>
+                  <span style={{ color: 'var(--faint)', fontSize: 10.5, wordBreak: 'break-word' }}>
+                    {prettyAction(call.action_downgraded_from)}{' → '}
+                    <strong style={{ color: 'var(--warn)', fontWeight: 600 }}>{prettyAction(call.action)}</strong>
+                    {call.position_status === 'holding' && ' · sedang dipegang'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.5 }}>
+            <code>skor</code> kekuatan tesis lensa itu · <code>data</code> kelengkapan &amp; kesegaran datanya —
+            gerbang P4 membaca yang kedua, ranking Top Pick membaca yang pertama. Klik baris untuk melihat
+            rantai keputusan lengkapnya.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Halaman ini SENGAJA cuma nampilin Top Pick (action entry terkuat per
 // lensa) -- bukan tabel semua ticker x 3 lensa (kepenuhan, mayoritas isinya
 // pantau/lewati yang bukan "ide baru"). Ticker yang lewat dari sini (jadi
 // holding, atau action-nya berubah) TETAP kesimpen -- itu tugas Riwayat
-// Pribadi, bukan dobel di sini.
+// Pribadi, bukan dobel di sini. Pengecualian yang disengaja: call yang
+// DITAHAN P4 (DowngradedSection) -- itu bukan "ide yang lewat", itu ide yang
+// tidak pernah punya kesempatan tampil.
 export default function PersonalAggregatorView({ onSelectTicker }) {
   const { data, error } = useStageData(api.personalCalls)
   // ~10 KB, dulu seluruh riwayat 160 MB -- badge "BARU" saja. Tetap opsional:
@@ -410,5 +519,10 @@ export default function PersonalAggregatorView({ onSelectTicker }) {
 
   const callSets = data.call_sets || []
 
-  return <TopPicksSection callSets={callSets} prevPicks={prevPicks} onSelectTicker={onSelectTicker} calibration={calibration} />
+  return (
+    <>
+      <TopPicksSection callSets={callSets} prevPicks={prevPicks} onSelectTicker={onSelectTicker} calibration={calibration} />
+      <DowngradedSection callSets={callSets} onSelectTicker={onSelectTicker} />
+    </>
+  )
 }
