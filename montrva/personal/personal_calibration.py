@@ -315,6 +315,33 @@ def _mechanical_tuning(rows: list[dict], slices: list[dict], overall: dict) -> d
     ada hari ini berasal dari satu lensa berhorizon 7 hari. Menyetel gerbang
     skor yang dipakai bertiga dari bukti satu lensa berarti memindahkan
     pelajaran jangka pendek ke keputusan 5 tahunan.
+
+    TAPI ALASAN ITU PUNYA BATAS, dan sebelum 2026-08-12 batasnya tidak
+    dikodekan. `allowed` tunggal memperlakukan SEMUA penyetelan sama, jadi
+    syarat ketiga ikut mengunci hal yang sama sekali tidak dilindunginya:
+    bobot milik lensa Spekulatif sendiri. Diukur dari `not_yet_evaluable`,
+    vonis Multibagger paling awal 2027-07-27 dan Quality 2028-07-28 — jadi
+    "belum" itu artinya SATU TAHUN, bukan beberapa minggu, sementara lensa
+    Spekulatif sudah punya 855 tesis berarah di 7 tanggal masuk. Gerbang yang
+    tidak pernah menggigit dalam praktik bukan gerbang; gerbang yang mengunci
+    hal di luar jangkauan alasannya itu cuma rem tangan.
+
+    Jadi gerbangnya dipecah dua, bukan dilonggarkan:
+
+    - `allowed` (TIDAK BERUBAH, ketiga syarat tetap) — untuk kenop BERSAMA:
+      SCORE_TIER_BOUNDS 70/50, ACTION_TABLE, gerbang bukti itu sendiri. Di
+      sini alasan syarat ketiga berlaku penuh.
+    - `per_module[m].allowed` — untuk kenop yang cuma dipakai lensa m
+      (bobot & ambang di dalam run_*_lens). Syarat ketiga TIDAK dipasang di
+      sini, karena bahaya yang dijaganya — bukti satu lensa memindahkan
+      keputusan lensa lain — secara konstruksi tidak bisa terjadi kalau
+      buktinya milik lensa itu sendiri. Dua syarat sisanya justru DIPERKETAT:
+      dievaluasi ulang atas irisan DI DALAM lensa itu, bukan atas populasi
+      gabungan, supaya lensa tidak bisa menumpang bukti tetangganya.
+
+    Yang TIDAK berubah: `allowed` global tetap False sampai 2027, dan tidak
+    ada satu pun kenop yang disetel oleh fungsi ini. Ia melaporkan izin, bukan
+    memakainya.
     """
     non_spec = [r for r in rows if r["module"] != "speculative"]
     evaluable_slices = [s for s in slices if s["evaluable"]]
@@ -335,7 +362,57 @@ def _mechanical_tuning(rows: list[dict], slices: list[dict], overall: dict) -> d
             "detail": f"{len(non_spec)} tesis dari Multibagger + Quality/Compound",
         },
     ]
-    return {"allowed": all(c["met"] for c in conditions), "conditions": conditions}
+    return {
+        "allowed": all(c["met"] for c in conditions),
+        "scope": SHARED_SCOPE,
+        "conditions": conditions,
+        "per_module": {m: _module_tuning(rows, m) for m in MODULES},
+    }
+
+
+# Apa yang sebetulnya diizinkan tiap gerbang. Ditulis sebagai data yang ikut
+# terkirim ke rapor, bukan cuma komentar: pembaca yang melihat "allowed: true"
+# tanpa cakupannya akan wajar mengira SEMUA kenop terbuka -- persis salah baca
+# yang membuat pemecahan gerbang ini perlu dijelaskan panjang di atas.
+SHARED_SCOPE = "kenop bersama: SCORE_TIER_BOUNDS (70/50), ACTION_TABLE, gerbang bukti"
+MODULE_SCOPE = "kenop milik lensa ini sendiri: bobot & ambang di run_*_lens"
+
+
+def _module_tuning(rows: list[dict], module: str) -> dict:
+    """Gerbang bukti untuk kenop yang cuma menyentuh SATU lensa.
+
+    Irisannya dihitung ulang dari baris lensa ini (`_slice_by` yang sama
+    dipakai build_calibration), BUKAN disaring dari daftar irisan global:
+    irisan global seperti "tanggal masuk 2026-08-01" mencampur ketiga lensa,
+    jadi memakainya di sini akan meloloskan lensa yang buktinya sendiri tipis
+    dengan menumpang tesis lensa lain -- kebalikan dari maksud gerbang ini.
+    """
+    mrows = [r for r in rows if r["module"] == module]
+    mslices = (
+        _slice_by(mrows, "horizon", lambda r: r["horizon"])
+        + _slice_by(mrows, "action", lambda r: r["action"])
+        + _slice_by(mrows, "stance", lambda r: r["stance"])
+        + _slice_by(mrows, "tingkat skor tesis", lambda r: r["score_tier"])
+    )
+    evaluable = [s for s in mslices if s["evaluable"]]
+    n_dates = len({r["entry_date"] for r in mrows if r["entry_date"]})
+    conditions = [
+        {
+            "label": f"minimal satu irisan LENSA INI lolos gerbang bukti (n>={MIN_THESES} & >={MIN_ENTRY_DATES} tanggal masuk)",
+            "met": bool(evaluable),
+            "detail": f"{len(evaluable)} dari {len(mslices)} irisan lensa ini lolos",
+        },
+        {
+            "label": f"minimal {MIN_ENTRY_DATES} tanggal masuk berbeda DI LENSA INI",
+            "met": n_dates >= MIN_ENTRY_DATES,
+            "detail": f"{n_dates} tanggal masuk, {len(mrows)} tesis berarah",
+        },
+    ]
+    return {
+        "allowed": all(c["met"] for c in conditions),
+        "scope": MODULE_SCOPE,
+        "conditions": conditions,
+    }
 
 
 def _baselines(baselines_path: Path | None) -> dict | None:

@@ -130,7 +130,7 @@ function NotYetEvaluable({ items }) {
 // yang tampil di sini status yang benar-benar diperiksa, bukan salinan janji.
 const DELIBERATELY_NOT_DONE = [
   ['Tidak ada mesin skor kedua', 'action tetap murni dari ACTION_TABLE (stance + tingkat skor tesis). Halaman ini tidak pernah jadi input ke sana.'],
-  ['Tidak ada auto-tuning threshold', 'HORIZON_OUTCOME_THRESHOLD_PCT dan gerbang _thesis_score_tier tidak disetel dari hasil, sampai tiga syarat di atas terpenuhi.'],
+  ['Tidak ada auto-tuning threshold', 'HORIZON_OUTCOME_THRESHOLD_PCT dan gerbang _thesis_score_tier keduanya kenop BERSAMA — tidak disetel dari hasil sampai ketiga syarat kenop bersama terpenuhi, tidak peduli ada lensa yang izinnya sendiri sudah terbuka.'],
   ['Tidak ada pembobotan ulang risk flag', 'high_debt terlihat 16% vs 32% tanpa flag, tapi dari 1 tanggal masuk — itu belum bukti, baru petunjuk.'],
   ['Tidak ada angka yang tidak bisa ditelusuri', 'setiap persen di halaman ini bisa dilacak balik ke outcome tersimpan; tidak ada model yang "belajar" di luar itu.'],
 ]
@@ -232,32 +232,80 @@ function Baselines({ b }) {
   )
 }
 
+function ConditionList({ conditions }) {
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {conditions.map((c) => (
+        <div key={c.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11 }}>
+          <span style={{ color: c.met ? 'var(--good)' : 'var(--faint)', fontFamily: 'var(--mono)' }}>
+            {c.met ? '✓' : '○'}
+          </span>
+          <span style={{ color: c.met ? 'var(--text)' : 'var(--dim)' }}>
+            {c.label}
+            <span style={{ color: 'var(--faint)' }}> — {c.detail}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Gerbangnya DUA, dan bedanya harus terbaca sebelum angkanya. Satu izin
+// tunggal dulu mengunci hal yang alasannya tidak lindungi: syarat "minimal
+// satu lensa non-spekulatif jatuh tempo" ada supaya bukti berhorizon 7 hari
+// tidak menyetel keputusan 5 tahunan -- bahaya yang tidak bisa terjadi kalau
+// kenopnya cuma dipakai lensa yang buktinya itu sendiri. Dan "belum" di sini
+// artinya 2027-07-27 (Multibagger) / 2028-07-28 (Quality), bukan beberapa
+// minggu, jadi biayanya setahun penuh diam.
+function PerModuleTuning({ perModule }) {
+  const rows = Object.entries(perModule || {})
+  if (rows.length === 0) return null
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--rule)' }}>
+      <div style={{ fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 3 }}>
+        Per lensa — kenop miliknya sendiri
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.55, marginBottom: 8 }}>
+        Syarat lensa non-spekulatif TIDAK dipasang di sini (bukti lensa ini cuma menyetel lensa ini),
+        tapi dua syarat sisanya diperketat: dihitung ulang atas irisan di dalam lensa itu saja, supaya
+        tidak ada lensa yang lolos dengan menumpang bukti tetangganya.
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {rows.map(([module, m]) => (
+          <div key={module} style={{ border: '1px solid var(--rule)', borderRadius: 7, padding: '8px 10px' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+              <strong style={{ fontSize: 11.5, color: 'var(--text)' }}>{MODULE_LABELS[module] || module}</strong>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: m.allowed ? 'var(--good)' : 'var(--warn)' }}>
+                {m.allowed ? 'boleh disetel' : 'belum boleh'}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>{m.scope}</div>
+            <ConditionList conditions={m.conditions} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MechanicalTuning({ mt }) {
   return (
     <div style={{ padding: '12px 14px', margin: '18px 0 12px', background: 'var(--panel)', border: '1px solid var(--rule)', borderRadius: 10 }}>
       <div style={{ fontSize: 12, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 8 }}>
         Kapan angka ini boleh mengubah sistem
       </div>
-      <div style={{ fontSize: 12, marginBottom: 10 }}>
+      <div style={{ fontSize: 12, marginBottom: 3 }}>
         Status sekarang:{' '}
         <strong style={{ color: mt.allowed ? 'var(--good)' : 'var(--warn)' }}>
           {mt.allowed ? 'ketiga syarat terpenuhi' : 'belum boleh — masih menandai saja'}
         </strong>
       </div>
-      <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-        {mt.conditions.map((c) => (
-          <div key={c.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11 }}>
-            <span style={{ color: c.met ? 'var(--good)' : 'var(--faint)', fontFamily: 'var(--mono)' }}>
-              {c.met ? '✓' : '○'}
-            </span>
-            <span style={{ color: c.met ? 'var(--text)' : 'var(--dim)' }}>
-              {c.label}
-              <span style={{ color: 'var(--faint)' }}> — {c.detail}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-      <div style={{ paddingTop: 10, borderTop: '1px solid var(--rule)' }}>
+      {mt.scope && (
+        <div style={{ fontSize: 10.5, color: 'var(--faint)', marginBottom: 10 }}>{mt.scope}</div>
+      )}
+      <ConditionList conditions={mt.conditions} />
+      <PerModuleTuning perModule={mt.per_module} />
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--rule)' }}>
         <div style={{ fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>
           Yang sengaja tidak dikerjakan
         </div>
