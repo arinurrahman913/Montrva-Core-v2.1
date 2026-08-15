@@ -35,6 +35,10 @@ const NAV_GROUPS = [
 const PERSONAL_NAV_GROUP = {
   title: 'Pribadi',
   items: [
+    // Paling atas: satu-satunya halaman tempat pengguna MENULIS, dan yang
+    // memberi makan seluruh sisa grup ini (holdings.json -> position_status
+    // -> kolom `holding` di ACTION_TABLE).
+    { id: 'portfolio', label: 'Portofolio' },
     { id: 'personal_aggregator', label: 'Agregator Pribadi' },
     { id: 'personal_historical', label: 'Riwayat Pribadi' },
     { id: 'personal_calibration', label: 'Rapor Kalibrasi' },

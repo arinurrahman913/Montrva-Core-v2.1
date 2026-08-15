@@ -820,36 +820,16 @@ def main() -> None:
         if args.risk_out:
             with open(args.risk_out, "r", encoding="utf-8") as f:
                 risk_dict = json.load(f)
-            from .layer2.risk_contracts import RiskAssessment, RedFlag, Flag
-            risks = []
-            for assess_dict in risk_dict.get("assessments", []):
-                red_flags = [RedFlag(**rf) for rf in assess_dict.get("red_flags", [])]
-                spec_flags = [Flag(**f) for f in assess_dict.get("flags", [])]
-                assess_dict_copy = assess_dict.copy()
-                assess_dict_copy["red_flags"] = red_flags
-                assess_dict_copy["flags"] = spec_flags
-                risks.append(RiskAssessment(**assess_dict_copy))
+            from .layer2 import rehydrate
+            risks = [rehydrate.risk_assessment(a) for a in risk_dict.get("assessments", [])]
 
         if args.reasoning_out:
             with open(args.reasoning_out, "r", encoding="utf-8") as f:
                 reason_dict = json.load(f)
-            from .layer2.reasoning_contracts import (
-                ReasoningBundle, ModuleOutput, ModuleConfidence, FlagResponse, ContextUsage
-            )
-
-            def _rebuild_module_output(d: dict) -> ModuleOutput:
-                d = d.copy()
-                d["confidence"] = ModuleConfidence(**d["confidence"])
-                d["flag_responses"] = [FlagResponse(**r) for r in d.get("flag_responses", [])]
-                d["context_used"] = [ContextUsage(**c) for c in d.get("context_used", [])]
-                return ModuleOutput(**d)
-
-            reasonings = []
-            for bundle_dict in reason_dict.get("reasoning_outputs", []):
-                bundle_dict = bundle_dict.copy()
-                for key in ["multibagger", "quality_compound", "speculative"]:
-                    bundle_dict[key] = _rebuild_module_output(bundle_dict[key])
-                reasonings.append(ReasoningBundle(**bundle_dict))
+            from .layer2 import rehydrate
+            reasonings = [
+                rehydrate.reasoning_bundle(b) for b in reason_dict.get("reasoning_outputs", [])
+            ]
 
         # Apply limit
         if args.limit:

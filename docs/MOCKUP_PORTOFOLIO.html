@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Mockup — Halaman Portofolio (Montrva)</title>
+<style>
+:root{
+  --ink:#0A0D14; --panel:#12151E; --panel2:#181C28; --panel3:#1F2433;
+  --rule:rgba(255,255,255,.07); --rule-strong:rgba(255,255,255,.14);
+  --text:#E7E9EE; --dim:#98A2B8; --faint:#616B80;
+  --accent:#22D3EE; --accent2:#818CF8; --warn:#FBBF7A; --bad:#FB7185; --good:#4ADE80;
+  --gold:#e8b84b; --gold-hi:#f5cf6f; --gold-dim:#c9a24a;
+  --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+  --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.app{display:flex;min-height:100vh}
+
+/* SIDEBAR (dipangkas — cuma untuk menunjukkan posisi item nav baru) */
+.sidebar{width:256px;flex-shrink:0;background:linear-gradient(180deg,var(--panel),var(--ink));border-right:1px solid var(--rule);padding-bottom:20px}
+.brand{padding:20px 18px 16px;border-bottom:1px solid var(--rule);text-align:center}
+.brand-name{font-family:Georgia,serif;font-size:19px;letter-spacing:.16em;text-indent:.16em}
+.brand-sub{font-family:var(--mono);font-size:8.5px;color:#8a7a52;letter-spacing:.14em;text-transform:uppercase}
+.brand-rule{height:1px;background:var(--gold-dim);opacity:.35;margin:9px 22px 8px}
+.nav-group{padding:14px 10px;border-bottom:1px solid var(--rule)}
+.nav-group-personal{border-top:1px solid var(--rule-strong)}
+.nav-group-title{padding:0 10px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.nav-group-personal .nav-group-title{color:var(--accent2)}
+.nav-item{padding:9px 12px;margin:1px 0;font-size:13px;font-weight:500;border-radius:8px;color:var(--dim);display:flex;justify-content:space-between}
+.nav-item.active{background:linear-gradient(90deg,rgba(34,211,238,.16),transparent);color:var(--accent);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
+.nav-new{font-family:var(--mono);font-size:9px;color:var(--good);letter-spacing:.08em}
+
+/* MAIN */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{padding:18px 26px 16px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.topbar h1{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.topbar p{font-size:12px;color:var(--faint);margin-top:3px;max-width:720px}
+.btn-gold{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#1a1405;border:none;border-radius:9px;padding:9px 16px;font-family:var(--sans);font-size:12.5px;font-weight:700;white-space:nowrap}
+.content{padding:22px 26px 60px}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;margin-bottom:18px}
+.stat{--c:var(--gold);position:relative;border-radius:16px;padding:16px 17px;background:var(--panel);border:1px solid var(--rule);border-top:2px solid color-mix(in srgb,var(--c) 55%,var(--rule));box-shadow:var(--shadow-sm)}
+.stat-label{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.stat-value{font-family:var(--mono);font-size:24px;font-weight:600}
+.stat-value.good{color:var(--good)} .stat-value.bad{color:var(--bad)} .stat-value.warn{color:var(--warn)}
+.stat-sub{font-size:11px;font-weight:600;color:var(--dim);margin-top:3px}
+
+/* BANNER */
+.banner{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;border-radius:10px;font-size:12.5px;line-height:1.55;margin-bottom:18px;border:1px solid rgba(251,191,122,.3);background:rgba(251,191,122,.07);color:var(--warn)}
+.banner b{color:var(--gold-hi)}
+.banner span{color:var(--dim)}
+
+/* SECTION */
+.sec{margin-bottom:26px}
+.sec-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:16px}
+.sec-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.sec-note{font-size:11.5px;color:var(--faint)}
+
+/* TABLE */
+.table-wrap{background:var(--panel);border:1px solid var(--rule);border-radius:12px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;text-align:left;padding:9px 13px;color:var(--faint);border-bottom:1px solid var(--rule);white-space:nowrap;background:var(--panel2)}
+td{padding:8px 13px;border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--panel2)}
+.num{font-family:var(--mono);text-align:right}
+th.num{text-align:right}
+.ticker{font-family:var(--mono);font-weight:700;color:var(--accent)}
+.good{color:var(--good)} .bad{color:var(--bad)} .dim{color:var(--dim)} .faint{color:var(--faint)}
+.pill{display:inline-block;padding:3px 9px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:999px;text-transform:uppercase}
+.pill.ok{color:var(--good);background:rgba(74,222,128,.12)}
+.pill.warn{color:var(--warn);background:rgba(251,191,122,.12)}
+.pill.bad{color:var(--bad);background:rgba(251,113,133,.12)}
+.pill.neutral{color:var(--dim);background:rgba(255,255,255,.06)}
+.pill.info{color:var(--accent2);background:rgba(129,140,248,.13)}
+.wbar{display:inline-block;width:52px;height:7px;background:var(--panel3);border-radius:5px;position:relative;vertical-align:middle;overflow:hidden;margin-right:7px}
+.wbar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:5px}
+.wbar i.hot{background:var(--warn)}
+.rowdot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:middle}
+
+/* FORM */
+.form-card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px 18px}
+.form-grid{display:grid;grid-template-columns:100px 118px 130px 1fr 1fr 1fr;gap:12px;align-items:end}
+.fld label{display:block;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.fld input,.fld select{width:100%;background:var(--panel3);border:1px solid var(--rule);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;outline:none}
+.fld input::placeholder{color:var(--faint)}
+.fld input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.13)}
+.seg{display:flex;background:var(--panel3);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.seg button{flex:1;background:none;border:none;color:var(--dim);font-family:var(--sans);font-size:12.5px;font-weight:600;padding:8px 0}
+.seg button.on-buy{background:rgba(74,222,128,.16);color:var(--good)}
+.seg button.on-sell{background:rgba(251,113,133,.16);color:var(--bad)}
+.form-row2{display:grid;grid-template-columns:1fr 150px;gap:12px;align-items:end;margin-top:12px}
+.btn-submit{background:var(--accent);color:#06232a;border:none;border-radius:8px;padding:9px 0;font-family:var(--sans);font-size:13px;font-weight:700;width:100%}
+.preview{margin-top:14px;padding:11px 13px;border-radius:9px;background:var(--panel2);border-left:3px solid var(--accent);font-size:12.5px;line-height:1.6}
+.preview b{font-family:var(--mono);color:var(--text)}
+.preview .lbl{color:var(--faint);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px}
+.errbox{margin-top:14px;padding:11px 13px;border-radius:9px;background:rgba(251,113,133,.08);border-left:3px solid var(--bad);font-size:12.5px;line-height:1.6;color:var(--bad)}
+.errbox .lbl{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px}
+.errbox ul{margin:0;padding-left:16px;color:var(--text);opacity:.9}
+.icon-btn{background:none;border:1px solid var(--rule);color:var(--faint);border-radius:7px;font-size:11px;padding:3px 9px;font-family:var(--sans)}
+.note{font-size:11.5px;color:var(--faint);line-height:1.6;margin-top:10px}
+.lens-head{font-size:9.5px;color:var(--faint);font-weight:600;letter-spacing:.05em}
+.closed td{opacity:.55}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-name">MONTRVA</div>
+      <div class="brand-rule"></div>
+      <div class="brand-sub">Market Intelligence</div>
+    </div>
+    <div class="nav-group"><div class="nav-group-title">Market</div><div class="nav-item">Layer 1 — Context</div></div>
+    <div class="nav-group"><div class="nav-group-title">Fase A — Per Ticker</div>
+      <div class="nav-item">Screening</div><div class="nav-item">Evidence</div>
+      <div class="nav-item">Knowledge</div><div class="nav-item">Catalyst</div></div>
+    <div class="nav-group"><div class="nav-group-title">Fase B — Populasi</div>
+      <div class="nav-item">Aliran Dana Institusi</div><div class="nav-item">Peer Comparison</div>
+      <div class="nav-item">Confidence</div><div class="nav-item">Risk / Red Flags</div>
+      <div class="nav-item">Reasoning</div><div class="nav-item">Aggregator</div></div>
+    <div class="nav-group"><div class="nav-group-title">Tracking</div><div class="nav-item">Historical</div></div>
+    <div class="nav-group nav-group-personal">
+      <div class="nav-group-title">🔒 Pribadi</div>
+      <div class="nav-item active">Portofolio <span class="nav-new">BARU</span></div>
+      <div class="nav-item">Agregator Pribadi</div>
+      <div class="nav-item">Riwayat Pribadi</div>
+      <div class="nav-item">Rapor Kalibrasi</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1>Portofolio</h1>
+        <p>Posisi riil + buku transaksi. holdings.json diturunkan dari halaman ini — tidak pernah diedit tangan, tidak pernah masuk git.</p>
+      </div>
+      <button class="btn-gold">Generate</button>
+    </div>
+
+    <div class="content">
+
+      <!-- 1. RINGKASAN -->
+      <div class="stats">
+        <div class="stat" style="--c:var(--accent2)">
+          <div class="stat-label">Modal Ditanam</div>
+          <div class="stat-value">$12.480</div>
+          <div class="stat-sub">7 posisi terbuka</div>
+        </div>
+        <div class="stat" style="--c:var(--accent)">
+          <div class="stat-label">Nilai Sekarang</div>
+          <div class="stat-value">$14.127</div>
+          <div class="stat-sub">harga live, 14 Agu 09:41</div>
+        </div>
+        <div class="stat" style="--c:var(--good)">
+          <div class="stat-label">Belum Direalisasi</div>
+          <div class="stat-value good">+$1.647</div>
+          <div class="stat-sub" style="color:var(--good)">+13,2%</div>
+        </div>
+        <div class="stat" style="--c:var(--gold)">
+          <div class="stat-label">Sudah Direalisasi</div>
+          <div class="stat-value good">+$312</div>
+          <div class="stat-sub">2 posisi tertutup · fee $18</div>
+        </div>
+        <div class="stat" style="--c:var(--warn)">
+          <div class="stat-label">Bobot Terbesar</div>
+          <div class="stat-value warn">31,4%</div>
+          <div class="stat-sub" style="color:var(--warn)">NVDA — konsentrasi tinggi</div>
+        </div>
+      </div>
+
+      <!-- 2. BANNER KESEGARAN -->
+      <div class="banner">
+        <span style="color:var(--warn);font-size:15px;line-height:1.2">⟳</span>
+        <div>
+          <b>2 posisi belum masuk run pipeline terakhir</b> (MU, HAFN — dicatat sesudah run 11 Agu).
+          <span>Action ketiga lensa di bawah dihitung ulang saat ini juga dari <code>reasoning_outputs.json</code> run terakhir lewat fungsi pipeline yang sama —
+          jadi kolomnya benar, tapi halaman Agregator Pribadi masih menampilkan versi <code>no_holding</code> sampai run berikutnya.</span>
+        </div>
+      </div>
+
+      <!-- 3. TABEL POSISI -->
+      <div class="sec">
+        <div class="sec-head">
+          <div class="sec-title">Posisi Terbuka</div>
+          <div class="sec-note">Klik baris → modal ticker (Evidence, Knowledge, Risk, 3 lensa, katalis)</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Ticker</th><th class="num">Lembar</th><th class="num">Avg Cost</th><th class="num">Harga</th>
+                <th class="num">Nilai</th><th class="num">P/L</th><th>Bobot</th>
+                <th><span class="lens-head">MULTIBAGGER</span></th>
+                <th><span class="lens-head">QUALITY</span></th>
+                <th><span class="lens-head">SPEKULATIF</span></th>
+                <th>Umur vs Horizon</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="ticker">NVDA</span></td>
+                <td class="num">24</td><td class="num">$118,40</td><td class="num">$184,72</td>
+                <td class="num">$4.433</td><td class="num good">+56,0%</td>
+                <td><span class="wbar"><i class="hot" style="width:100%"></i></span><span class="num warn">31,4%</span></td>
+                <td><span class="pill ok">tambah_bertahap</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill neutral">tahan_sampai_katalis</span></td>
+                <td class="dim">312 hr · <span class="pill neutral">dalam horizon</span></td>
+              </tr>
+              <tr>
+                <td><span class="ticker">AAPL</span></td>
+                <td class="num">12</td><td class="num">$201,15</td><td class="num">$214,08</td>
+                <td class="num">$2.569</td><td class="num good">+6,4%</td>
+                <td><span class="wbar"><i style="width:58%"></i></span><span class="num dim">18,2%</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill ok">tambah</span></td>
+                <td><span class="pill bad">jual</span></td>
+                <td class="dim">140 hr · <span class="pill neutral">dalam horizon</span></td>
+              </tr>
+              <tr>
+                <td><span class="rowdot"></span><span class="ticker">MU</span></td>
+                <td class="num">30</td><td class="num">$96,80</td><td class="num">$91,25</td>
+                <td class="num">$2.738</td><td class="num bad">−5,7%</td>
+                <td><span class="wbar"><i style="width:62%"></i></span><span class="num dim">19,4%</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill warn">kurangi</span></td>
+                <td><span class="pill neutral">tahan_sampai_katalis</span></td>
+                <td class="dim">3 hr · <span class="pill neutral">dalam horizon</span></td>
+              </tr>
+              <tr>
+                <td><span class="ticker">CMRE</span></td>
+                <td class="num">140</td><td class="num">$14,22</td><td class="num">$13,05</td>
+                <td class="num">$1.827</td><td class="num bad">−8,2%</td>
+                <td><span class="wbar"><i style="width:41%"></i></span><span class="num dim">12,9%</span></td>
+                <td><span class="pill warn">kurangi</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill bad">jual</span></td>
+                <td class="bad">631 hr · <span class="pill warn">horizon terlewati</span></td>
+              </tr>
+              <tr>
+                <td><span class="rowdot"></span><span class="ticker">HAFN</span></td>
+                <td class="num">85</td><td class="num">$6,90</td><td class="num">$7,44</td>
+                <td class="num">$632</td><td class="num good">+7,8%</td>
+                <td><span class="wbar"><i style="width:14%"></i></span><span class="num dim">4,5%</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill neutral">tahan</span></td>
+                <td><span class="pill neutral">tahan_sampai_katalis</span></td>
+                <td class="dim">1 hr · <span class="pill neutral">dalam horizon</span></td>
+              </tr>
+              <tr>
+                <td><span class="ticker" style="color:var(--faint)">BBCA.JK</span></td>
+                <td class="num">400</td><td class="num">$0,58</td><td class="num faint">—</td>
+                <td class="num faint">—</td><td class="num faint">—</td>
+                <td class="faint">—</td>
+                <td colspan="3"><span class="pill neutral">di luar universe — tidak ada analisis</span></td>
+                <td class="faint">— <span class="pill neutral">tidak berlaku</span></td>
+              </tr>
+              <tr class="closed">
+                <td><span class="ticker">SMCI</span></td>
+                <td class="num">0</td><td class="num">—</td><td class="num">$41,60</td>
+                <td class="num">—</td><td class="num good">+$312 direalisasi</td>
+                <td>—</td>
+                <td colspan="3"><span class="pill neutral">posisi tertutup — tidak masuk holdings.json</span></td>
+                <td class="faint">ditutup 2 Agu</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          Baris bertitik oranye = dicatat sesudah run terakhir. Baris redup = posisi yang sudah dijual habis: <b>sengaja tidak ditulis ke holdings.json</b> —
+          <code>compute_position()</code> memutuskan "holding" dari ada/tidaknya kunci ticker, bukan dari jumlah lembarnya, jadi menuliskannya akan menyalakan
+          seluruh kolom <code>ACTION_TABLE["holding"]</code> untuk saham yang sudah tidak dipegang.
+        </div>
+      </div>
+
+      <!-- 4. FORM -->
+      <div class="sec">
+        <div class="sec-head">
+          <div class="sec-title">Catat Transaksi</div>
+          <div class="sec-note">Yang disimpan peristiwa (beli/jual) — avg cost dihitung, tidak diketik</div>
+        </div>
+        <div class="form-card">
+          <div class="form-grid">
+            <div class="fld"><label>Ticker</label><input value="MU"></div>
+            <div class="fld"><label>Jenis</label>
+              <div class="seg"><button class="on-buy">Beli</button><button>Jual</button></div>
+            </div>
+            <div class="fld"><label>Tanggal</label><input value="2026-08-11"></div>
+            <div class="fld"><label>Harga / lembar</label><input value="96.80"></div>
+            <div class="fld"><label>Jumlah lembar</label><input value="30"></div>
+            <div class="fld"><label>Fee</label><input value="1.00" placeholder="0"></div>
+          </div>
+          <div class="form-row2">
+            <div class="fld"><label>Catatan (opsional)</label><input placeholder="mis. masuk sesudah koreksi pasca-earnings"></div>
+            <div class="fld"><button class="btn-submit">Catat Transaksi</button></div>
+          </div>
+
+          <div class="preview">
+            <span class="lbl">Pratinjau — dihitung sebelum disimpan</span>
+            Beli <b>30</b> lembar MU @ <b>$96,80</b> + fee <b>$1,00</b> = keluar <b>$2.905,00</b>.
+            Avg cost jadi <b>$96,83</b> · lembar dimiliki <b>0 → 30</b> · posisi <b>dibuka 2026-08-11</b>.
+            <span class="faint">Fee masuk basis biaya, jadi avg cost sedikit di atas harga belinya.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. CONTOH PENOLAKAN -->
+      <div class="sec">
+        <div class="sec-head"><div class="sec-title">Contoh — Transaksi Ditolak</div>
+        <div class="sec-note">Validasi lewat replay kronologis, bukan perbandingan ke posisi akhir</div></div>
+        <div class="form-card">
+          <div class="form-grid">
+            <div class="fld"><label>Ticker</label><input value="AAPL"></div>
+            <div class="fld"><label>Jenis</label>
+              <div class="seg"><button>Beli</button><button class="on-sell">Jual</button></div>
+            </div>
+            <div class="fld"><label>Tanggal</label><input value="2026-03-04" style="border-color:rgba(251,113,133,.5)"></div>
+            <div class="fld"><label>Harga / lembar</label><input value="188.00"></div>
+            <div class="fld"><label>Jumlah lembar</label><input value="12" style="border-color:rgba(251,113,133,.5)"></div>
+            <div class="fld"><label>Fee</label><input value="1.00"></div>
+          </div>
+          <div class="errbox">
+            <span class="lbl">Ditolak — tidak ada yang disimpan</span>
+            <ul>
+              <li>AAPL: jual 12 lembar pada 2026-03-04 melebihi kepemilikan saat itu (0 lembar).</li>
+            </ul>
+            <div style="color:var(--dim);margin-top:7px;font-size:11.5px">
+              Tanggalnya mundur ke sebelum pembelian pertama (26 Mar). Diperiksa terhadap urutan waktu final, jadi transaksi backdate tidak bisa lolos
+              cuma karena posisi hari ini kebetulan cukup.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. BUKU TRANSAKSI -->
+      <div class="sec">
+        <div class="sec-head">
+          <div class="sec-title">Buku Transaksi</div>
+          <div class="sec-note">Sumber kebenaran — holdings.json diturunkan dari sini setiap kali berubah</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Tanggal</th><th>Ticker</th><th>Jenis</th><th class="num">Lembar</th><th class="num">Harga</th>
+              <th class="num">Fee</th><th class="num">Nilai</th><th>Catatan</th><th></th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="dim">2026-08-13</td><td><span class="ticker">HAFN</span></td><td><span class="pill ok">beli</span></td>
+                <td class="num">85</td><td class="num">$6,90</td><td class="num">$1,00</td><td class="num">$587,50</td>
+                <td class="faint">skor tesis 100, data 47%</td><td><button class="icon-btn">hapus</button></td></tr>
+              <tr><td class="dim">2026-08-11</td><td><span class="ticker">MU</span></td><td><span class="pill ok">beli</span></td>
+                <td class="num">30</td><td class="num">$96,80</td><td class="num">$1,00</td><td class="num">$2.905,00</td>
+                <td class="faint">—</td><td><button class="icon-btn">hapus</button></td></tr>
+              <tr><td class="dim">2026-08-02</td><td><span class="ticker">SMCI</span></td><td><span class="pill bad">jual</span></td>
+                <td class="num">18</td><td class="num">$58,90</td><td class="num">$1,00</td><td class="num">$1.060,20</td>
+                <td class="faint">tutup posisi, stance jadi bukan_compounder</td><td><button class="icon-btn">hapus</button></td></tr>
+              <tr><td class="dim">2026-06-14</td><td><span class="ticker">SMCI</span></td><td><span class="pill ok">beli</span></td>
+                <td class="num">18</td><td class="num">$41,20</td><td class="num">$1,00</td><td class="num">$742,60</td>
+                <td class="faint">—</td><td><button class="icon-btn">hapus</button></td></tr>
+              <tr><td class="dim">2026-03-26</td><td><span class="ticker">AAPL</span></td><td><span class="pill ok">beli</span></td>
+                <td class="num">12</td><td class="num">$201,00</td><td class="num">$1,80</td><td class="num">$2.413,80</td>
+                <td class="faint">—</td><td><button class="icon-btn">hapus</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          Hapus juga di-replay dulu: kalau membuang sebuah "beli" membuat "jual" sesudahnya melebihi kepemilikan, penghapusan dibatalkan dan alasannya ditampilkan —
+          buku yang posisinya tidak bisa dihitung tidak pernah tersimpan.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

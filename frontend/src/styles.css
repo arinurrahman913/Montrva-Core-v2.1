@@ -557,3 +557,119 @@ tr.expand-row td{white-space:normal}
 
 .loading{padding:48px;text-align:center;font-family:var(--sans);color:var(--faint);font-size:13px}
 .empty{padding:22px;font-family:var(--sans);color:var(--faint);font-size:13px}
+
+/* PORTOFOLIO (halaman Pribadi — satu-satunya permukaan TULIS di dashboard).
+   Seluruh kelas di sini diawali .pf- dengan sengaja: halaman ini butuh
+   beberapa utilitas generik (angka rata kanan, teks redup, positif/negatif),
+   dan menambahkannya sebagai .num/.dim/.good ke stylesheet bersama akan
+   menabrak kelas mana pun yang lahir belakangan dengan nama sama. */
+.pf-sec{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin:0 0 10px}
+.pf-sec-title{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.pf-sec-note{font-family:var(--sans);font-size:11.5px;color:var(--faint)}
+.pf-num{font-family:var(--mono);text-align:right}
+.pf-pos{color:var(--good)}
+.pf-neg{color:var(--bad)}
+.pf-dim{color:var(--dim)}
+.pf-faint{color:var(--faint)}
+.pf-src{font-family:var(--sans);font-size:9px;color:var(--warn);margin-left:6px;letter-spacing:.04em;text-transform:uppercase}
+/* Titik penanda "dicatat sesudah run terakhir" — posisi yang call-nya
+   dihitung ulang saat permintaan, bukan diambil dari personal_calls.json. */
+.pf-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:middle}
+.pf-banner{
+  padding:11px 14px;border-radius:10px;font-size:12.5px;line-height:1.55;margin-bottom:16px;
+  border:1px solid rgba(251,191,122,.3);background:rgba(251,191,122,.07);color:var(--warn)
+}
+.pf-banner b{color:var(--gold-hi)}
+.pf-banner span{color:var(--dim)}
+.pf-banner code{font-family:var(--mono);font-size:11.5px}
+.pf-banner.neutral{border-color:var(--rule-strong);background:var(--panel2);color:var(--dim)}
+.pf-banner.neutral b{color:var(--text)}
+
+.pf-form{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm)}
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:12px;align-items:end}
+.pf-row2{display:grid;grid-template-columns:1fr 160px;gap:12px;align-items:end;margin-top:12px}
+.pf-fld{display:block}
+.pf-fld>span{display:block;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.pf-fld input{
+  width:100%;background:var(--panel3);border:1px solid var(--rule);border-radius:8px;color:var(--text);
+  font-family:var(--mono);font-size:13px;padding:8px 10px;outline:none;
+  transition:border-color .15s var(--ease),box-shadow .15s var(--ease)
+}
+.pf-fld input::placeholder{color:var(--faint)}
+.pf-fld input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.pf-seg{display:flex;background:var(--panel3);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.pf-seg button{
+  flex:1;background:none;border:none;color:var(--dim);font-family:var(--sans);font-size:12.5px;font-weight:600;
+  padding:8px 0;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)
+}
+.pf-seg button.on-buy{background:rgba(74,222,128,.16);color:var(--good)}
+.pf-seg button.on-sell{background:rgba(251,113,133,.16);color:var(--bad)}
+.pf-submit{
+  width:100%;background:var(--accent);color:#06232a;border:none;border-radius:8px;padding:9px 0;
+  font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer
+}
+.pf-submit:disabled{opacity:.55;cursor:default}
+.pf-preview{
+  margin-top:14px;padding:11px 13px;border-radius:9px;background:var(--panel2);
+  border-left:3px solid var(--accent);font-size:12.5px;line-height:1.6;color:var(--dim)
+}
+.pf-preview.bad{border-left-color:var(--bad);background:rgba(251,113,133,.08)}
+.pf-preview ul{margin:0;padding-left:16px;color:var(--text)}
+.pf-lbl{display:block;font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.pf-del{background:none;border:1px solid var(--rule);color:var(--faint);border-radius:7px;font-family:var(--sans);font-size:11px;padding:3px 9px;cursor:pointer}
+.pf-del:hover{color:var(--bad);border-color:rgba(251,113,133,.4)}
+.pf-del:disabled{opacity:.5;cursor:default}
+/* "Jual semua" duduk DI DALAM field nominal, bukan sebagai tombol sejajar:
+   ia mengisi field itu, jadi tempatnya di sana — dan baris form tetap lima
+   kolom rata, tidak tumbuh satu kolom cuma untuk kasus jual. */
+.pf-all{
+  display:block;margin-top:5px;background:none;border:none;padding:0;cursor:pointer;
+  font-family:var(--sans);font-size:10.5px;font-weight:600;color:var(--accent);letter-spacing:.02em
+}
+.pf-all:hover{color:var(--cy-hi);text-decoration:underline}
+.pf-note-toggle{
+  align-self:end;justify-self:start;background:none;border:1px dashed var(--rule-strong);color:var(--faint);
+  border-radius:8px;padding:8px 12px;font-family:var(--sans);font-size:12px;cursor:pointer
+}
+.pf-note-toggle:hover{color:var(--text);border-color:var(--accent)}
+
+/* Kartu posisi + riwayatnya (15 Agu 2026 — menggantikan dua tabel posisi).
+   Alasannya: `avg cost $744,86` adalah jawaban tanpa argumennya. Riwayat per
+   posisi dengan sisa & avg cost BERJALAN adalah argumennya. */
+.pf-card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow-sm)}
+.pf-card.closed{opacity:.72}
+.pf-card.closed:hover{opacity:1}
+.pf-card-head{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 16px;cursor:pointer;
+  transition:background .12s var(--ease)
+}
+.pf-card-head:hover{background:var(--panel2)}
+.pf-caret{color:var(--faint);font-size:16px;line-height:1;transition:transform .15s var(--ease);display:inline-block}
+.pf-caret.open{transform:rotate(90deg)}
+.pf-card-ticker{display:flex;align-items:center;min-width:84px}
+.pf-card-ticker .ticker{font-size:14px}
+.pf-card-ticker .ticker:hover{text-decoration:underline}
+/* Label kecil di atas nilainya: menghilangkan baris header tabel tanpa
+   membuat angka jadi tanpa nama. */
+.pf-kv{display:flex;flex-direction:column;gap:2px;min-width:66px}
+.pf-kv i{font-style:normal;font-family:var(--sans);font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.pf-kv b{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text)}
+.pf-card-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.pf-lens{display:flex;align-items:center;gap:5px}
+.pf-lens i{font-style:normal;font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
+
+.pf-hist{border-top:1px solid var(--rule);background:var(--panel2);overflow-x:auto}
+.pf-hist table{width:100%;border-collapse:collapse;font-size:12px}
+.pf-hist th{
+  font-family:var(--sans);font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  text-align:left;padding:7px 13px;color:var(--faint);border-bottom:1px solid var(--rule);white-space:nowrap;background:none
+}
+.pf-hist td{padding:7px 13px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.pf-hist tbody tr:last-child td{border-bottom:none}
+.pf-hist tbody tr:hover{background:var(--panel3)}
+.pf-hist-note{color:var(--faint)}
+.pf-hist-empty{border-top:1px solid var(--rule);background:var(--panel2);padding:14px 16px;font-size:12px;color:var(--faint)}
+.pf-foot{margin-top:18px;font-family:var(--sans);font-size:11.5px;color:var(--faint);line-height:1.6}
+/* Baris rupiah di bawah nilai dolar (kartu posisi). <u> dipakai murni sebagai
+   slot ketiga di .pf-kv — garis bawahnya dimatikan; ia tidak pernah jadi tautan. */
+.pf-kv u{text-decoration:none;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.01em}

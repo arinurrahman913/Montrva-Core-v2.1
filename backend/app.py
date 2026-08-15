@@ -867,7 +867,11 @@ def get_capabilities():
 
 
 if PERSONAL_ENABLED:
-    register_personal_routes(app, DATA_DIR)
+    # _get_stage diteruskan supaya halaman Portofolio membaca reasoning/risk/
+    # catalyst dari cache stage YANG SAMA dengan sisa dashboard, bukan menyimpan
+    # salinan keduanya (25 + 7 + 2 MB JSON, berkali lipat itu sebagai objek
+    # Python) di dalam personal_routes.
+    register_personal_routes(app, DATA_DIR, _get_stage)
 
 
 @app.get("/api/sectors")

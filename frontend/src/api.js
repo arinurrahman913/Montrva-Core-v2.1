@@ -29,6 +29,35 @@ async function getJSON(path) {
   return promise
 }
 
+// Buang entry cache yang path-nya diawali `prefix`. Dibutuhkan begitu ada
+// endpoint TULIS: tanpa ini, GET /api/personal/portfolio tepat sesudah POST
+// transaksi masih bisa mengembalikan promise dari sebelum transaksi itu ada
+// (TTL 5 detik) — pengguna mencatat pembelian lalu melihat halaman yang belum
+// memuatnya, dan itu terbaca seperti tulisan yang gagal.
+function invalidate(prefix) {
+  for (const key of [..._cache.keys()]) {
+    if (key.startsWith(prefix)) _cache.delete(key)
+  }
+}
+
+async function sendJSON(path, method, body) {
+  const resp = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const data = await resp.json().catch(() => ({}))
+  invalidate('/api/personal/')
+  if (!resp.ok) {
+    // Backend membalas 422 dengan {errors: [...]} — daftar alasan penolakan
+    // yang memang untuk dibaca pengguna, bukan pesan HTTP generik.
+    const err = new Error((data.errors || [`${path} -> HTTP ${resp.status}`]).join(' '))
+    err.errors = data.errors || [`${path} -> HTTP ${resp.status}`]
+    throw err
+  }
+  return data
+}
+
 export const api = {
   layer1: () => getJSON('/api/layer1'),
   layer1History: () => getJSON('/api/layer1_history'),
@@ -72,6 +101,12 @@ export const api = {
   // itu ikut mengunduh riwayat 160 MB.
   personalHistoryPreviousPicks: () => getJSON('/api/personal/history/previous-picks'),
   personalDueForReview: () => getJSON('/api/personal/due-for-review'),
+  // Portofolio — posisi turunan + harga live + call yang dihitung ulang untuk
+  // ticker yang dipegang (lihat _build_portfolio di backend/personal_routes.py).
+  personalPortfolio: () => getJSON('/api/personal/portfolio'),
+  personalAddTransaction: (tx) => sendJSON('/api/personal/transactions', 'POST', tx),
+  personalDeleteTransaction: (id) =>
+    sendJSON(`/api/personal/transactions/${encodeURIComponent(id)}`, 'DELETE'),
   // ~4 KB, konstan sepanjang run — ACTION_TABLE + ambang tier, disajikan dari
   // Python supaya panel "Jalur Keputusan" tidak perlu menyalin 72 sel aturan
   // ke JS (lihat docstring endpoint-nya di backend/personal_routes.py).

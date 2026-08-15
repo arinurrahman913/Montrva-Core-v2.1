@@ -28,6 +28,7 @@ def build_personal_call_set(
     today: date | None = None,
     risk=None,
     benchmark_price: float | None = None,
+    current_price: float | None = None,
 ) -> PersonalCallSet:
     """3 PersonalCall untuk satu ticker. position_status/holding_since/
     unrealized_return_pct dihitung SEKALI (properti portofolio, bukan per
@@ -35,8 +36,15 @@ def build_personal_call_set(
     karena bucket horizon-nya beda-beda per modul.
 
     `risk` & `benchmark_price` juga properti per-ticker/per-run (bukan per
-    lens), jadi diteruskan apa adanya ke ketiganya."""
-    current_price = current_price_from_evidence(evidence)
+    lens), jadi diteruskan apa adanya ke ketiganya.
+
+    `current_price` boleh diberikan langsung sebagai ganti membaca
+    EvidencePackage. Pipeline tidak memakainya (harganya memang datang dari
+    Evidence run itu), tapi halaman Portofolio menghitung ulang call di luar
+    run — di sana harga yang benar adalah kutipan live, dan merekonstruksi
+    EvidencePackage 250 MB hanya untuk mengambil satu `last_price` akan
+    membayar ongkos raksasa untuk satu angka."""
+    current_price = current_price if current_price is not None else current_price_from_evidence(evidence)
     position_status, holding_since, unrealized = compute_position(bundle.ticker, holdings, current_price)
     common = dict(today=today, current_price=current_price, benchmark_price=benchmark_price, risk=risk)
 

@@ -21,6 +21,23 @@ export function fmtMoney(v) {
   return `$${v.toFixed(2)}`
 }
 
+// Rupiah dari nilai dolar + kurs. Mengembalikan null (bukan "Rp —") kalau
+// salah satunya tidak ada, supaya pemanggil bisa MENGHILANGKAN barisnya
+// daripada memasang tempat kosong yang terbaca seperti nilai nol.
+//
+// Ringkas di atas sejuta, sejalan dengan fmtMoney yang sudah memakai B/M untuk
+// dolar: angka portofolio rupiah punya 8-10 digit, dan deretan digit sepanjang
+// itu justru lebih sulit dibaca sekilas daripada "Rp 7,49 jt".
+export function fmtIDR(usd, rate) {
+  if (usd === null || usd === undefined || !rate) return null
+  const v = usd * rate
+  const a = Math.abs(v)
+  const sign = v < 0 ? '-' : ''
+  if (a >= 1e9) return `${sign}Rp ${(a / 1e9).toFixed(2)} mlr`
+  if (a >= 1e6) return `${sign}Rp ${(a / 1e6).toFixed(2)} jt`
+  return `${sign}Rp ${Math.round(a).toLocaleString('id-ID')}`
+}
+
 // 13F wajib dilaporkan institusi (>$100M AUM) paling lambat 45 hari setelah
 // kuartal tutup — jadi data kuartal berjalan belum akan ADA di manapun (SEC,
 // Yahoo, siapapun) sampai deadline itu lewat, bukan soal cache basi di sisi

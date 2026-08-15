@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import gzip
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Response, jsonify, request
 
-from montrva.personal import due_for_review
+from montrva.layer2 import rehydrate
+from montrva.layer2.sources.live_quote import fetch_live_quote
+from montrva.personal import build_personal_call_set, due_for_review
+from montrva.personal import portfolio as pf
 from montrva.personal.personal_contracts import ACTION_ALIASES
 
 _stage_cache: dict[str, tuple[float, dict]] = {}
@@ -156,8 +160,158 @@ def _build_previous_picks(history: dict) -> dict:
     return {"as_of": as_of, "tickers": {m: sorted(v) for m, v in picks.items()}}
 
 
-def register(app, data_dir: Path) -> None:
+# Kutipan live untuk seluruh portofolio sekaligus. fetch_live_quote sendiri
+# sudah punya timeout 8 detik + cache 30 detik per ticker, tapi ia satu-ticker
+# per panggilan: 20 posisi secara berurutan bisa jadi 160 detik di kasus
+# terburuk. Pool kecil di sini membuat batas atasnya tetap ~8 detik apa pun
+# jumlah posisinya. Ukurannya sengaja kecil — ini permintaan web, bukan batch.
+_QUOTE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="portfolio-quote")
+
+
+def _live_prices(tickers: list[str]) -> dict[str, float | None]:
+    if not tickers:
+        return {}
+    quotes = _QUOTE_POOL.map(fetch_live_quote, tickers)
+    return {t: (q.get("last_price") if not q.get("stale") else None) for t, q in zip(tickers, quotes)}
+
+
+def _usd_idr() -> dict:
+    """Kurs USD/IDR untuk TAMPILAN saja.
+
+    Yang dikirim cuma kursnya, bukan nilai yang sudah dikonversi: dolar tetap
+    mata uang pencatatan (brokernya USD), dan menyimpan angka rupiah berarti
+    membekukan kurs satu titik waktu ke dalam catatan transaksi — besok angka
+    itu salah tanpa ada yang tahu.
+
+    Lewat fetch_live_quote yang sama dengan harga saham (timeout 8 detik +
+    cache 30 detik sudah di dalamnya). Kalau gagal, `rate` None dan frontend
+    tidak menampilkan rupiah sama sekali — bukan memakai kurs tebakan."""
+    q = fetch_live_quote("USDIDR=X")
+    rate = q.get("last_price") if not q.get("stale") else None
+    return {
+        "pair": "USDIDR=X",
+        "rate": rate,
+        "fetched_at": q.get("fetched_at"),
+        "error": q.get("error"),
+    }
+
+
+def _build_portfolio(personal_dir: Path, data_dir: Path, get_stage) -> dict:
+    """Isi halaman Portofolio: posisi + harga + ringkasan + call yang DIHITUNG
+    ULANG untuk ticker yang dipegang.
+
+    Perhitungan ulang itu inti Poin 3. `personal_calls.json` lahir sekali per
+    run penuh (~3,5 jam), jadi posisi yang dicatat hari ini akan terbaca
+    `no_holding` di seluruh dashboard sampai run berikutnya — dan kolom
+    `holding` di ACTION_TABLE (36 sel) tidak pernah menyala. Di sini
+    `build_personal_call_set()` YANG SAMA dipanggil ulang dengan holdings
+    terbaru; bahannya (reasoning/catalyst/risk) semuanya sudah ada di disk.
+    Yang TIDAK dilakukan: menulis ulang personal_calls.json di luar pipeline
+    (merusak keseragaman session_id yang dijaga /api/consistency), dan
+    menyalin ACTION_TABLE ke JS.
+    """
+    book = pf.ensure_book(personal_dir)
+    positions = pf.derive_positions(book)
+    open_tickers = [p["ticker"] for p in positions if p["is_open"]]
+
+    prices = _live_prices(open_tickers)
+    calls_file = _load_json(personal_dir / "personal_calls.json")
+    snapshot_calls = _index_by_ticker(calls_file.get("call_sets", []))
+
+    # Cadangan harga: harga yang dipakai run terakhir. Bukan pengganti kutipan
+    # live (bisa berumur sehari), tapi jauh lebih baik daripada None — posisi
+    # tanpa harga hilang dari nilai pasar & bobot sama sekali.
+    price_source: dict[str, str | None] = {}
+    for ticker in open_tickers:
+        if prices.get(ticker) is not None:
+            price_source[ticker] = "live"
+            continue
+        fallback = ((snapshot_calls.get(ticker) or {}).get("multibagger") or {}).get("price_at_call")
+        prices[ticker] = fallback
+        price_source[ticker] = "snapshot" if fallback is not None else None
+
+    weights = pf.position_weights(positions, prices)
+    summary = pf.summarize(positions, prices)
+
+    holdings = {p["ticker"]: p for p in positions if p["is_open"]}
+    reasoning = _index_by_ticker(get_stage("reasoning").get("reasoning_outputs", []))
+    risk = _index_by_ticker(get_stage("risk").get("assessments", []))
+    catalyst = _index_by_ticker(get_stage("catalyst").get("catalyst_sets", []))
+    # Harga benchmark run terakhir — sama untuk semua ticker dalam satu run,
+    # jadi diambil dari call mana pun yang punya (lihat build_personal_call_sets).
+    benchmark = next(
+        (c["multibagger"]["benchmark_at_call"] for c in snapshot_calls.values()
+         if (c.get("multibagger") or {}).get("benchmark_at_call") is not None),
+        None,
+    )
+
+    rows = []
+    for pos in positions:
+        ticker = pos["ticker"]
+        row = dict(pos)
+        price = prices.get(ticker)
+        row["price"] = price
+        row["price_source"] = price_source.get(ticker)
+        row["weight_pct"] = weights.get(ticker)
+        row["in_universe"] = ticker in reasoning
+        row["market_value"] = price * pos["quantity"] if (price is not None and pos["is_open"]) else None
+        row["unrealized_pnl"] = (row["market_value"] - pos["total_cost"]) if row["market_value"] is not None else None
+        row["unrealized_pct"] = (
+            row["unrealized_pnl"] / pos["total_cost"] * 100.0
+            if row["unrealized_pnl"] is not None and pos["total_cost"] else None
+        )
+        row["call_set"] = None
+        # Sudahkah run terakhir tahu kita memegang ini? Kalau snapshot-nya masih
+        # `no_holding`, halaman Agregator Pribadi memang akan menyebut hal lain
+        # sampai run berikutnya — itu dilaporkan, bukan disembunyikan.
+        snapshot_status = ((snapshot_calls.get(ticker) or {}).get("multibagger") or {}).get("position_status")
+        row["pending_next_run"] = bool(pos["is_open"]) and snapshot_status != "holding"
+
+        bundle_dict = reasoning.get(ticker)
+        if pos["is_open"] and bundle_dict:
+            try:
+                call_set = build_personal_call_set(
+                    rehydrate.reasoning_bundle(bundle_dict),
+                    holdings,
+                    catalyst=rehydrate.catalyst_set(catalyst[ticker]) if ticker in catalyst else None,
+                    risk=rehydrate.risk_assessment(risk[ticker]) if ticker in risk else None,
+                    current_price=price,
+                    benchmark_price=benchmark,
+                )
+                row["call_set"] = call_set.to_dict()
+            except (TypeError, KeyError, ValueError) as exc:
+                # Satu ticker yang kontraknya tidak cocok (berkas dari versi
+                # lama) tidak boleh mengosongkan seluruh halaman.
+                row["call_error"] = f"{type(exc).__name__}: {exc}"
+        rows.append(row)
+
+    return {
+        "positions": rows,
+        "summary": summary,
+        "transactions": pf.sort_transactions(book)[::-1],  # terbaru dulu, untuk tabel buku
+        "cost_basis_method": "average_cost",
+        "fx": _usd_idr(),
+        "pending_next_run": sorted(r["ticker"] for r in rows if r["pending_next_run"]),
+        "snapshot_session_id": calls_file.get("session_id"),
+        "snapshot_generated_at": calls_file.get("generated_at"),
+    }
+
+
+def register(app, data_dir: Path, get_stage=None) -> None:
     personal_dir = data_dir / "personal"
+
+    # Berbagi cache stage milik app.py kalau diberikan. Penting untuk memori,
+    # bukan kerapian: reasoning_outputs.json 25 MB + risk 7 MB + catalysts 2 MB
+    # sudah dipegang _stage_cache app.py begitu halaman Reasoning/Risk/Catalyst
+    # atau satu detail ticker dibuka. Membacanya lewat _load_json di modul ini
+    # akan menyimpan SALINAN KEDUA — persis kelas pemborosan yang dikejar
+    # habis-habisan waktu backend diturunkan dari 3,32 GB ke 0,59 GB.
+    if get_stage is None:
+        _STAGE_FILES = {"reasoning": "reasoning_outputs.json", "risk": "risk_assessments.json",
+                        "catalyst": "catalysts.json"}
+
+        def get_stage(name):  # noqa: ANN001
+            return _load_json(data_dir / _STAGE_FILES[name])
 
     @app.get("/api/personal/calls")
     def get_personal_calls():
@@ -247,6 +401,54 @@ def register(app, data_dir: Path) -> None:
         apa pun dari personal_history.json (127 MB; /api/personal/history
         mengirimkannya utuh dan halaman itu butuh ~1 menit memuat)."""
         return jsonify(_load_json(personal_dir / "calibration.json"))
+
+    # --- Portofolio (buku transaksi + posisi turunan) ---------------------
+    #
+    # SATU-SATUNYA jalur tulis di lapisan pribadi. Sama seperti seluruh
+    # /api/personal/*, endpoint ini WAJIB tetap local-only: yang mengalir di
+    # sini bukan lagi pendapat sistem, tapi portofolio dan harga beli riil.
+
+    @app.get("/api/personal/portfolio")
+    def get_personal_portfolio():
+        return jsonify(_build_portfolio(personal_dir, data_dir, get_stage))
+
+    @app.get("/api/personal/transactions")
+    def get_personal_transactions():
+        book = pf.ensure_book(personal_dir)
+        return jsonify({
+            "transactions": pf.sort_transactions(book)[::-1],
+            "positions": pf.derive_positions(book),
+        })
+
+    @app.post("/api/personal/transactions")
+    def post_personal_transaction():
+        body = request.get_json(silent=True) or {}
+        tx, errors = pf.add_transaction(
+            personal_dir,
+            ticker=str(body.get("ticker", "")),
+            side=str(body.get("side", "")),
+            tx_date=str(body.get("date", "")),
+            price=body.get("price"),
+            # Halaman mengirim nominal; `quantity` tetap diterima supaya alat
+            # bantu/skrip lama tidak perlu ikut berubah.
+            amount=body.get("amount"),
+            quantity=body.get("quantity"),
+            fee=body.get("fee") or 0.0,
+            note=str(body.get("note") or ""),
+        )
+        if errors:
+            # 422, bukan 400: bentuk permintaannya sah, isinya yang ditolak
+            # aturan buku (mis. jual melebihi kepemilikan pada tanggal itu).
+            return jsonify({"errors": errors}), 422
+        return jsonify({"transaction": tx}), 201
+
+    @app.delete("/api/personal/transactions/<tx_id>")
+    def delete_personal_transaction(tx_id: str):
+        removed, errors = pf.delete_transaction(personal_dir, tx_id)
+        if errors:
+            status = 404 if removed is None and "tidak ditemukan" in errors[0] else 422
+            return jsonify({"errors": errors}), status
+        return jsonify({"removed": removed})
 
     @app.get("/api/personal/due-for-review")
     def get_personal_due_for_review():
