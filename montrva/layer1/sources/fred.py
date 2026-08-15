@@ -10,12 +10,14 @@ refresh dashboard berkala) tidak perlu menembak FRED tiap kali.
 from __future__ import annotations
 
 import os
+import sys
 from datetime import date
 from pathlib import Path
 
 import requests
 
 from ... import cache
+from ...layer2.sources._retry import retry
 
 # Auto-load FRED_API_KEY dari file .env di root repo (gitignored), supaya tidak
 # perlu di-set manual tiap sesi terminal / scheduled task. Aman kalau .env atau
@@ -29,6 +31,36 @@ except ImportError:
 
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 OBSERVATIONS_CACHE_TTL = 12 * 3600  # 12 jam
+
+# Dua kelemahan yang sama persis dengan yang dibetulkan di sources/yahoo.py
+# (14 Agu 2026): satu percobaan tanpa retry, dan cache yang cuma dipakai kalau
+# masih segar. Terbukti mahal 15 Agu 2026 — gangguan DNS beberapa menit
+# (`getaddrinfo failed`) membuat 5 dari 13 komponen MISSING sekaligus
+# (Business Cycle, Credit Spread, Liquidity, Macro Calendar, Yield Curve),
+# padahal seluruh serinya tersimpan lengkap di .cache/layer1_fred_observations.
+FRED_RETRIES = 2
+FRED_BACKOFF_SECONDS = 3.0
+
+# Seri FRED rilis paling cepat HARIAN, mayoritas mingguan/bulanan (WALCL
+# mingguan, M2SL & INDPRO bulanan). Jadi salinan berumur beberapa hari masih
+# seri yang sama persis — batasnya jauh lebih longgar daripada Yahoo (3 hari,
+# harga bergerak tiap hari bursa) tanpa jadi kurang jujur. Di atas 14 hari,
+# `data_freshness` komponennya sendiri sudah jatuh ke "stale" (cadence 1-30
+# hari × 3), jadi tidak ada gunanya menyelamatkannya lagi.
+STALE_FALLBACK_MAX_AGE = 14 * 24 * 3600
+
+
+def cache_fallback_or_raise(namespace: str, cache_key: str, label: str, exc: BaseException):
+    """Salinan terakhir yang masih layak, atau lempar ulang kegagalan aslinya."""
+    stale = cache.get_stale(namespace, cache_key)
+    if stale is None:
+        raise exc
+    payload, age = stale
+    if age > STALE_FALLBACK_MAX_AGE:
+        raise exc
+    print(f"[{label}] fetch gagal — memakai cache berumur {age / 3600:.1f} jam "
+          f"sebagai jaring pengaman", file=sys.stderr)
+    return payload
 
 
 def api_key() -> str:
@@ -71,10 +103,20 @@ def series_observations(series_id: str, limit: int = 24) -> list[tuple[str, floa
         "sort_order": "desc",
         "limit": limit,
     }
-    resp = requests.get(BASE_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    obs = resp.json().get("observations", [])
-    result = [(o["date"], float(o["value"])) for o in obs if o["value"] != "."]
+
+    def _fetch():
+        resp = requests.get(BASE_URL, params=params, timeout=15)
+        resp.raise_for_status()
+        obs = resp.json().get("observations", [])
+        return [(o["date"], float(o["value"])) for o in obs if o["value"] != "."]
+
+    try:
+        result = retry(_fetch, retries=FRED_RETRIES, backoff_seconds=FRED_BACKOFF_SECONDS,
+                       label=f"layer1_fred:{series_id}")
+    except Exception as exc:  # noqa: BLE001
+        payload = cache_fallback_or_raise("layer1_fred_observations", cache_key,
+                                  f"layer1_fred:{series_id}", exc)
+        return [tuple(pair) for pair in payload]
 
     cache.set("layer1_fred_observations", cache_key, result)
     return result

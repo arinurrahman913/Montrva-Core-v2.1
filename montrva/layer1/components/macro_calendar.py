@@ -17,7 +17,8 @@ import requests
 from ... import cache
 from ..contracts import ComponentReading
 from ._util import ev, missing, source, th
-from ..sources.fred import api_key
+from ..sources.fred import FRED_BACKOFF_SECONDS, FRED_RETRIES, cache_fallback_or_raise, api_key
+from ...layer2.sources._retry import retry
 
 NAME = "macro_calendar"
 
@@ -42,20 +43,36 @@ def _upcoming_dates(release_id: int, label: str) -> list[dict]:
     if cached is not None:
         return cached
     today = _today()
-    resp = requests.get(
-        "https://api.stlouisfed.org/fred/release/dates",
-        params={
-            "release_id": release_id,
-            "api_key": api_key(),
-            "file_type": "json",
-            "realtime_start": today.isoformat(),
-            "realtime_end": (today + timedelta(days=HORIZON_DAYS)).isoformat(),
-            "include_release_dates_with_no_data": "true",
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    events = [{"label": label, "date": d["date"], "severity": SEVERITY} for d in resp.json().get("release_dates", [])]
+
+    def _fetch():
+        resp = requests.get(
+            "https://api.stlouisfed.org/fred/release/dates",
+            params={
+                "release_id": release_id,
+                "api_key": api_key(),
+                "file_type": "json",
+                "realtime_start": today.isoformat(),
+                "realtime_end": (today + timedelta(days=HORIZON_DAYS)).isoformat(),
+                "include_release_dates_with_no_data": "true",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return [{"label": label, "date": d["date"], "severity": SEVERITY}
+                for d in resp.json().get("release_dates", [])]
+
+    # Retry + jaring pengaman cache basi, sama seperti fred.series_observations
+    # (endpoint ini FRED juga, cuma jalur berbeda karena bukan seri observasi).
+    # Kalender rilis justru yang paling aman diselamatkan dari cache: tanggal
+    # CPI/Employment ditetapkan berbulan-bulan di muka dan hampir tidak pernah
+    # bergeser.
+    try:
+        events = retry(_fetch, retries=FRED_RETRIES, backoff_seconds=FRED_BACKOFF_SECONDS,
+                       label=f"layer1_fred_calendar:{release_id}")
+    except Exception as exc:  # noqa: BLE001
+        return cache_fallback_or_raise("layer1_macro_calendar", str(release_id),
+                               f"layer1_fred_calendar:{release_id}", exc)
+
     cache.set("layer1_macro_calendar", str(release_id), events)
     return events
 

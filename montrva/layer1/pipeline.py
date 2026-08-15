@@ -451,19 +451,78 @@ def _get_spx_validation_history() -> list[dict] | None:
         return None
 
 
+def _age_label(age_seconds: float) -> str:
+    """Umur cache dalam satuan yang tidak membulat jadi nol. `{jam:.0f}` saja
+    menulis "0 jam" untuk cache berumur 12 menit — terbaca seolah-olah tidak
+    ada jeda sama sekali, padahal justru jeda itu yang sedang dilaporkan."""
+    minutes = age_seconds / 60.0
+    if minutes < 90:
+        return f"{minutes:.0f} menit"
+    hours = minutes / 60.0
+    return f"{hours:.0f} jam" if hours < 48 else f"{hours / 24:.0f} hari"
+
+
+def _annotate_stale_fallback(reading: ComponentReading, stale: list[tuple[str, float]]) -> None:
+    """Tandai bacaan yang terpaksa memakai cache basi (fetch Yahoo gagal).
+
+    Status TETAP "ok", disengaja: datanya LENGKAP, cuma diambil dari salinan
+    kemarin. Menurunkannya ke "degraded" akan membuat _apply_contribution
+    membuangnya dari LayerScore (`status != "ok"` -> contribution None), yaitu
+    persis akibat yang sedang diperbaiki — skor dihitung dari 7 dari 13
+    komponen. Umur DATA-nya sendiri tetap terlaporkan lewat jalur yang memang
+    mengukurnya: `data_freshness` dihitung dari tanggal evidence, jadi cache
+    yang benar-benar tua otomatis jatuh ke acceptable/stale dan memotong
+    confidence (-15/-40) tanpa perlu aturan kedua di sini.
+
+    Yang wajib ditambahkan cuma KETERLIHATANNYA: tanpa ini, satu-satunya
+    jejaknya cuma baris stderr yang tidak pernah dibaca siapa pun."""
+    parts = ", ".join(f"{ticker} ({_age_label(age)})" for ticker, age in stale)
+    msg = f"Fetch Yahoo gagal saat run ini — dipakai cache terakhir: {parts}."
+    reading.note = f"{reading.note} {msg}" if reading.note else msg
+    if reading.narrative:
+        reading.narrative = f"{reading.narrative} ⚠ {msg}"
+
+
+def _run_component(fn, *args) -> tuple[ComponentReading, list[tuple[str, float]]]:
+    """Jalankan satu komponen leaf sambil mencatat fallback cache basi.
+
+    Dijalankan DI DALAM worker thread pool (lihat pemanggilnya), yang membuat
+    pencatat thread-local di sources/yahoo.py memetakan tepat ke komponen ini
+    — tiap komponen punya thread sendiri.
+
+    Daftar fallback dikembalikan BERDAMPINGAN dengan bacaannya, bukan dibaca
+    ulang belakangan dari teks `note` yang ditulis _annotate_stale_fallback:
+    memeriksa keluaran dengan mencocokkan string ke format penulisnya sendiri
+    adalah kelas bug yang sudah enam kali kena di proyek ini."""
+    yahoo.begin_capture()
+    try:
+        reading = fn(*args)
+    except BaseException:
+        yahoo.pop_capture()
+        raise
+    stale = yahoo.pop_capture()
+    if stale and reading.status == "ok":
+        _annotate_stale_fallback(reading, stale)
+    return reading, stale
+
+
 def build_market_context_package(price_cache: dict | None = None, session_id: str | None = None) -> MarketContextPackage:
     session_id = session_id or f"session-{uuid.uuid4().hex[:12]}"
     today = date.today()
 
     components: dict = {}
+    stale_fallback_components: list[str] = []
     with ThreadPoolExecutor(max_workers=len(LEAF_COMPONENTS)) as pool:
         futures = {
-            name: pool.submit(fn, price_cache) if name == "market_breadth" else pool.submit(fn)
+            name: pool.submit(_run_component, fn, price_cache) if name == "market_breadth"
+            else pool.submit(_run_component, fn)
             for name, fn in LEAF_COMPONENTS.items()
         }
         for name, fut in futures.items():
             try:
-                components[name] = fut.result()
+                components[name], stale = fut.result()
+                if stale:
+                    stale_fallback_components.append(name)
             except Exception as exc:  # noqa: BLE001
                 # Jaring pengaman: satu komponen yang gagal tak terduga (mis.
                 # IndexError dari respons FRED kosong yang lolos try lokalnya)
@@ -513,10 +572,17 @@ def build_market_context_package(price_cache: dict | None = None, session_id: st
         if c.data_freshness:
             freshness_tally[c.data_freshness] = freshness_tally.get(c.data_freshness, 0) + 1
     confidence_band = context_summary.confidence.band if context_summary else "medium"
+    # Komponen yang datanya lengkap tapi diambil dari cache karena fetch gagal
+    # (lihat _annotate_stale_fallback). Statusnya "ok", jadi ia TIDAK akan
+    # muncul di daftar degraded/missing — tanpa hitungan sendiri di sini,
+    # run yang seluruhnya berjalan di atas jaring pengaman akan terbaca
+    # sempurna dari ringkasannya.
+    stale_fallback = sorted(stale_fallback_components)
     data_quality_summary = {
         "total": n_total,
         "ok": n_ok,
         "degraded": n_degraded,
+        "stale_fallback": stale_fallback,
         "fresh": freshness_tally.get("fresh", 0),
         "acceptable": freshness_tally.get("acceptable", 0),
         "stale": freshness_tally.get("stale", 0),
