@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -27,7 +28,9 @@ from montrva.personal import build_personal_call_set, due_for_review
 from montrva.personal import portfolio as pf
 from montrva.personal.personal_contracts import ACTION_ALIASES
 
-_stage_cache: dict[str, tuple[float, dict]] = {}
+# path -> (mtime, isi, kedaluwarsa). Kedaluwarsa None = ditahan permanen
+# (berkas kecil); berisi angka = dilepas sesudah TTL (lihat _LARGE_FILE_BYTES).
+_stage_cache: dict[str, tuple[float, dict, float | None]] = {}
 _derived_cache: dict[str, tuple[float, str, bytes]] = {}
 
 # Field yang dipakai comparePersonalPicks di frontend/src/format.js untuk
@@ -44,17 +47,58 @@ _RANK_FIELDS = ("thesis_score", "source_confidence", "risk_flags_high", "risk_fl
 _MAX_TICKERS_PER_REQUEST = 250
 
 
+# Ambang "berkas besar" dan berapa lama isinya boleh ditahan di memori sesudah
+# terakhir dipakai.
+#
+# personal_history.json tumbuh jadi 267 MB (riwayat 4.441 ticker, run 15 Agu).
+# `_load_json` menahannya sebagai dict Python selamanya — terukur +461 MB RAM
+# backend sekali panggil, di mesin dengan 2,7 GB bebas dan Chrome jalan. Backend
+# mati dua kali pada 15 Agu, log berhenti mendadak TANPA traceback (tanda
+# proses dibunuh, bukan exception), dan halaman Riwayat Pribadi menampilkan
+# "TypeError: Failed to fetch" — yang artinya servernya hilang, bukan permintaan
+# yang ditolak.
+#
+# Kenapa TTL, bukan sekadar "jangan di-cache": satu kali muat halaman Riwayat
+# memanggil /candidates lalu /tickers dalam hitungan detik, dan yang kedua butuh
+# akses acak ke dict penuh. Tanpa penahanan sama sekali, tiap muat halaman
+# membayar parse 267 MB (terukur 18,3 detik) DUA kali. Ditahan sebentar lalu
+# dilepas: letupannya sekali per kunjungan, bukan permanen.
+#
+# Berkas kecil (personal_calls.json 13 MB, calibration 30 KB) tetap ditahan
+# permanen seperti sebelumnya — bukan itu yang membunuh backend.
+_LARGE_FILE_BYTES = 50 * 1024 * 1024
+_LARGE_FILE_TTL_SECONDS = 120
+
+
+def _sweep_expired(now: float) -> None:
+    for key, entry in list(_stage_cache.items()):
+        if len(entry) == 3 and entry[2] is not None and entry[2] < now:
+            del _stage_cache[key]
+
+
 def _load_json(path: Path) -> dict:
     if not path.exists():
         return {}
+    now = time.time()
+    # Pelepasan terjadi di sini, saat ADA permintaan lain masuk — bukan lewat
+    # timer latar. Cukup karena tiap halaman pribadi memanggil endpoint ini
+    # lagi; yang penting memorinya tidak ditahan sampai proses mati.
+    _sweep_expired(now)
+
     mtime = path.stat().st_mtime
     key = str(path)
     cached = _stage_cache.get(key)
     if cached is not None and cached[0] == mtime:
+        if len(cached) == 3 and cached[2] is not None:
+            # Diakses lagi -> perpanjang, supaya burst permintaan dalam satu
+            # kunjungan halaman tidak kehilangan cache di tengah jalan.
+            _stage_cache[key] = (cached[0], cached[1], now + _LARGE_FILE_TTL_SECONDS)
         return cached[1]
+
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    _stage_cache[key] = (mtime, data)
+    expires = now + _LARGE_FILE_TTL_SECONDS if path.stat().st_size >= _LARGE_FILE_BYTES else None
+    _stage_cache[key] = (mtime, data, expires)
     return data
 
 
