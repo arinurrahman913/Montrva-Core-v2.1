@@ -17,7 +17,7 @@ import yfinance as yf
 from ..cache import CACHE_DIR, get as cache_get, set as cache_set
 from .contracts import ScreeningCandidate, ScreeningResult
 from .sources._retry import retry
-from .sources.listing import cheap_filter, fetch_universe
+from .sources.listing import cheap_filter, fetch_universe, is_adr
 from .sources.sector_map import load_sector_map
 
 BATCH_SIZE = int(os.environ.get("YF_BATCH_SIZE", "50"))
@@ -42,12 +42,6 @@ LARGE_CAP_THRESHOLD = 100_000_000_000
 RECENT_IPO_MAX_DAYS = 252
 LOW_LIQUIDITY_MAX = 1_000_000
 
-# Frasa nama sekuritas yang menandakan ADR (American Depositary Receipt/Shares)
-# — heuristik teks sama seperti NON_COMMON_STOCK_KEYWORDS di sources/listing.py,
-# dipakai sebagai soft flag (bukan exclude, ADR tetap sekuritas valid untuk
-# screening — cuma perlu ditandai karena nuansa regulasi/pelaporan beda dari
-# domestic issuer biasa).
-ADR_KEYWORDS = ["american depositary shares", "american depositary receipt"]
 
 
 def _chunks(seq: list, size: int):
@@ -196,11 +190,6 @@ def fetch_fast_info(ticker: str) -> dict | None:
     return data
 
 
-def _is_adr(security_name: str) -> bool:
-    name_lower = (security_name or "").lower()
-    return any(kw in name_lower for kw in ADR_KEYWORDS)
-
-
 def evaluate_candidate(row, price_df: pd.DataFrame | None, fast_info: dict | None,
                         sector: str | None = None) -> ScreeningCandidate:
     ticker = row.symbol
@@ -248,7 +237,7 @@ def evaluate_candidate(row, price_df: pd.DataFrame | None, fast_info: dict | Non
         soft_flags.append("low_liquidity")
     if market_cap is None:
         soft_flags.append("market_cap_unavailable")
-    if _is_adr(row.security_name):
+    if is_adr(row.security_name):
         soft_flags.append("adr")
 
     return ScreeningCandidate(ticker=ticker, exchange=exchange, passed=True,

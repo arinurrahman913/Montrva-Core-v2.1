@@ -112,13 +112,88 @@ def fetch_universe(use_cache: bool = True) -> list[ListingRow]:
     return rows
 
 
+# Frasa yang menandai American Depositary Receipt/Share — saham biasa
+# perusahaan non-AS yang diperdagangkan di bursa AS. TINGGAL DI SINI, bukan di
+# screening.py, karena ini fakta tentang NAMA SEKURITAS dari berkas listing,
+# dan karena dua daftar kata yang saling menimpa di dua berkas berbeda adalah
+# persis penyebab bug yang diperbaiki di bawah.
+ADR_KEYWORDS = ["american depositary share", "american depositary receipt",
+                "american depository share", "american depository receipt"]
+
+# Kata kunci di NON_COMMON_STOCK_KEYWORDS yang secara harfiah TERKANDUNG di
+# dalam nama ADR ("american depositary shares" memuat "depositary share").
+# Cuma dua kata inilah yang boleh dimaafkan untuk ADR; sisanya (preferred,
+# warrant, notes, unit) tetap berlaku penuh — ADR preferen atau warrant ADR
+# tetap bukan saham biasa.
+_ADR_OVERLAPPING_KEYWORDS = {"depositary share", "depository share"}
+
+# Klausa yang memisahkan "sekuritas yang TERDAFTAR" dari "saham yang DIWAKILI".
+# Nama ADR panjang dan deskriptif: "… American Depositary Shares, each
+# representing the right to receive twenty (20) Series L Shares". Semua kata
+# sesudah klausa ini menggambarkan saham dasarnya, bukan sekuritas yang
+# diperdagangkan di bursa AS.
+_ADR_UNDERLYING_SPLIT = ("representing", "repstg", "to purchase", "consists of")
+
+# Satu pengecualian dari aturan di atas: PREFEREN menular. ADS yang mewakili
+# saham preferen berperilaku seperti preferen (ITUB, PBR.A, CIB), jadi kata ini
+# tetap diperiksa di SELURUH nama, bukan cuma di kepalanya.
+_ADR_UNDERLYING_VETO = "preferred"
+
+
+def is_adr(security_name: str) -> bool:
+    name_lower = (security_name or "").lower()
+    return any(kw in name_lower for kw in ADR_KEYWORDS)
+
+
+def _adr_objections(name_lower: str) -> set[str]:
+    """Keberatan yang benar-benar berlaku untuk sebuah ADR.
+
+    Ada karena NON_COMMON_STOCK_KEYWORDS mencocokkan PROSA, bukan jenis
+    sekuritas: `" right"` menangkap "the right to receive", `" unit"`
+    menangkap "each representing one unit". Pada nama non-ADR yang pendek
+    ("Acme Corp. - Common Stock") itu tidak pernah terlihat; pada nama ADR
+    yang deskriptif, ia membuang America Movil, Coca-Cola FEMSA, Santander
+    Brasil, RLX, dan Waterdrop — semuanya saham biasa.
+
+    Karena itu kata kunci diuji pada KEPALA nama saja (sekuritas yang
+    terdaftar), kecuali "preferred" yang tetap diuji di seluruh nama."""
+    head = name_lower
+    for sep in _ADR_UNDERLYING_SPLIT:
+        head = head.split(sep, 1)[0]
+    obj = {kw.strip() for kw in NON_COMMON_STOCK_KEYWORDS
+           if kw in head and kw.strip() not in _ADR_OVERLAPPING_KEYWORDS}
+    if _ADR_UNDERLYING_VETO in name_lower:
+        obj.add(_ADR_UNDERLYING_VETO)
+    return obj
+
+
 def is_common_stock(row: ListingRow) -> bool:
+    """Apakah baris listing ini saham biasa yang layak masuk universe.
+
+    ADR DIMAAFKAN SECARA EKSPLISIT (audit 15 Agu 2026). Sebelum ini, kata
+    kunci `"depositary share"` — yang ada untuk membuang *preferred*
+    depositary shares — ikut menelan setiap ADR, karena "american depositary
+    shares" memuat substring itu. Akibatnya 274 sekuritas (ARGX, AMRN, ABVX,
+    AKTX, …) hilang dari SELURUH sistem tanpa jejak: mereka dibuang di
+    cheap_filter, tahap yang tidak membuat record apa pun, jadi tidak muncul
+    di `passed` maupun di `hard_excluded` beserta alasannya.
+
+    Efek kedua yang sama pentingnya: `soft_flags.append("adr")` di
+    screening.py menjadi kode yang TIDAK MUNGKIN dieksekusi — dua aturan di
+    pipeline yang sama saling bertentangan, satu bilang "ADR sekuritas valid,
+    cukup ditandai", satu lagi menghapusnya lebih dulu. Diukur atas universe
+    nyata: 274 ADR, 0 lolos, 0 pernah ditandai."""
     if row.is_etf or row.is_test_issue:
         return False
     if "$" in row.symbol or "." in row.symbol:  # kelas saham/unit khusus, notasi non-standar
         return False
     name_lower = row.security_name.lower()
-    return not any(kw in name_lower for kw in NON_COMMON_STOCK_KEYWORDS)
+    hits = {kw.strip() for kw in NON_COMMON_STOCK_KEYWORDS if kw in name_lower}
+    if not hits:
+        return True
+    if not is_adr(name_lower):
+        return False
+    return not _adr_objections(name_lower)
 
 
 def cheap_filter(universe: list[ListingRow]) -> list[ListingRow]:

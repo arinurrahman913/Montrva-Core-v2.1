@@ -416,6 +416,17 @@ def _apply_screening_flag_penalties(by_section: dict[str, SectionScore], screeni
 
 
 def _assess_peer_penalty(peer_comparison: PeerComparisonResult | None) -> PeerPenalty:
+    """TIDAK PERNAH MENYALA di desain peer group sekarang (audit 15 Agu 2026).
+
+    Pemicunya `PeerComparisonResult.low_sample_size`, yang bernilai
+    `len(peers) < 3` — sementara `peer_group_basis` selalu "screening_universe"
+    dan tiap grup berisi 300-800 peer. Terukur: 0 dari 4.077 ticker, dan tidak
+    ada yang terlewat (44.269 blok perbandingan seluruhnya berstatus "ok").
+
+    Sengaja TIDAK dihapus: ia jadi hidup begitu peer group menyempit (mis. peer
+    per-industri, bukan per-universe). Yang tidak boleh dilakukan adalah
+    membaca `applied=False` di 100% populasi sebagai "kualitas peer-nya bagus"
+    — ia berarti pemeriksaannya tidak pernah dijalankan secara efektif."""
     if peer_comparison is None:
         return PeerPenalty(applied=True, reason="No peer comparison available")
     if peer_comparison.low_sample_size:
@@ -438,6 +449,18 @@ def _assess_context_penalty(components_degraded: list[str] | None) -> ContextPen
 
 
 def _assess_recency_penalty(evidence_age_days: int | None) -> RecencyPenalty:
+    """MENGUKUR JAM PERAKITAN, BUKAN UMUR DATA — karena itu selalu 0.
+
+    `evidence_age_days` dihitung dari `KnowledgeMetadata.evidence_date`, yang
+    diisi saat EvidencePackage dirakit dalam run yang sama. Terukur 15 Agu
+    2026: `evidence_age_days == 0` di 4.077 dari 4.077 ticker, jadi ambang 91
+    hari di bawah tidak akan pernah terlampaui.
+
+    Umur ISI-nya memang bisa lebih tua dari itu (cache Evidence: 6 jam harga,
+    24 jam fundamental) — tapi paling jauh sehari, bukan sekuartal. Yang
+    dijaga aturan ini nyata; jam yang dipakai mengukurnya yang salah, dan
+    membetulkannya butuh stempel waktu per-sumber di dalam EvidencePackage
+    yang saat ini tidak ada."""
     if evidence_age_days is None or evidence_age_days <= RECENCY_PENALTY_THRESHOLD_DAYS:
         return RecencyPenalty(applied=False, age_days=evidence_age_days)
     return RecencyPenalty(
