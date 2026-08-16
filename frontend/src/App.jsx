@@ -19,6 +19,7 @@ import PortfolioView from './views/PortfolioView'
 import PersonalAggregatorView from './views/PersonalAggregatorView'
 import PersonalHistoricalView from './views/PersonalHistoricalView'
 import PersonalCalibrationView from './views/PersonalCalibrationView'
+import ActionRulesView from './views/ActionRulesView'
 import { api } from './api'
 
 const TITLES = {
@@ -37,6 +38,7 @@ const TITLES = {
   portfolio: ['Portofolio', 'Posisi riil + buku transaksi. holdings.json diturunkan dari halaman ini — tidak diedit tangan, tidak pernah masuk git'],
   personal_aggregator: ['Sintesis', 'Action + horizon per lens, dibaca dari stance Reasoning — tidak pernah dipublikasikan'],
   personal_historical: ['Rekam Jejak', 'Snapshot keputusan per hari — outcome dievaluasi otomatis begitu call jatuh tempo'],
+  action_rules: ['Aturan Keputusan', 'ACTION_TABLE utuh berdampingan dengan berapa kali tiap selnya benar-benar menyala — stance + skor masuk, action keluar, tanpa mesin skor kedua'],
   personal_calibration: ['Rapor Kalibrasi', 'Hit rate per irisan keputusan, dengan gerbang bukti — melaporkan juga apa yang belum bisa dinilai'],
 }
 
@@ -56,6 +58,7 @@ const VIEWS = {
   portfolio: PortfolioView,
   personal_aggregator: PersonalAggregatorView,
   personal_historical: PersonalHistoricalView,
+  action_rules: ActionRulesView,
   personal_calibration: PersonalCalibrationView,
 }
 

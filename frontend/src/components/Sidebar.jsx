@@ -65,6 +65,10 @@ const PERSONAL_NAV_GROUP = {
     // memberi makan seluruh sisa grup ini (holdings.json -> position_status
     // -> kolom `holding` di ACTION_TABLE).
     { id: 'portfolio', label: 'Portofolio' },
+    // Aturan yang MENGHASILKAN isi halaman lain di grup ini — ditaruh
+    // sebelum rapornya, karena memahami aturannya lebih dulu membuat
+    // angka hit rate di Rapor Kalibrasi punya arti.
+    { id: 'action_rules', label: 'Aturan Keputusan' },
     { id: 'personal_calibration', label: 'Rapor Kalibrasi' },
   ],
 }

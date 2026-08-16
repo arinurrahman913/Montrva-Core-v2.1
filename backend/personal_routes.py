@@ -387,11 +387,48 @@ def register(app, data_dir: Path, get_stage=None) -> None:
         akan mengajarkan aturan yang sudah tidak dipakai tanpa satu pun test
         yang gagal.
         """
-        from montrva.personal.personal_reasoning import ACTION_TABLE, SCORE_TIER_BOUNDS
+        from montrva.personal.personal_reasoning import (
+            ACTION_TABLE, SCORE_TIER_BOUNDS, _thesis_score_tier,
+        )
+
+        # Berapa ticker BENAR-BENAR mendarat di tiap sel pada run terakhir.
+        # Dihitung DI SINI, bukan di JS: memetakan skor ke tingkat butuh
+        # SCORE_TIER_BOUNDS, dan menyalinnya ke frontend akan menambah tempat
+        # KEEMPAT untuk gerbang yang sama (docstring di atas sudah mencatat
+        # tiga yang ada dan bahwa tidak ada yang menghubungkannya).
+        #
+        # Gunanya bukan statistik: sel yang aturannya ada tapi TIDAK PERNAH
+        # menyala cuma bisa terlihat kalau aturan dan kenyataan ditaruh
+        # berdampingan. Begitulah dulu ketahuan bahwa kolom "high" mustahil
+        # tercapai saat gerbangnya masih confidence.band, dan bahwa seluruh
+        # blok "holding" menganggur sebelum ada portofolio.
+        counts: dict = {}
+        tier_hist: dict = {}
+        for cs in _load_json(personal_dir / "personal_calls.json").get("call_sets", []):
+            for module in ("multibagger", "quality_compound", "speculative"):
+                call = cs.get(module)
+                if not isinstance(call, dict):
+                    continue
+                status = call.get("position_status")
+                stance = call.get("source_stance")
+                tier = _thesis_score_tier(call.get("thesis_score") or 50.0)
+                if not status or not stance:
+                    continue
+                # Ditulis bertahap, BUKAN satu ekspresi berantai: pada
+                # `a[k] = b` Python mengevaluasi sisi KANAN lebih dulu, jadi
+                # versi berantai membaca counts[status] sebelum setdefault di
+                # sisi kiri sempat membuatnya -> KeyError.
+                per_stance = counts.setdefault(status, {}).setdefault(module, {}).setdefault(stance, {})
+                per_stance[tier] = per_stance.get(tier, 0) + 1
+                per_module = tier_hist.setdefault(module, {})
+                per_module[tier] = per_module.get(tier, 0) + 1
 
         return jsonify({
             "action_table": ACTION_TABLE,
             "score_tier_bounds": SCORE_TIER_BOUNDS,
+            "cell_counts": counts,
+            "tier_distribution": tier_hist,
+            "session_id": _load_json(personal_dir / "personal_calls.json").get("session_id"),
         })
 
     @app.get("/api/personal/history")

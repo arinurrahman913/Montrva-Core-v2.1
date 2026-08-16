@@ -673,3 +673,12 @@ tr.expand-row td{white-space:normal}
 /* Baris rupiah di bawah nilai dolar (kartu posisi). <u> dipakai murni sebagai
    slot ketiga di .pf-kv — garis bawahnya dimatikan; ia tidak pernah jadi tautan. */
 .pf-kv u{text-decoration:none;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.01em}
+
+/* ATURAN KEPUTUSAN — matriks ACTION_TABLE + hitungan pemakaian nyata */
+.ar-block{margin-bottom:16px}
+.ar-block-title{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);margin-bottom:7px}
+.ar-stance{font-family:var(--mono);font-size:12px;color:var(--dim)}
+/* Sel yang aturannya ada tapi tidak pernah menyala. Diredupkan, BUKAN
+   disembunyikan: yang perlu dilihat justru bahwa ia ada dan diam. */
+.ar-dead{opacity:.38}
+.ar-count{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px}
