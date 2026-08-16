@@ -31,6 +31,7 @@ catalysts.json.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 import logging
 import os
 import sys
@@ -525,7 +526,18 @@ def _run() -> int:
             # tidak boleh menempel ke run ini. Kalau belum pernah dibangun,
             # blok "baselines" di rapor jadi None, bukan angka karangan.
             calibration = build_calibration(
-                personal_timelines, baselines_path=personal_dir / "baselines.json"
+                personal_timelines, baselines_path=personal_dir / "baselines.json",
+                # Checkpoint antara: nol biaya baca di sini — dua-duanya sudah
+                # di memori dari tahap sebelumnya.
+                current_reasoning={b.ticker: {
+                    m: {"stance": getattr(b, m).stance,
+                        "thesis_score": getattr(b, m).thesis_score}
+                    for m in ("multibagger", "quality_compound", "speculative")
+                } for b in reasonings},
+                resolved_by_ticker={
+                    t: [asdict(r) for r in (cs.resolved_history or [])]
+                    for t, cs in catalyst_map.items()
+                },
             )
             _atomic_write(personal_dir / "calibration.json", calibration)
             _cal = calibration["overall"]

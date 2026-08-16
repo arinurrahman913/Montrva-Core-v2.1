@@ -41,6 +41,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .personal_contracts import ACTION_ALIASES
+from .personal_checkpoint import build_checkpoints
 from .personal_evaluation import MODULES, claim_type
 from .personal_historical import call_due_date, run_dates
 
@@ -523,7 +524,14 @@ def build_calibration(
     timelines: dict[str, dict],
     today: date | None = None,
     baselines_path: Path | None = None,
+    current_reasoning: dict[str, dict] | None = None,
+    resolved_by_ticker: dict[str, list[dict]] | None = None,
 ) -> dict:
+    """Dua argumen terakhir OPSIONAL dan cuma untuk blok `checkpoints`.
+
+    Tanpa keduanya rapor tetap dibangun utuh, blok checkpoint-nya saja yang
+    absen — supaya pemanggil lama (dan siapa pun yang cuma punya timelines)
+    tidak perlu ikut berubah."""
     today = today or datetime.now(timezone.utc).date()
     all_rows = collect_theses(timelines)
     # Sebuah tesis masuk rapor kalau SALAH SATU penggarisnya memberi vonis.
@@ -583,4 +591,11 @@ def build_calibration(
         "run_dates": run_dates(timelines),
         "rotation": _rotation(timelines),
         "mechanical_tuning": _mechanical_tuning(rows, slices, overall),
+        # Umpan balik jangka pendek untuk dua lensa yang vonis tesisnya baru
+        # ada 2027-2028. BUKAN vonis dan TIDAK membuka gerbang di atas — lihat
+        # personal_checkpoint.py, pembatas nomor 5.
+        "checkpoints": (
+            build_checkpoints(timelines, current_reasoning, resolved_by_ticker, today)
+            if current_reasoning is not None and resolved_by_ticker is not None else None
+        ),
     }

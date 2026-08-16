@@ -23,7 +23,8 @@ sys.path.insert(0, str(ROOT))
 from montrva.json_safe import dumps_safe, write_text_atomic  # noqa: E402
 from montrva.personal.personal_calibration import build_calibration  # noqa: E402
 
-PERSONAL_DIR = ROOT / "dashboard" / "data" / "personal"
+DATA_DIR = ROOT / "dashboard" / "data"
+PERSONAL_DIR = DATA_DIR / "personal"
 
 
 def main() -> int:
@@ -36,7 +37,21 @@ def main() -> int:
     timelines = json.loads(history_path.read_text(encoding="utf-8"))
     timelines = timelines.get("timelines", timelines)
 
-    report = build_calibration(timelines, baselines_path=PERSONAL_DIR / "baselines.json")
+    # Checkpoint butuh keluaran reasoning run terakhir + riwayat katalis yang
+    # sudah selesai. Kalau salah satunya tidak ada, rapor tetap dibangun tanpa
+    # blok checkpoint — bukan gagal.
+    def _muat(nama, kunci, ambil):
+        p = DATA_DIR / nama
+        if not p.exists():
+            return None
+        return {x["ticker"]: ambil(x) for x in json.loads(p.read_text(encoding="utf-8")).get(kunci, [])}
+
+    current = _muat("reasoning_outputs.json", "reasoning_outputs", lambda x: x)
+    resolved = _muat("catalysts.json", "catalyst_sets", lambda x: x.get("resolved_history") or [])
+    report = build_calibration(
+        timelines, baselines_path=PERSONAL_DIR / "baselines.json",
+        current_reasoning=current, resolved_by_ticker=resolved,
+    )
     out = PERSONAL_DIR / "calibration.json"
     write_text_atomic(out, dumps_safe(report, indent=2, ensure_ascii=False))
 
