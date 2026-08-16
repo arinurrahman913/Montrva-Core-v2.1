@@ -41,7 +41,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .personal_contracts import ACTION_ALIASES
-from .personal_evaluation import MODULES
+from .personal_evaluation import MODULES, claim_type
 from .personal_historical import call_due_date, run_dates
 
 # Gerbang bukti. Angkanya sengaja tidak dipakai untuk MENYARING apa pun,
@@ -96,10 +96,17 @@ def collect_theses(timelines: dict[str, dict]) -> list[dict]:
                 score = call.get("thesis_score")
                 if isinstance(score, dict):  # bentuk lama/berbreakdown
                     score = score.get("score")
+                # Apa yang DIKLAIM call ini — penentu dengan penggaris mana ia
+                # boleh dinilai. Entry lama (sebelum field ini ada) diturunkan
+                # dari action-nya lewat fungsi produksi yang sama, bukan ditebak
+                # di sini: satu definisi "action ini mengklaim apa".
+                kind = rec.get("claim_type") or claim_type(call.get("action") or "")
                 out.append({
                     "ticker": ticker,
                     "module": module,
+                    "claim_type": kind,
                     "classification": rec.get("classification"),
+                    "classification_v2": rec.get("classification_v2"),
                     "miss_reason": rec.get("miss_reason"),
                     "return_pct": rec.get("return_pct"),
                     "excess_pct": rec.get("excess_return_pct"),
@@ -116,10 +123,47 @@ def collect_theses(timelines: dict[str, dict]) -> list[dict]:
 def _summarize(rows: list[dict]) -> dict:
     """Ringkasan satu irisan. `hit_rate_pct` sengaja dihitung atas
     terbukti+meleset saja (ambigu dikeluarkan dari penyebut, bukan dihitung
-    setengah benar) dan bernilai None kalau penyebutnya nol — bukan 0."""
-    terbukti = sum(1 for r in rows if r["classification"] == "terbukti")
-    meleset = sum(1 for r in rows if r["classification"] == "meleset")
-    ambigu = sum(1 for r in rows if r["classification"] == "ambigu")
+    setengah benar) dan bernilai None kalau penyebutnya nol — bukan 0.
+
+    DUA PENGGARIS, DUA ANGKA (audit 15 Agu 2026). `hit_rate_pct` sekarang cuma
+    menghitung tesis berklaim ARAH. Tesis berklaim AMPLITUDO (`siaga_gerakan`)
+    dilaporkan terpisah di blok `amplitudo_*`.
+
+    Sebabnya bukan kerapian: lensa Spekulatif diukur lawan pembanding nol dan
+    hasilnya BISA menemukan saham yang akan bergerak besar (+15,5pp di luar
+    derau) tapi TIDAK terbukti bisa menebak arahnya (+4,2pp, di dalam derau).
+    Karena itu action-nya diganti `masuk_spekulatif` -> `siaga_gerakan` pada
+    2026-08-05 supaya berhenti mengklaim arah. Tapi rapor ini masih menilainya
+    dengan vonis arah, jadi lensa itu terbaca gagal (hit rate 44,8%) memakai
+    ukuran yang sudah diputuskan tidak berlaku untuknya — sementara
+    `classification_v2`, yang menilai klaim amplitudonya, sudah dihitung dan
+    disimpan tapi tidak pernah dibaca siapa pun.
+
+    Menjumlahkan keduanya jadi satu angka persis yang dilarang docstring
+    `claim_type()` di personal_evaluation.py: "tesis arah yang benar" dan
+    "tesis amplitudo yang benar" bukan hal yang sama.
+
+    Diukur atas riwayat live 15 Agu 2026: hit_rate_pct arah TIDAK berubah
+    (44,8%, 529 terbukti / 652 meleset) karena tesis yang jatuh tempo memang
+    hampir seluruhnya `masuk_spekulatif`. Yang MUNCUL adalah blok amplitudo
+    yang selama ini tak terlihat: 74 tesis `siaga_gerakan` sudah matang, 26
+    terbukti / 48 meleset = 35,1%. Angka itu ada di disk sejak action-nya
+    diganti, cuma tidak pernah dibaca — bukan data baru, melainkan data yang
+    akhirnya dilaporkan.
+    """
+    arah = [r for r in rows if r.get("claim_type") != "amplitudo"]
+    amp = [r for r in rows if r.get("claim_type") == "amplitudo"]
+
+    terbukti = sum(1 for r in arah if r["classification"] == "terbukti")
+    meleset = sum(1 for r in arah if r["classification"] == "meleset")
+    ambigu = sum(1 for r in arah if r["classification"] == "ambigu")
+
+    # Klaim amplitudo dinilai lewat classification_v2 (z terhadap pita derau
+    # tickernya sendiri), BUKAN classification arah.
+    amp_terbukti = sum(1 for r in amp if r.get("classification_v2") == "terbukti")
+    amp_meleset = sum(1 for r in amp if r.get("classification_v2") == "meleset")
+    amp_ambigu = sum(1 for r in amp if r.get("classification_v2") == "ambigu")
+    amp_base = amp_terbukti + amp_meleset
     base = terbukti + meleset
     dates = {r["entry_date"] for r in rows if r["entry_date"]}
     returns = [r["return_pct"] for r in rows if r["return_pct"] is not None]
@@ -135,10 +179,22 @@ def _summarize(rows: list[dict]) -> dict:
 
     return {
         "n": n,
+        # Penyebut vonis arah — BEDA dari `n` begitu satu irisan memuat
+        # campuran klaim. Tanpa angka ini, pembaca tidak bisa tahu berapa
+        # banyak dari `n` yang sebenarnya ikut menentukan hit_rate_pct.
+        "n_arah": len(arah),
+        "n_amplitudo": len(amp),
         "terbukti": terbukti,
         "meleset": meleset,
         "ambigu": ambigu,
         "hit_rate_pct": round(terbukti / base * 100, 1) if base else None,
+        # Blok amplitudo: "gerakannya melebihi deru tickernya sendiri atau
+        # tidak", bukan "arahnya benar atau tidak". Sengaja bernama beda supaya
+        # tidak ada yang menjumlahkannya dengan hit_rate_pct.
+        "amplitudo_terbukti": amp_terbukti,
+        "amplitudo_meleset": amp_meleset,
+        "amplitudo_ambigu": amp_ambigu,
+        "amplitudo_hit_rate_pct": round(amp_terbukti / amp_base * 100, 1) if amp_base else None,
         "entry_dates": n_dates,
         "entry_date_list": sorted(dates)[:10],
         "median_return_pct": round(statistics.median(returns), 2) if returns else None,
@@ -470,7 +526,18 @@ def build_calibration(
 ) -> dict:
     today = today or datetime.now(timezone.utc).date()
     all_rows = collect_theses(timelines)
-    rows = [r for r in all_rows if r["classification"] in DIRECTIONAL]
+    # Sebuah tesis masuk rapor kalau SALAH SATU penggarisnya memberi vonis.
+    # Sebelum audit 15 Agu 2026 syaratnya cuma `classification` (vonis ARAH),
+    # sehingga tesis berklaim amplitudo — yang arahnya memang tidak dinilai dan
+    # karena itu ber-classification "tidak_berlaku" — tersaring habis di sini,
+    # sebelum sempat sampai ke _summarize. Terukur: 74 tesis `siaga_gerakan`
+    # sudah matang dengan vonis classification_v2 (26 terbukti / 48 meleset),
+    # dan seluruhnya tidak pernah muncul di rapor mana pun.
+    rows = [
+        r for r in all_rows
+        if r["classification"] in DIRECTIONAL
+        or (r.get("claim_type") == "amplitudo" and r.get("classification_v2") in DIRECTIONAL)
+    ]
 
     miss_reasons: dict[str, int] = defaultdict(int)
     for r in rows:

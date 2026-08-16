@@ -219,11 +219,13 @@ def _speculative_horizon(
         elif days <= 180:
             horizon = "bulanan"
         else:
-            # PLAFON DATA, bukan bug: catalyst.py cuma bisa menurunkan 2 jenis
-            # katalis dari Yahoo `.info` -- earnings (3128) & dividen (656),
-            # dua-duanya kuartalan. Jarak terjauh yang pernah muncul di 4056
-            # ticker cuma 90 hari (audit 2026-07-31), jadi cabang >180 hari ini
-            # tidak pernah dieksekusi: 0 call ber-horizon "enam_bulan".
+            # PLAFON DATA, bukan bug — DIUKUR ULANG 15 Agu 2026 atas 4.021
+            # katalis: jarak terjauh ke katalis mana pun 90 hari (median 74),
+            # nol di atas 180. Jadi horizon Spekulatif efektif cuma "mingguan"
+            # dan "bulanan"; cabang di bawah ini tetap nol dieksekusi.
+            # catalyst.py cuma bisa menurunkan 2 jenis
+            # katalis dari Yahoo `.info` -- earnings (3.105) & dividen (916),
+            # dua-duanya kuartalan.
             # SENGAJA TIDAK dihapus (dan "enam_bulan" tetap di HORIZON_ALLOWED):
             # jenis katalis berjangka panjang (FDA/regulatory/investor day)
             # sudah tercatat sebagai fitur yang ditunda di catalyst.py -- begitu

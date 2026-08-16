@@ -97,9 +97,43 @@ MODULE_KNOWLEDGE_GAP_FIELDS = {
 }
 
 
+# Berapa gap yang membuat sebuah lensa menyatakan "tidak terbaca". PER MODUL,
+# bukan angka tunggal 2 seperti sebelumnya — karena daftar ketergantungan tiap
+# lensa panjangnya jauh berbeda: Multibagger 10 field, Quality 14, Speculative 2.
+# "Kehilangan 2" berarti 20% bukti hilang untuk Multibagger, tapi 100% untuk
+# Speculative.
+#
+# Audit 15 Agu 2026 menemukan akibatnya: `asimetri_tak_terbaca` MUSTAHIL menyala.
+# Dua field gap Speculative adalah volatility_daily (hilang di 0 dari 4.265 —
+# selalu terhitung) dan institutional_pct (hilang di 22). Karena satu-satunya
+# yang bisa hilang cuma satu, ambang 2 tidak akan pernah tercapai. Terukur: 0
+# `asimetri_tak_terbaca` di seluruh universe, berbanding 694 `ruang_tak_terbaca`
+# (Multibagger) dan 843 `mesin_tak_terbaca` (Quality).
+#
+# Akibatnya bukan kosmetik: lensa ini jadi TIDAK PUNYA cara mengatakan "data
+# ini tidak terbaca", sehingga jalur pengaman P3 (PASSIVE_ACTION untuk stance
+# tak terbaca) dan aturan V5 hampa untuknya — ia selalu terpaksa mengambil
+# sikap, bahkan saat separuh masukannya hilang.
+#
+# BUKAN termasuk kenop yang digerbangi kalibrasi: `mechanical_tuning.scope`
+# menyebut SCORE_TIER_BOUNDS, ACTION_TABLE, dan gerbang bukti — bukan ini.
+# Sebanding sebagai PROPORSI, bukan sebagai angka: 3/10 = 30%, 4/14 = 29%,
+# 1/2 = 50%. Yang lama untuk Speculative adalah 2/2 = 100% — satu-satunya lensa
+# yang diminta kehilangan SELURUH masukannya sebelum boleh bilang tidak terbaca.
+UNREADABLE_GAP_THRESHOLD = {
+    "multibagger": 3,       # dari 10 field
+    "quality_compound": 4,  # dari 14 field
+    "speculative": 1,       # dari 2 field (dulu 2 — mustahil, lihat catatan di atas)
+}
+
+
 def _knowledge_gaps(profile: KnowledgeProfile, module: str) -> list[str]:
     allowed = MODULE_KNOWLEDGE_GAP_FIELDS[module]
     return [f for f in (profile.metadata.missing_fields or []) if f in allowed]
+
+
+def _is_unreadable(gaps: list[str], module: str) -> bool:
+    return len(gaps) >= UNREADABLE_GAP_THRESHOLD[module]
 
 
 # Penalti flag terhadap confidence MODUL (bukan ConfidenceReport, yang
@@ -563,7 +597,7 @@ def run_quality_lens(
         stance = "compounding_rapuh"
     else:
         stance = "bukan_compounder"
-    if len(gaps) >= 4:
+    if _is_unreadable(gaps, "quality_compound"):
         stance = "mesin_tak_terbaca"
     assert stance in QUALITY_STANCES
 
@@ -606,6 +640,31 @@ def run_speculative_lens(
     "asimetri_tanpa_katalis". Katalis `rumored` sengaja TIDAK dihitung sebagai
     katalis di sini (spec: rumor menurunkan confidence, bukan menaikkan
     stance) — has_upcoming hanya True untuk scheduled/expected.
+
+    DUA BATAS YANG HARUS DIBACA BERSAMA SKORNYA (audit 15 Agu 2026, diukur atas
+    4.265 ticker). Keduanya BUKAN bug dan sengaja tidak "diperbaiki" dengan
+    menyetel angka — bobot & ambang adalah kenop kalibrasi (lihat
+    `mechanical_tuning` di calibration.json), bukan wewenang modul ini:
+
+    1. PLAFON SKORNYA 88, BUKAN 100. Enam faktor menyumbang, tapi
+       `insider_transactions` (bobot 10) tidak pernah menyala —
+       `ownership.insider_transactions` kosong di 4.265/4.265 (lihat catatan
+       INERT di cabangnya). Maksimum aritmetik yang tersisa 50+10+15+8+5 = 88,
+       dan data setuju: skor tertinggi di seluruh universe persis 88,0.
+       Akibatnya `_thesis_score_tier` (>=70 "high") memakai skala 0-100 atas
+       lensa yang plafonnya 88 — pita "high" di sini sebenarnya 70-88, jadi
+       lensa ini ~12 poin lebih sulit mencapai tingkat penuh dibanding dua
+       lensa lain. JANGAN membandingkan thesis_score antar-lensa apa adanya.
+
+    2. KATALIS NYARIS TIDAK MEMBEDAKAN APA PUN. 79,1% ticker di universe punya
+       katalis mendatang; di kelompok berskor >=60 angkanya 82,6% — selisih
+       cuma +3,5pp. Jadi pembelahan asimetri_berkatalis (1.126) vs
+       asimetri_tanpa_katalis (237) hampir seluruhnya ditentukan LAJU DASAR,
+       bukan sesuatu yang khas pada tickernya. Sebabnya ada di hulu:
+       catalyst.py cuma bisa menurunkan dua jenis katalis dari Yahoo `.info`
+       (earnings 3.105, dividend 916), dua-duanya kuartalan, jadi hampir semua
+       perusahaan punya. Stance "berkatalis" di sini berarti "punya earnings
+       terjadwal", bukan "punya pemicu yang tidak dimiliki orang lain".
     """
     score = 0.0
     positive = []
@@ -705,7 +764,7 @@ def run_speculative_lens(
         stance = "asimetri_berkatalis" if has_catalyst else "asimetri_tanpa_katalis"
     else:
         stance = "tanpa_asimetri"
-    if len(gaps) >= 2:
+    if _is_unreadable(gaps, "speculative"):
         stance = "asimetri_tak_terbaca"
     assert stance in SPECULATIVE_STANCES
 
@@ -929,7 +988,7 @@ def run_multibagger_lens(
         stance = "ruang_sempit"
     else:
         stance = "ruang_tertutup"
-    if len(gaps) >= 3:
+    if _is_unreadable(gaps, "multibagger"):
         stance = "ruang_tak_terbaca"
     assert stance in MULTIBAGGER_STANCES
 
