@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useStageData } from '../useStageData'
 import StatCards from '../components/StatCards'
@@ -6,6 +6,7 @@ import DataTable from '../components/DataTable'
 import Bar from '../components/Bar'
 import Sparkline from '../components/Sparkline'
 import Icon from '../components/Icon'
+import KnowledgeDetailCards from '../components/KnowledgeDetailCards'
 import { fmtPct } from '../format'
 
 // Warna & ikon per sektor — sekadar variasi visual antar-card, tidak
@@ -93,6 +94,49 @@ const columns = [
   },
 ]
 
+// Isi baris yang dibuka: grid "DATA PENDUKUNG LENGKAP" yang sama persis dengan
+// yang dipakai TickerModal — satu definisi, dua pemakai (lihat
+// components/KnowledgeDetailCards.jsx).
+//
+// Knowledge-nya sudah ada di memori (knowledge.json sudah dimuat halaman ini),
+// tapi Evidence TIDAK: berkasnya 242 MB dan cuma bisa diambil per-ticker. Jadi
+// ia ditarik saat barisnya dibuka, bukan di muka — kartunya tampil langsung
+// dengan bagian Knowledge terisi, lalu KEPEMILIKAN/BERITA/VALUASI menyusul
+// begitu Evidence datang. Tanpa Evidence pun kartunya tidak pecah (seluruh
+// pembacaannya optional chaining), cuma berisi "—".
+function ExpandedProfile({ profile, onSelectTicker }) {
+  const [evidence, setEvidence] = useState(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setEvidence(null)
+    setFailed(false)
+    api.ticker(profile.ticker)
+      .then((d) => { if (!cancelled) setEvidence(d.evidence || null) })
+      .catch(() => { if (!cancelled) setFailed(true) })
+    return () => { cancelled = true }
+  }, [profile.ticker])
+
+  return (
+    <div style={{ padding: '4px 2px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span className="msection-title" style={{ margin: 0 }}>Data pendukung lengkap</span>
+        {!evidence && !failed && <span style={{ fontSize: 11, color: 'var(--faint)' }}>memuat Evidence…</span>}
+        {failed && <span style={{ fontSize: 11, color: 'var(--warn)' }}>Evidence gagal dimuat — bagian yang bergantung padanya kosong</span>}
+        <button
+          className="btn-back"
+          style={{ marginLeft: 'auto', transform: 'none' }}
+          onClick={(e) => { e.stopPropagation(); onSelectTicker?.(profile.ticker) }}
+        >
+          Buka detail penuh →
+        </button>
+      </div>
+      <KnowledgeDetailCards knowledge={profile} evidence={evidence} />
+    </div>
+  )
+}
+
 export default function KnowledgeView({ onSelectTicker }) {
   const { data, error } = useStageData(api.knowledge)
   const { data: summaryData } = useStageData(api.knowledgeSectorSummary)
@@ -131,7 +175,11 @@ export default function KnowledgeView({ onSelectTicker }) {
           </span>
           {selectedSector} — {sectorProfiles.length} tickers
         </div>
-        <DataTable columns={columns} rows={sectorProfiles} onRowClick={(r) => onSelectTicker(r.ticker)} />
+        <DataTable
+          columns={columns}
+          rows={sectorProfiles}
+          renderExpanded={(r) => <ExpandedProfile profile={r} onSelectTicker={onSelectTicker} />}
+        />
       </>
     )
   }
