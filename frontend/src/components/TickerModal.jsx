@@ -753,30 +753,134 @@ function FactorWeights({ breakdown, thesisScore }) {
   )
 }
 
-function LensGrid({ reasoning }) {
+// Skor tesis tiap lensa sepanjang riwayat PUBLIK. Sumbernya
+// historical.entries, yang sudah menyimpan thesis_score per modul di tiap
+// snapshot -- jadi kolom Δ dan sparkline di bawah tidak menuntut data baru.
+function publicSeries(historical) {
+  const out = { multibagger: [], quality_compound: [], speculative: [] }
+  for (const raw of historical?.entries || []) {
+    const e = readHistoricalEntry(raw)
+    for (const l of e?.lenses || []) {
+      if (out[l.module] && l.thesis_score != null && Number.isFinite(l.thesis_score)) {
+        out[l.module].push(l.thesis_score)
+      }
+    }
+  }
+  return out
+}
+
+// Tiga lensa sebagai GRID ANGKA, bukan tiga kartu prosa.
+//
+// Bentuk lamanya menaruh skor di dalam kalimat dan menyusun tiga kartu
+// bersebelahan dengan tinggi mengikuti panjang prosa masing-masing -- angka
+// ketiganya tidak pernah sejajar, jadi "mana yang paling kuat" harus dibaca,
+// bukan dilihat. Isi lengkapnya tidak dibuang: semuanya pindah ke baris
+// "detail" yang cuma dirender kalau dibuka.
+function LensGrid({ reasoning, historical }) {
+  const [open, setOpen] = useState(null)
+  const series = useMemo(() => publicSeries(historical), [historical])
+
   return (
-    <div className="lens-grid">
-      {MODULES.map((key) => {
-        const o = reasoning[key]
-        if (!o) return null
-        const metricEntries = Object.entries(o.key_metrics || {})
-        const weightEntries = Object.entries(o.score_breakdown || {})
-        const hasDetail =
-          (o.positive_factors || []).length > 0 ||
-          (o.negative_factors || []).length > 0 ||
-          (o.knowledge_gaps || []).length > 0 ||
-          (o.flag_responses || []).length > 0 ||
-          weightEntries.length > 0 ||
-          (o.context_used || []).length > 0 ||
-          (o.fields_accessed || []).length > 0
-        return (
-          <div className="lens-card" key={key}>
-            <div className="lens-card-mod">{MODULE_LABELS[key]}</div>
-            <span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span>
-            {o.stance_rationale && <p className="lens-card-rationale">{o.stance_rationale}</p>}
+    <div className="numgrid-wrap">
+      <table className="numgrid">
+        <thead>
+          <tr>
+            <th className="l">Lensa</th>
+            <th>Skor</th>
+            <th>Δ run</th>
+            <th className="c">Riwayat</th>
+            <th className="l">Stance</th>
+            <th className="l">Keyakinan</th>
+            <th className="l">Metrik teratas</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {MODULES.map((key, i) => (
+            <LensRows
+              key={key}
+              module={key}
+              output={reasoning[key]}
+              series={series[key] || []}
+              index={i}
+              isOpen={open === key}
+              onToggle={() => setOpen(open === key ? null : key)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LensRows({ module, output: o, series, index, isOpen, onToggle }) {
+  const sparkRef = useRef(null)
+  const shown = useCountUp(o?.thesis_score ?? null, 2, index * 60)
+  useEffect(() => { drawPath(sparkRef.current, { duration: 500, delay: index * 60 }) }, [index, series.length])
+
+  if (!o) {
+    return (
+      <tr className="numgrid-empty">
+        <td className="l">{MODULE_LABELS[module]}</td>
+        <td colSpan={7} className="l faint">Belum ada data.</td>
+      </tr>
+    )
+  }
+
+  const metricEntries = Object.entries(o.key_metrics || {})
+  const weightEntries = Object.entries(o.score_breakdown || {})
+  const hasDetail =
+    (o.positive_factors || []).length > 0 ||
+    (o.negative_factors || []).length > 0 ||
+    (o.knowledge_gaps || []).length > 0 ||
+    (o.flag_responses || []).length > 0 ||
+    weightEntries.length > 0 ||
+    (o.context_used || []).length > 0 ||
+    (o.fields_accessed || []).length > 0 ||
+    !!o.stance_rationale
+
+  // Δ terhadap snapshot sebelumnya. Deret riwayat SUDAH memuat skor run ini
+  // (historical ditulis di run yang sama), jadi pembandingnya elemen kedua
+  // dari belakang -- bukan yang terakhir, yang justru sama dengan skor kini.
+  const prev = series.length >= 2 ? series[series.length - 2] : null
+  const delta = prev != null && o.thesis_score != null ? +(o.thesis_score - prev).toFixed(2) : null
+
+  return (
+    <>
+      <tr className="numgrid-row">
+        <td className="l">
+          <span className="ng-lens">{MODULE_LABELS[module]}</span>
+        </td>
+        <td className="ng-num" title="Skor kekuatan tesis lensa ini (0-100, netral 50)">{shown}</td>
+        <td className={`ng-delta ${delta == null ? 'faint' : delta > 0 ? 'good' : delta < 0 ? 'bad' : 'faint'}`}>
+          {delta == null ? '—' : delta === 0 ? '0,00' : `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}`}
+        </td>
+        <td className="c"><DataSpark values={series} pathRef={sparkRef} /></td>
+        <td className="l"><span className={`pill ${stanceClass(o.stance)}`}>{prettyStance(o.stance)}</span></td>
+        <td className="l">
+          <span
+            className="ng-stance"
+            title={`Bukan Confidence Report. Ini seberapa yakin lensa ${MODULE_LABELS[module]} pada kesimpulannya sendiri — selalu ≤ Confidence Report.`}
+          >
+            {o.confidence?.score?.toFixed(0) ?? '—'} · {o.confidence?.band ?? '—'}
+          </span>
+        </td>
+        <td className="l ng-stance">
+          {metricEntries.length
+            ? metricEntries.slice(0, 2).map(([k, v]) => `${prettyLabel(k)} ${fmtMetricValue(v)}`).join(' · ')
+            : '—'}
+        </td>
+        <td>
+          {hasDetail && <button className="ng-why" onClick={onToggle}>{isOpen ? 'tutup' : 'detail'}</button>}
+        </td>
+      </tr>
+      {isOpen && hasDetail && (
+        <tr className="numgrid-why">
+          <td colSpan={8}>
+            {o.stance_rationale && <p style={{ marginBottom: 8 }}>{o.stance_rationale}</p>}
             {metricEntries.length > 0 && (
-              <div className="lens-card-metrics">
-                {metricEntries.slice(0, 3).map(([k, v]) => (
+              <div className="lens-card-metrics" style={{ marginBottom: 10 }}>
+                {metricEntries.map(([k, v]) => (
                   <div className="lens-card-metric" key={k}>
                     <span>{prettyLabel(k)}</span>
                     <b>{fmtMetricValue(v)}</b>
@@ -784,18 +888,7 @@ function LensGrid({ reasoning }) {
                 ))}
               </div>
             )}
-            <div className="mod-conf">
-              <span className="qi">i</span>
-              <span>keyakinan modul: {o.confidence?.score?.toFixed(0) ?? '—'} ({o.confidence?.band ?? '—'})</span>
-              <div className="tt">
-                <b>Bukan Confidence Report.</b> Ini seberapa yakin lensa {MODULE_LABELS[key]} pada kesimpulannya
-                sendiri — selalu ≤ Confidence Report (lihat bagian Confidence di modal ini).
-              </div>
-            </div>
-            {hasDetail && (
-              <details className="lens-details">
-                <summary>Detail lainnya</summary>
-                <FactorWeights breakdown={o.score_breakdown} thesisScore={o.thesis_score} />
+            <FactorWeights breakdown={o.score_breakdown} thesisScore={o.thesis_score} />
                 {(o.context_used || []).length > 0 && (
                   <div style={{ margin: '2px 0 10px' }}>
                     <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 5 }}>
@@ -843,115 +936,10 @@ function LensGrid({ reasoning }) {
                     ⚑ {fr.flag_id} ({fr.impact}): {fr.rationale}
                   </div>
                 ))}
-              </details>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Blok "Pribadi" di ticker modal — SATU-SATUNYA tempat frontend baca
-// /api/personal/ticker/<ticker> (§9 draft: tetap terpisah dari data publik
-// di atas, cuma render bersebelahan di modal yang sama). Kalau backend tidak
-// PERSONAL_ENABLED, view yang membuka modal dengan context ini tidak akan
-// pernah ada di nav (Sidebar.jsx) -- tapi komponen ini tetap defensif kalau
-// dipanggil manual/context lama.
-function PersonalCallCard({ module, call }) {
-  // DI ATAS early return: hook tidak boleh dipanggil bersyarat, dan lensa
-  // tanpa data (call == null) memang terjadi -- itu cabang pertama di bawah.
-  const [showPath, setShowPath] = useState(false)
-  if (!call) {
-    return (
-      <div className="lens-card">
-        <div className="lens-card-mod">{MODULE_LABELS[module]}</div>
-        <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Belum ada data.</span>
-      </div>
-    )
-  }
-  const statusInfo = horizonStatusInfo(call.horizon_status)
-  const thesisScore = call.thesis_score
-  const scoreColor = thesisScore == null ? 'var(--faint)' : thesisScore >= 65 ? 'var(--good)' : thesisScore >= 50 ? 'var(--gold)' : 'var(--faint)'
-  return (
-    <div className="lens-card">
-      <div className="lens-card-mod" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span>{MODULE_LABELS[module]}</span>
-        {thesisScore != null && (
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: scoreColor }} title="Skor kekuatan tesis lensa ini (0-100, netral 50) — dasar ranking top pick, beda dari confidence (kelengkapan data) di bawah">
-            skor {thesisScore.toFixed(0)}
-          </span>
-        )}
-      </div>
-      <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
-      {/* Tanpa keterangan ini, ticker berskor tinggi yang muncul dengan action
-          bertahap terbaca seperti inkonsistensi sistem. P4 menurunkannya
-          dengan sengaja: skor tesis boleh kuat, tapi data lensa ini terlalu
-          tipis (band "low") untuk membenarkan eksposur penuh. */}
-      {call.action_downgraded_from && (
-        <div
-          style={{ marginTop: 5, fontSize: 10, color: 'var(--warn)', lineHeight: 1.45 }}
-          title="P4: confidence lensa ini 'low' — action penuh diganti versi bertahap"
-        >
-          ⓘ Diturunkan dari <strong>{prettyAction(call.action_downgraded_from)}</strong> — data lensa ini tipis, belum cukup untuk eksposur penuh.
-        </div>
+          </td>
+        </tr>
       )}
-      {call.action_rationale && <p className="lens-card-rationale">{call.action_rationale}</p>}
-      <RiskBadge call={call} />
-
-      <div style={{ marginTop: 8, fontSize: 11 }}>
-        <span style={{ color: 'var(--faint)' }}>{horizonLabel(call.action)}: </span>
-        <span style={{ color: 'var(--dim)' }}>{prettyHorizon(call.horizon)}</span>
-      </div>
-      {call.horizon_basis && (
-        <p style={{ fontSize: 10.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: 4 }}>{call.horizon_basis}</p>
-      )}
-      {call.horizon_anchor && (
-        <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2 }}>Jangkar: {call.horizon_anchor}</div>
-      )}
-
-      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--rule)', fontSize: 10.5, color: 'var(--faint)' }}>
-        {call.position_status === 'holding' ? (
-          <>
-            Dipegang sejak {call.holding_since || '—'}
-            {call.unrealized_return_pct != null && (
-              <span style={{ color: call.unrealized_return_pct >= 0 ? 'var(--good)' : 'var(--bad)' }}>
-                {' '}· {call.unrealized_return_pct >= 0 ? '+' : ''}{call.unrealized_return_pct.toFixed(1)}%
-              </span>
-            )}
-            {statusInfo && <div style={{ color: 'var(--warn)', marginTop: 2 }}>{statusInfo.label}</div>}
-          </>
-        ) : (
-          'Belum dipegang'
-        )}
-      </div>
-      {call.price_at_call != null && (
-        <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }} title="Harga saat call ini dibuat, dan harga S&P 500 pada saat yang sama -- basis pembanding excess return nanti begitu dievaluasi">
-          Harga saat call: ${call.price_at_call.toFixed(2)}
-          {call.benchmark_at_call != null && ` · S&P 500: ${call.benchmark_at_call.toFixed(0)}`}
-        </div>
-      )}
-      <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 4 }}>
-        Berdasarkan stance: {call.source_stance} (confidence {call.source_confidence?.toFixed(0) ?? '—'})
-      </div>
-
-      {/* Kartu ini menampilkan HASIL; bagian di bawah menampilkan TURUNANNYA.
-          Ditutup secara default supaya kartu tetap ringkas — dan lazy: tabel
-          aksi baru diminta ke backend saat benar-benar dibuka, bukan 3x per
-          modal dibuka (satu per lensa). */}
-      <button
-        type="button"
-        onClick={() => setShowPath((v) => !v)}
-        style={{
-          marginTop: 8, width: '100%', textAlign: 'left', background: 'transparent',
-          border: '1px solid var(--rule)', borderRadius: 6, padding: '5px 8px',
-          fontSize: 10, color: 'var(--dim)', cursor: 'pointer',
-        }}
-      >
-        {showPath ? '▾' : '▸'} Jalur keputusan
-      </button>
-      {showPath && <DecisionPath module={module} call={call} />}
-    </div>
+    </>
   )
 }
 
@@ -1583,7 +1571,7 @@ function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }
       body: () => (
         <>
           <BullBearCase reasoning={reasoning} />
-          <LensGrid reasoning={reasoning} />
+          <LensGrid reasoning={reasoning} historical={historical} />
         </>
       ),
     },

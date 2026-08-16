@@ -128,6 +128,17 @@ def _history_record(path: Path, ticker: str) -> dict | None:
     berubah) -- lambat, tidak pernah salah data: `build_historical_index`
     memvalidasi hasilnya dan mengembalikan None kalau penandanya meleset.
     """
+    index = _history_idx(path)
+    if index is None:
+        history = _load_json(path)
+        return (history.get("timelines") or history).get(ticker)
+    return index.get(ticker)
+
+
+def _history_idx(path: Path):
+    """Indeks offset berkas ini, dibangun sekali per mtime. None kalau berkasnya
+    tidak ada ATAU penanda record-nya meleset (bentuk berkas berubah) -- kedua
+    pemanggil di bawah menerjemahkan None jadi jalur `_load_json` biasa."""
     if not path.exists():
         return None
     mtime = path.stat().st_mtime
@@ -136,17 +147,42 @@ def _history_record(path: Path, ticker: str) -> dict | None:
     if cached is None or cached[0] != mtime:
         cached = (mtime, big_json.build_historical_index(path))
         _history_index[key] = cached
-    index = cached[1]
+    return cached[1]
+
+
+def _history_records(path: Path):
+    """Seluruh isi personal_history.json, SATU RECORD PADA SATU WAKTU.
+
+    Dipakai dua proyeksi yang memang butuh seluruh populasi (kandidat top-3 &
+    previous picks). Sebelumnya keduanya lewat `_load_json`, yang mengembang
+    jadi dict Python ~460 MB sekali panggil -- letupan yang dua kali membunuh
+    backend pada 15 Agu. Hasil proyeksinya sendiri sudah di-cache per mtime,
+    jadi ini dibayar sekali per versi berkas; yang berubah cuma puncak
+    memorinya: satu record, bukan 4.441.
+    """
+    if not path.exists():
+        return
+    index = _history_idx(path)
     if index is None:
         history = _load_json(path)
-        return (history.get("timelines") or history).get(ticker)
-    return index.get(ticker)
+        yield from (history.get("timelines") or history).items()
+        return
+    yield from index.iter_records()
 
 
-def _derived_json(path: Path, key: str, build) -> Response:
+def _derived_json(path: Path, key: str) -> Response:
     """Hasil turunan dari sebuah berkas, di-cache dengan kunci mtime yang sama
     dengan _load_json. Proyeksi di bawah memindai ~113 ribu call tiap kali
     dibangun; tanpa cache ini, tiap muat halaman membayarnya lagi.
+
+    [2026-08-16] KEDUA proyeksi dibangun sekali jalan (lihat
+    _history_projections), bukan satu per permintaan. Sebelumnya masing-masing
+    memanggil `_load_json` dan yang kedua menumpang dict yang sudah ditahan
+    yang pertama — gratis. Begitu sumbernya jadi aliran record (hemat memori,
+    tidak menahan apa pun), "gratis" itu hilang: yang kedua akan melewati
+    berkas 291 MB untuk kedua kalinya. Terukur ~9,5 detik sekali lewat, jadi
+    dua kali lewat = regresi nyata untuk halaman yang memang memanggil
+    keduanya.
 
     Yang di-cache SUDAH BERUPA TEKS (dan versi gzip-nya), bukan dict: jsonify
     menyerialkan ulang tiap permintaan, dan untuk proyeksi kandidat (2,5 MB,
@@ -163,9 +199,12 @@ def _derived_json(path: Path, key: str, build) -> Response:
     cache_key = f"{path}#{key}"
     cached = _derived_cache.get(cache_key)
     if cached is None or cached[0] != mtime:
-        payload = json.dumps(build(_load_json(path)), separators=(",", ":"))
-        cached = (mtime, payload, gzip.compress(payload.encode("utf-8"), 6))
-        _derived_cache[cache_key] = cached
+        for name, payload_obj in _history_projections(path).items():
+            payload = json.dumps(payload_obj, separators=(",", ":"))
+            _derived_cache[f"{path}#{name}"] = (
+                mtime, payload, gzip.compress(payload.encode("utf-8"), 6),
+            )
+        cached = _derived_cache[cache_key]
     if "gzip" in (request.headers.get("Accept-Encoding") or ""):
         resp = Response(cached[2], mimetype="application/json")
         resp.headers["Content-Encoding"] = "gzip"
@@ -180,7 +219,7 @@ def _is_best_action(module: str, action: str | None) -> bool:
     return bool(action) and action in ACTION_ALIASES.get(module, frozenset())
 
 
-def _build_candidates(history: dict) -> dict:
+def _collect_candidates(out: list, ticker: str, timeline) -> None:
     """Semua call yang BERHAK ikut perebutan top-3, tanpa isi timeline-nya.
 
     Halaman Riwayat Pribadi butuh tahu ticker mana yang pernah masuk 3 besar
@@ -188,30 +227,30 @@ def _build_candidates(history: dict) -> dict:
     SELURUH populasi, dan selama ini dijawab dengan mengirim personal_history.json
     utuh (160 MB) ke browser. Proyeksi ini membawa persis yang dibutuhkan
     perankingan dan tidak lebih: 17 ribu baris, ~2,4 MB.
+
+    Bentuknya kolektor PER RECORD (bukan loop atas seluruh berkas) supaya
+    proyeksi ini dan _collect_previous_pick bisa jalan dalam SATU kali lewat
+    -- aturan masing-masing tetap di fungsinya sendiri.
     """
-    timelines = history.get("timelines", history)
-    out = []
-    for ticker, timeline in timelines.items():
-        if not isinstance(timeline, dict):
+    if not isinstance(timeline, dict):
+        return
+    for entry in timeline.get("entries", []):
+        day = (entry.get("analyzed_at") or "")[:10]
+        if not day:
             continue
-        for entry in timeline.get("entries", []):
-            day = (entry.get("analyzed_at") or "")[:10]
-            if not day:
+        call_set = entry.get("personal_call_set") or {}
+        for module in ACTION_ALIASES:
+            call = call_set.get(module) or {}
+            if call.get("position_status") != "no_holding":
                 continue
-            call_set = entry.get("personal_call_set") or {}
-            for module in ACTION_ALIASES:
-                call = call_set.get(module) or {}
-                if call.get("position_status") != "no_holding":
-                    continue
-                if not _is_best_action(module, call.get("action")):
-                    continue
-                row = {"ticker": ticker, "day": day, "module": module}
-                row.update({f: call.get(f) for f in _RANK_FIELDS})
-                out.append(row)
-    return {"candidates": out}
+            if not _is_best_action(module, call.get("action")):
+                continue
+            row = {"ticker": ticker, "day": day, "module": module}
+            row.update({f: call.get(f) for f in _RANK_FIELDS})
+            out.append(row)
 
 
-def _build_previous_picks(history: dict) -> dict:
+def _collect_previous_pick(picks: dict, ticker: str, timeline, as_of):
     """Ticker yang jadi kandidat top pick di snapshot SEBELUM yang terakhir,
     per lensa -- dasar badge "BARU" di Agregator Pribadi.
 
@@ -220,25 +259,44 @@ def _build_previous_picks(history: dict) -> dict:
     run sebelumnya secara global), disaring position_status=no_holding +
     action terkuat lensa itu. Dipindah ke sini karena satu-satunya alasan
     halaman Agregator mengunduh riwayat 160 MB adalah badge ini.
+
+    Kolektor per record, sama pola dengan _collect_candidates. Mengembalikan
+    `as_of` yang sudah diperbarui (tanggal snapshot kedua-dari-belakang
+    TERBARU di seluruh populasi) -- nilainya lintas-record, jadi tidak bisa
+    disimpan di dalam kolektor.
     """
-    timelines = history.get("timelines", history)
+    if not isinstance(timeline, dict):
+        return as_of
+    entries = timeline.get("entries", [])
+    if len(entries) < 2:
+        return as_of
+    prev = entries[-2]
+    for module in ACTION_ALIASES:
+        call = (prev.get("personal_call_set") or {}).get(module) or {}
+        if call.get("position_status") == "no_holding" and _is_best_action(module, call.get("action")):
+            picks[module].add(ticker)
+    prev_at = prev.get("analyzed_at") or ""
+    return prev_at if (not as_of or prev_at > as_of) else as_of
+
+
+def _history_projections(path: Path) -> dict:
+    """Kedua proyeksi populasi, SATU kali lewat berkas.
+
+    Yang mahal di sini bukan aturannya melainkan melewati 4.441 record (~9,5
+    detik). Membangunnya per permintaan berarti membayar itu dua kali untuk
+    satu kali muat halaman, karena tidak ada lagi dict besar yang ditahan
+    untuk ditumpangi permintaan kedua.
+    """
+    candidates: list = []
     picks: dict[str, set[str]] = {m: set() for m in ACTION_ALIASES}
     as_of = None
-    for ticker, timeline in timelines.items():
-        if not isinstance(timeline, dict):
-            continue
-        entries = timeline.get("entries", [])
-        if len(entries) < 2:
-            continue
-        prev = entries[-2]
-        for module in ACTION_ALIASES:
-            call = (prev.get("personal_call_set") or {}).get(module) or {}
-            if call.get("position_status") == "no_holding" and _is_best_action(module, call.get("action")):
-                picks[module].add(ticker)
-        prev_at = prev.get("analyzed_at") or ""
-        if not as_of or prev_at > as_of:
-            as_of = prev_at
-    return {"as_of": as_of, "tickers": {m: sorted(v) for m, v in picks.items()}}
+    for ticker, timeline in _history_records(path):
+        _collect_candidates(candidates, ticker, timeline)
+        as_of = _collect_previous_pick(picks, ticker, timeline, as_of)
+    return {
+        "candidates": {"candidates": candidates},
+        "previous_picks": {"as_of": as_of, "tickers": {m: sorted(v) for m, v in picks.items()}},
+    }
 
 
 # Kutipan live untuk seluruh portofolio sekaligus. fetch_live_quote sendiri
@@ -479,10 +537,8 @@ def register(app, data_dir: Path, get_stage=None) -> None:
     @app.get("/api/personal/history/candidates")
     def get_personal_history_candidates():
         """Proyeksi tipis untuk menentukan siapa yang pernah masuk top-3 --
-        lihat _build_candidates. Perankingannya tetap di frontend."""
-        return _derived_json(
-            personal_dir / "personal_history.json", "candidates", _build_candidates,
-        )
+        lihat _collect_candidates. Perankingannya tetap di frontend."""
+        return _derived_json(personal_dir / "personal_history.json", "candidates")
 
     @app.get("/api/personal/history/tickers")
     def get_personal_history_tickers():
@@ -510,9 +566,7 @@ def register(app, data_dir: Path, get_stage=None) -> None:
     @app.get("/api/personal/history/previous-picks")
     def get_personal_history_previous_picks():
         """Kandidat top pick di snapshot sebelumnya, per lensa (badge "BARU")."""
-        return _derived_json(
-            personal_dir / "personal_history.json", "previous_picks", _build_previous_picks,
-        )
+        return _derived_json(personal_dir / "personal_history.json", "previous_picks")
 
     @app.get("/api/personal/calibration")
     def get_personal_calibration():
