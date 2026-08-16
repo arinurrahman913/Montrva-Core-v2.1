@@ -177,6 +177,64 @@ export const QUALITY_INFO = {
   unverified: { label: 'unverified', reason: 'Ada nilai, tapi belum lolos cross-check keandalan.' },
 }
 
+// --- "Cara baca": keterangan yang menempel di angkanya ------------------
+//
+// Semuanya di SATU tempat, sebelah METRIC_DEFINITIONS, bukan ditulis di dalam
+// JSX tiap komponen: kalau aturannya berubah, satu berkas yang diubah.
+//
+// Isinya BUKAN definisi kamus. Tiap kalimat lahir dari satu salah-baca yang
+// benar-benar mungkin di angka itu -- beberapa di antaranya pernah
+// menyesatkan saat mengaudit sistem ini sendiri (mis. `undetermined` dibaca
+// "aman", `evidence_age_days=0` dibaca "real-time").
+//
+// Nilai boleh berupa fungsi kalau kalimatnya butuh fakta populasi yang
+// berubah tiap run. Aturannya: kalau faktanya tidak tersedia, kalimatnya
+// MENYUSUT, tidak pernah menebak angka.
+export const READING_NOTES = {
+  chain: {
+    screening: 'Lolos saringan kelayakan data & ukuran — belum ada penilaian apa pun soal bagus/tidaknya.',
+    evidence: 'Berapa sumber yang menjawab. "umur" = jarak dari perakitan Evidence, BUKAN umur data pasarnya.',
+    knowledge: 'Field terisi dari yang diperiksa. Yang hilang berarti lensa membaca lebih sedikit bukti — bukan berarti perusahaannya buruk.',
+    confidence: 'Kelengkapan & kesegaran DATA, bukan kualitas sahamnya. Saham buruk berdata lengkap tetap dapat skor tinggi.',
+    risk: 'Flag yang TERPICU. Sisanya undetermined — belum bisa dinilai, bukan aman.',
+    reasoning: 'Tiga lensa terpisah, tidak dirata-rata. Faktor & bobotnya beda, jadi skor satu lensa tidak setara skor lensa lain.',
+    synthesis: (ctx) => {
+      const n = ctx?.populationSize
+      return `Titik temu antar-lensa, bukan vonis. Surprise = kelangkaan kombinasi stance dibanding ${n ? `${n.toLocaleString('id-ID')} ticker` : 'seluruh ticker'} di run ini — tinggi berarti jarang, bukan bagus.`
+    },
+    catalyst: 'Peristiwa terjadwal yang bisa menggerakkan harga. Mayoritas ticker punya earnings terjadwal (terukur ~79% pada audit 15 Agu 2026), jadi yang membedakan jaraknya — bukan adanya.',
+    peer: 'Dibanding median grup sektornya, bukan pesaing yang dipilih tangan.',
+    personal: 'Terjemahan stance jadi tindakan untukmu, memperhitungkan posisi yang kamu pegang.',
+  },
+  section: {
+    personal: 'Terjemahan stance jadi TINDAKAN untukmu, memperhitungkan posisi yang kamu pegang. Tidak pernah dipublikasikan dan tidak ikut ke data publik.',
+    knowledge: 'Bukti mentah yang sudah distrukturkan jadi 7 section — bahan baku semua lensa, belum ada tafsiran.',
+    risk: 'Bahaya yang bisa MEMBATALKAN tesis, bukan yang membuatnya bagus. Flag "ekstrem" menghentikan ticker sebelum Reasoning jalan. Skor risiko bukan "sekian dari 100" — ia jumlah bobot flag yang terpicu.',
+    reasoning: 'Tiga cara memandang saham yang sama, sengaja tidak digabung. Stance "tak terbaca" ≠ jelek — artinya data lensa itu terlalu tipis untuk menyimpulkan apa pun.',
+    synthesis: '0 searah & 0 divergen BUKAN berarti ketiganya sepakat — artinya tidak ada pasangan lensa yang berbagi metrik kunci. Diam, bukan sepakat.',
+    confidence: 'Nilai DATANYA, per section Knowledge. Buka untuk melihat section mana yang menahan skornya.',
+    catalyst: 'Peristiwa terjadwal berikutnya beserta jaraknya. Yang berarti jaraknya, bukan sekadar adanya.',
+    peer: 'Posisi relatif terhadap median sektor. Persentil tinggi pada metrik "mahal" berarti lebih mahal dari sektornya, bukan lebih baik.',
+    evidence: 'Angka mentah apa adanya dari sumber, sebelum ditafsirkan. Bar harga dari cache pipeline, bukan kutipan live.',
+    historical: 'Snapshot keputusan tiap hari run. Outcome-nya belum dievaluasi (menunggu v2.1) — ini rekaman, bukan rapor.',
+  },
+  column: {
+    skor: '0-100, netral 50. Bukan target harga, bukan probabilitas.',
+    delta: 'Dibanding run SEBELUMNYA, bukan sejak awal.',
+    riwayat: 'Skor tiap snapshot; ujung kanan = sekarang.',
+    stance: 'Kosakata milik lensa itu sendiri — tidak dibandingkan antar-lensa.',
+    keyakinan: 'Keyakinan lensa pada kesimpulannya sendiri. Selalu ≤ Confidence Report.',
+    metrik: 'Angka yang benar-benar dibaca lensa ini, bukan ringkasan umum.',
+    aksi: 'Hasil ACTION_TABLE: stance × tingkat skor × posisi yang kamu pegang.',
+    horizon: 'Kapan tesis ini WAJAR dinilai ulang, bukan target waktu jual.',
+  },
+}
+
+export function readingNote(group, key, ctx) {
+  const v = READING_NOTES[group]?.[key]
+  return typeof v === 'function' ? v(ctx) : v || null
+}
+
 // --- Kosakata stance per-modul (Data Contracts D-09) ---
 // Tiap modul reasoning punya kosakata sendiri yang TIDAK sebanding lintas
 // modul — tapi DI DALAM satu modul urutannya jelas (bullish→bearish). Peta

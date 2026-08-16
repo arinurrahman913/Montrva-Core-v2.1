@@ -572,6 +572,28 @@ tr.expand-row td{white-space:normal}
 .cdl-vol.up{fill:var(--good)} .cdl-vol.down{fill:var(--bad)}
 .cdl-ma{fill:none;stroke:var(--accent);stroke-width:1.2;opacity:.85}
 .cdl-event{stroke:var(--warn);stroke-width:1;stroke-dasharray:3 3;opacity:.75}
+
+/* --- "Cara baca" -----------------------------------------------------------
+   Keterangan menempel DI BAWAH angkanya sendiri, tidak melayang di atasnya:
+   modal ini sering dibaca sambil membandingkan dua ticker, dan tooltip yang
+   menutupi angka justru menghalangi pekerjaan itu. */
+.readbtn{display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:10px;
+  font-family:var(--sans);font-size:10.5px;color:var(--faint);background:var(--panel3);
+  border:1px solid var(--rule-strong);border-radius:6px;padding:3px 10px;cursor:pointer}
+.readbtn:hover{color:var(--text)}
+.readbtn.on{color:var(--accent);border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.1)}
+.readbtn-dot{width:6px;height:6px;border-radius:99px;background:var(--faint);flex:none}
+.readbtn.on .readbtn-dot{background:var(--accent)}
+
+.mchain-step.with-note{min-width:172px}
+.mchain-help{font-family:var(--sans);font-size:10px;line-height:1.45;color:var(--accent);
+  margin-top:6px;padding-top:5px;border-top:1px dashed rgba(34,211,238,.28);white-space:normal}
+.msec-help{font-family:var(--sans);font-size:10.5px;line-height:1.5;color:var(--accent);
+  margin:0 13px 9px 26px;padding-left:9px;border-left:2px solid rgba(34,211,238,.3)}
+.th-help{display:block;font-family:var(--sans);font-size:9px;font-weight:400;letter-spacing:0;
+  text-transform:none;color:var(--accent);margin-top:3px;line-height:1.35;white-space:normal;max-width:190px}
+.numgrid th.l .th-help,.numgrid th.c .th-help{margin-left:0}
+.numgrid th:not(.l):not(.c) .th-help{margin-left:auto}
 /* Market Regime aggregation section */
 .agg-summary{display:flex;gap:12px;margin-bottom:10px;font-family:var(--sans);font-size:12px;font-weight:700}
 .agg-bull{color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent);padding:4px 8px;border-radius:6px}

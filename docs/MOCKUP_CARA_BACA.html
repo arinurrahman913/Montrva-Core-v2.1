@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Cara baca — keterangan tiap angka (Montrva)</title>
+<style>
+:root{
+  --ink:#0A0D14; --panel:#12151E; --panel2:#181C28; --panel3:#1F2433;
+  --rule:rgba(255,255,255,.07); --rule2:rgba(255,255,255,.13);
+  --text:#E7E9EE; --dim:#98A2B8; --faint:#616B80;
+  --accent:#22D3EE; --warn:#FBBF7A; --bad:#FB7185; --good:#4ADE80;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; --sans:-apple-system,"Segoe UI",Inter,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55;
+  padding:26px 30px 80px;font-variant-numeric:tabular-nums}
+h1{font-size:17px;font-weight:600;margin-bottom:5px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.lead{font-size:12.5px;color:var(--faint);margin-bottom:16px;max-width:1010px}
+.sec{margin-bottom:40px}
+.tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);border:1px solid rgba(34,211,238,.3);background:rgba(34,211,238,.08);
+  padding:2px 8px;border-radius:999px;margin-bottom:8px}
+.tag.b{color:var(--warn);border-color:rgba(251,191,122,.3);background:rgba(251,191,122,.08)}
+.note{font-size:11.5px;color:var(--faint);line-height:1.7;margin-top:12px;max-width:1030px}
+.note b{color:var(--dim)}
+.callout{border:1px solid rgba(34,211,238,.25);background:rgba(34,211,238,.05);border-radius:10px;
+  padding:11px 14px;font-size:12px;color:var(--dim);max-width:1030px;margin-bottom:18px}
+.callout b{color:var(--accent)}
+.mono{font-family:var(--mono)} .dim{color:var(--dim)} .faint{color:var(--faint)}
+.good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .acc{color:var(--accent)}
+.pill{display:inline-block;padding:2px 8px;font-size:9.5px;font-weight:600;letter-spacing:.03em;border-radius:999px}
+.pill.ok{color:var(--good);background:rgba(74,222,128,.12)}
+.pill.warn{color:var(--warn);background:rgba(251,191,122,.12)}
+.pill.neutral{color:var(--dim);background:rgba(255,255,255,.06)}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:1240px){.cmp{grid-template-columns:1fr}}
+.col-h{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.col-h .t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.col-h.before .t{color:var(--warn)} .col-h.after .t{color:var(--accent)}
+.col-h .s{font-size:11px;color:var(--faint)}
+
+.modal{background:var(--panel);border:1px solid var(--rule2);border-radius:12px;overflow:hidden}
+.mhead{padding:11px 15px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
+.mhead .tk{font-family:var(--mono);font-weight:700;font-size:16px;color:var(--accent)}
+.mhead .px{font-family:var(--mono);font-size:11px;color:var(--bad);background:rgba(251,113,133,.12);
+  padding:2px 8px;border-radius:999px}
+.readbtn{margin-left:auto;font-family:var(--sans);font-size:10.5px;color:var(--faint);background:var(--panel3);
+  border:1px solid var(--rule2);border-radius:6px;padding:3px 10px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.readbtn.on{color:var(--accent);border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.1)}
+.readbtn .dot{width:6px;height:6px;border-radius:99px;background:var(--faint)}
+.readbtn.on .dot{background:var(--accent)}
+
+.chain{display:flex;overflow-x:auto;background:var(--panel2);border-bottom:1px solid var(--rule);padding:11px 14px}
+.ro{min-width:128px;padding:0 12px;border-left:1px solid var(--rule);flex:none}
+.ro:first-child{border-left:none;padding-left:0}
+.ro-k{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.ro-v{font-family:var(--mono);font-size:15px;font-weight:600}
+.ro-s{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px}
+.ro-help{font-family:var(--sans);font-size:10px;line-height:1.45;color:var(--accent);margin-top:6px;
+  border-top:1px dashed rgba(34,211,238,.28);padding-top:5px;white-space:normal;max-width:200px}
+.ro-help b{color:var(--warn);font-weight:600}
+
+.msec{border-bottom:1px solid var(--rule)}
+.msec-h{display:flex;align-items:center;gap:9px;padding:9px 15px}
+.msec-t{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
+.msec-sum{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.msec.asal .msec-t{color:var(--accent)}
+.badge{font-family:var(--mono);font-size:8.5px;color:var(--accent);border:1px solid rgba(34,211,238,.35);
+  border-radius:999px;padding:1px 6px}
+.sec-help{font-family:var(--sans);font-size:10.5px;color:var(--accent);line-height:1.5;padding:0 15px 9px 36px;
+  border-left:2px solid rgba(34,211,238,.3);margin-left:15px}
+.sec-help b{color:var(--warn)}
+.caret{color:var(--faint);font-size:11px;width:10px}
+
+table{width:100%;border-collapse:collapse}
+th{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);padding:7px 10px;text-align:right;border-bottom:1px solid var(--rule2);background:var(--panel2)}
+th.l{text-align:left}
+td{padding:8px 10px;border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:12.5px;text-align:right}
+td.l{text-align:left}
+tr:last-child td{border-bottom:none}
+.th-help{display:block;font-family:var(--sans);font-size:9px;font-weight:400;letter-spacing:0;
+  text-transform:none;color:var(--accent);margin-top:3px;line-height:1.35;white-space:normal}
+
+.risks{width:100%;max-width:1030px;border-collapse:collapse;font-size:12px}
+.risks th{text-align:left;padding:7px 10px}
+.risks td{font-family:var(--sans);font-size:12px;text-align:left;padding:9px 10px;color:var(--dim);
+  vertical-align:top;line-height:1.6}
+.risks td.m{font-family:var(--mono);font-size:11.5px;color:var(--text);white-space:nowrap}
+.risks td.x{color:var(--bad)}
+.wrap{border:1px solid var(--rule);border-radius:11px;overflow:hidden}
+</style>
+</head>
+<body>
+
+<h1>Cara baca — keterangan menempel di angkanya, bukan di halaman bantuan</h1>
+<p class="lead">
+Semua angka nyata: REPL (Replimune Group) dari run <span class="mono">session-20260816T031747</span> — ticker yang sama dengan screenshot-mu, dan kebetulan contoh yang tajam: dua lensa bilang <span class="mono">tak terbaca</span> sementara lensa ketiga memberi <b>98</b>.
+</p>
+
+<div class="callout">
+<b>Keputusan desain utama: keterangan TIDAK selalu tampil.</b> Kalau sepuluh readout dan sepuluh baris section masing-masing membawa satu kalimat permanen, tinggi modal berlipat dan kerapatan yang baru saja dibangun hilang. Tapi tooltip-saja juga salah — yang tidak tahu ada penjelasan tidak akan pernah mengarahkan kursor. Jalan tengahnya: satu tombol <span class="mono">Cara baca</span> di kepala modal yang menyalakan seluruh lapisan keterangan sekaligus, <b>menyala otomatis pada kunjungan pertama</b>, lalu diingat pilihannya.
+</div>
+
+<!-- ============ 1 ============ -->
+<div class="sec">
+  <span class="tag">Blok 1 — jejak rantai</span>
+  <h2>Tombol mati / tombol hidup</h2>
+
+  <div class="cmp">
+    <div>
+      <div class="col-h before"><span class="t">Cara baca: mati</span><span class="s">— seperti sekarang</span></div>
+      <div class="modal">
+        <div class="mhead"><span class="tk">REPL</span><span class="px">$14,97 −1,3%</span>
+          <button class="readbtn"><span class="dot"></span>Cara baca</button></div>
+        <div class="chain">
+          <div class="ro"><div class="ro-k">Knowledge</div><div class="ro-v warn">10/18</div><div class="ro-s">8 field hilang</div></div>
+          <div class="ro"><div class="ro-k">Confidence</div><div class="ro-v warn">65,4</div><div class="ro-s">medium</div></div>
+          <div class="ro"><div class="ro-k">Risk</div><div class="ro-v warn">1 menyala</div><div class="ro-s">2 spec flag · 3 lama</div></div>
+          <div class="ro" style="min-width:168px"><div class="ro-k">Reasoning</div><div class="ro-v">75 · 75 · 98</div><div class="ro-s">Δ 0 · 0 · ▲11,0</div></div>
+          <div class="ro" style="min-width:150px"><div class="ro-k">Sintesis</div><div class="ro-v">0 searah</div><div class="ro-s">0 divergen · surprise 3,83</div></div>
+        </div>
+      </div>
+      <p class="note">Rapat dan cepat dibaca — <b>kalau kamu sudah tahu artinya.</b> Kalau belum: 65,4 itu bagus atau jelek? "1 menyala" dari berapa? Kenapa satu lensa 98 sementara dua lainnya bilang tidak terbaca?</p>
+    </div>
+
+    <div>
+      <div class="col-h after"><span class="t">Cara baca: hidup</span><span class="s">— satu klik</span></div>
+      <div class="modal">
+        <div class="mhead"><span class="tk">REPL</span><span class="px">$14,97 −1,3%</span>
+          <button class="readbtn on"><span class="dot"></span>Cara baca</button></div>
+        <div class="chain">
+          <div class="ro"><div class="ro-k">Knowledge</div><div class="ro-v warn">10/18</div><div class="ro-s">8 field hilang</div>
+            <div class="ro-help">Field terisi dari 18 yang diperiksa. <b>8 hilang = lensa membaca lebih sedikit bukti</b>, bukan berarti perusahaannya buruk.</div></div>
+          <div class="ro"><div class="ro-k">Confidence</div><div class="ro-v warn">65,4</div><div class="ro-s">medium</div>
+            <div class="ro-help">Kelengkapan &amp; kesegaran <b>DATA</b>, bukan kualitas sahamnya. Saham buruk berdata lengkap tetap dapat skor tinggi.</div></div>
+          <div class="ro"><div class="ro-k">Risk</div><div class="ro-v warn">1 menyala</div><div class="ro-s">2 spec flag · 3 lama</div>
+            <div class="ro-help">1 dari 2 flag spesifikasi <b>terpicu</b>; sisanya <span class="mono">undetermined</span> — <b>belum bisa dinilai, bukan aman.</b></div></div>
+          <div class="ro" style="min-width:190px"><div class="ro-k">Reasoning</div><div class="ro-v">75 · 75 · 98</div><div class="ro-s">Δ 0 · 0 · ▲11,0</div>
+            <div class="ro-help">Tiga lensa terpisah, tidak dirata-rata. Faktor &amp; bobotnya beda-beda, jadi <b>75 di Multibagger ≠ 75 di Spekulatif.</b> Δ = dibanding run sebelumnya.</div></div>
+          <div class="ro" style="min-width:190px"><div class="ro-k">Sintesis</div><div class="ro-v">0 searah</div><div class="ro-s">0 divergen · surprise 3,83</div>
+            <div class="ro-help">0 &amp; 0 <b>bukan berarti ketiganya sepakat</b> — artinya tidak ada pasangan lensa yang berbagi metrik kunci. Surprise = kelangkaan kombinasi stance di 4.268 ticker run ini; tinggi = <b>jarang, bukan bagus.</b></div></div>
+        </div>
+      </div>
+      <p class="note">Keterangan menempel <b>di bawah angkanya sendiri</b>, bukan di panel terpisah — mata tidak perlu bolak-balik mencocokkan nomor dengan daftar.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2 ============ -->
+<div class="sec">
+  <span class="tag">Blok 2 — baris section</span>
+  <h2>Tiap baris terlipat menjawab satu pertanyaan</h2>
+  <p class="lead">Ringkasannya sudah memberi angka; keterangannya memberi <i>pertanyaan apa yang dijawab bagian ini</i> — supaya jelas kapan perlu dibuka.</p>
+
+  <div class="modal" style="max-width:1030px">
+    <div class="msec asal">
+      <div class="msec-h"><span class="caret">▾</span><span class="msec-t">Lapisan Pribadi</span><span class="badge">asal</span><span class="msec-sum">3 call</span></div>
+      <div class="sec-help">Terjemahan stance jadi <b>tindakan</b> untukmu, memperhitungkan posisi yang kamu pegang. Tidak pernah dipublikasikan dan tidak ikut ke data publik.</div>
+    </div>
+    <div class="msec">
+      <div class="msec-h"><span class="caret">▸</span><span class="msec-t">Risk / Red Flags</span><span class="pill warn">1 menyala</span><span class="msec-sum">insider_selling_90d · skor 9</span></div>
+      <div class="sec-help">Bahaya yang bisa <b>membatalkan</b> tesis, bukan yang membuatnya bagus. Flag <span class="mono">ekstrem</span> menghentikan ticker sebelum Reasoning jalan. <b>Skor 9 bukan "risiko 9 dari 100"</b> — ia jumlah bobot flag yang terpicu.</div>
+    </div>
+    <div class="msec">
+      <div class="msec-h"><span class="caret">▸</span><span class="msec-t">Reasoning — 3 Lensa</span><span class="msec-sum">Ruang Tak Terbaca · Mesin Tak Terbaca · Asimetri Berkatalis</span></div>
+      <div class="sec-help">Tiga cara memandang saham yang sama, sengaja tidak digabung. <b><span class="mono">tak terbaca</span> ≠ jelek</b> — artinya data lensa itu terlalu tipis untuk menyimpulkan apa pun.</div>
+    </div>
+    <div class="msec">
+      <div class="msec-h"><span class="caret">▸</span><span class="msec-t">Confidence Report</span><span class="pill warn">medium</span><span class="msec-sum">65,4 · 7 section</span></div>
+      <div class="sec-help">Nilai <b>datanya</b>, per 7 section Knowledge. Buka untuk melihat section mana yang menahan skornya — di REPL: financial_health 2/9 dan valuation 2/5.</div>
+    </div>
+    <div class="msec">
+      <div class="msec-h"><span class="caret">▸</span><span class="msec-t">Katalis</span><span class="msec-sum">earnings · 2026-11-05 · 80 hari</span></div>
+      <div class="sec-help">Peristiwa terjadwal yang bisa menggerakkan harga. <b>79% ticker punya earnings terjadwal</b>, jadi keberadaannya nyaris tidak membedakan apa pun — yang berarti jaraknya, bukan adanya.</div>
+    </div>
+    <div class="msec">
+      <div class="msec-h"><span class="caret">▸</span><span class="msec-t">Evidence — Sumber Data</span><span class="msec-sum">$14,97 · 4 sumber</span></div>
+      <div class="sec-help">Angka mentah apa adanya dari sumber, sebelum ditafsirkan. <b>"umur 0 hari" di rantai atas mengukur jarak dari perakitan Evidence</b>, bukan umur data pasarnya — isi cache paling jauh sehari.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 3 ============ -->
+<div class="sec">
+  <span class="tag">Blok 3 — kolom grid angka</span>
+  <h2>Aturan kolom ikut di kepala tabel</h2>
+  <div class="wrap" style="max-width:1030px">
+    <table>
+      <thead><tr>
+        <th class="l">Lensa</th>
+        <th>Skor<span class="th-help">0-100, netral 50. Bukan target harga, bukan probabilitas.</span></th>
+        <th>Δ run<span class="th-help">Dibanding run SEBELUMNYA, bukan sejak awal.</span></th>
+        <th>Riwayat<span class="th-help">Skor tiap snapshot; ujung kanan = sekarang.</span></th>
+        <th class="l">Stance<span class="th-help">Kosakata milik lensa itu sendiri — tidak dibandingkan antar-lensa.</span></th>
+        <th class="l">Keyakinan<span class="th-help">Keyakinan lensa pada kesimpulannya sendiri. Selalu ≤ Confidence Report.</span></th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="l">Multibagger</td><td>75,23</td><td class="faint">0,00</td><td class="faint">▁▂▃▅▆</td><td class="l dim">ruang_tak_terbaca</td><td class="l dim">45 · low</td></tr>
+        <tr><td class="l">Quality/Compound</td><td>75,34</td><td class="faint">0,00</td><td class="faint">▁▂▄▅▆</td><td class="l dim">mesin_tak_terbaca</td><td class="l dim">30 · low</td></tr>
+        <tr><td class="l">Speculative</td><td>98,00</td><td class="good">▲ 11,00</td><td class="faint">▂▃▄▆█</td><td class="l dim">asimetri_berkatalis</td><td class="l dim">60 · medium</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Keterangan kolom <b>selalu tampil</b> (tidak ikut tombol) — teksnya pendek, muat di kepala tabel, dan kolom tanpa aturannya justru yang paling sering disalahbaca. Yang ikut tombol cuma keterangan panjang di blok 1 &amp; 2.</p>
+</div>
+
+<!-- ============ 4 ============ -->
+<div class="sec">
+  <span class="tag b">Isi keterangannya</span>
+  <h2>Tiap kalimat mencegah satu salah-baca tertentu</h2>
+  <p class="lead">Bukan definisi kamus. Tiap keterangan lahir dari salah-baca yang benar-benar mungkin di angka itu — beberapa di antaranya sudah pernah menyesatkan aku sendiri saat mengaudit.</p>
+  <div class="wrap" style="max-width:1030px">
+  <table class="risks">
+    <thead><tr><th>Elemen</th><th>Salah baca yang dicegah</th></tr></thead>
+    <tbody>
+      <tr><td class="m">Confidence 65,4</td><td class="x">"Sahamnya lumayan." <span class="dim">→ Ini nilai DATA. Saham buruk berdata lengkap tetap dapat 95.</span></td></tr>
+      <tr><td class="m">Risk 1 menyala</td><td class="x">"Cuma 1 risiko, sisanya aman." <span class="dim">→ Sisanya <span class="mono">undetermined</span>: belum bisa dinilai. Tidak ada data ≠ tidak ada risiko.</span></td></tr>
+      <tr><td class="m">Skor 98 vs 75</td><td class="x">"Lensa Spekulatif paling yakin." <span class="dim">→ Tiap lensa punya faktor &amp; bobot sendiri; skornya tidak setara antar-lensa.</span></td></tr>
+      <tr><td class="m">tak terbaca</td><td class="x">"Lensanya menilai jelek." <span class="dim">→ Datanya terlalu tipis untuk menyimpulkan. Diam, bukan menolak.</span></td></tr>
+      <tr><td class="m">Sintesis 0 · 0</td><td class="x">"Tidak ada perbedaan, berarti sepakat." <span class="dim">→ Tidak ada pasangan lensa yang berbagi metrik kunci. Diam, bukan sepakat.</span></td></tr>
+      <tr><td class="m">surprise 3,83</td><td class="x">"Sinyal kuat." <span class="dim">→ Kelangkaan kombinasi stance dibanding 4.268 ticker. Jarang ≠ bagus.</span></td></tr>
+      <tr><td class="m">umur 0 hari</td><td class="x">"Datanya real-time." <span class="dim">→ Yang diukur jarak dari perakitan Evidence, bukan umur data pasar.</span></td></tr>
+      <tr><td class="m">Katalis ada</td><td class="x">"Ada pemicu, berarti menarik." <span class="dim">→ 79% ticker punya earnings terjadwal. Yang berarti jaraknya.</span></td></tr>
+      <tr><td class="m">Δ run 0,00</td><td class="x">"Tidak bergerak." <span class="dim">→ Tidak bergerak SEJAK RUN TERAKHIR. Sparkline di sebelahnya yang menunjukkan sebulan.</span></td></tr>
+      <tr><td class="m">Screening lolos</td><td class="x">"Lolos seleksi, layak beli." <span class="dim">→ Lolos saringan kelayakan data &amp; ukuran, belum ada penilaian apa pun.</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ============ 5 ============ -->
+<div class="sec">
+  <span class="tag">Batas</span>
+  <h2>Aturan yang kupegang kalau ini dikerjakan</h2>
+  <p class="note" style="margin-top:6px">
+    <b>1. Satu sumber teks.</b> Semua kalimat masuk satu peta <span class="mono">READING_NOTES</span> di <span class="mono">format.js</span>, sebelah <span class="mono">METRIC_DEFINITIONS</span> yang sudah ada — bukan ditulis di dalam JSX tiap komponen. Kalau aturannya berubah, satu tempat yang diubah.<br>
+    <b>2. Tidak ada angka ajaib di dalam teks.</b> "79% ticker punya earnings" dan "4.268 ticker" itu FAKTA POPULASI yang berubah tiap run — diambil dari <span class="mono">synthesis.population_baseline</span> dan hitungan katalis, bukan diketik permanen. Kalau tidak tersedia, kalimatnya menyusut, bukan berbohong.<br>
+    <b>3. Pilihan diingat, bukan ditanya lagi.</b> <span class="mono">localStorage</span>; menyala otomatis hanya pada kunjungan pertama.<br>
+    <b>4. Keterangan tidak menutupi angka.</b> Ia menambah baris di bawah, tidak melayang di atasnya — modal ini sering dibaca sambil membandingkan dua ticker.<br>
+    <b>5. Kolom tabel selalu berketerangan</b>, di luar tombol: teksnya pendek dan kepala tabel memang tempatnya.
+  </p>
+</div>
+
+</body>
+</html>

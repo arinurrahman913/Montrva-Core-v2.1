@@ -14,10 +14,31 @@ import {
   outcomeClass, prettyOutcome,
   factorLabel, splitFactors, isLegacyBreakdown, FACTOR_AXIS,
   nextFilingDeadline, NEW_POSITION_SENTINEL, quarterWindow,
-  readHistoricalEntry,
+  readHistoricalEntry, readingNote,
 } from '../format'
 
 const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHOLD_PCT
+
+// Preferensi "Cara baca". MENYALA otomatis di kunjungan pertama lalu diingat:
+// keterangan permanen di sepuluh readout + sepuluh baris section akan
+// melipatgandakan tinggi modal, tapi tooltip-saja juga salah -- yang tidak
+// tahu ada penjelasan tidak akan pernah mengarahkan kursor. Jadi ditunjukkan
+// sekali, sesudah itu terserah user.
+const READING_PREF_KEY = 'montrva.readingNotes'
+
+function loadReadingPref() {
+  try {
+    const raw = localStorage.getItem(READING_PREF_KEY)
+    if (raw === null) return true      // kunjungan pertama
+    return raw === '1'
+  } catch {
+    return true                        // localStorage diblokir -> tetap membantu
+  }
+}
+
+function saveReadingPref(on) {
+  try { localStorage.setItem(READING_PREF_KEY, on ? '1' : '0') } catch { /* diblokir, abaikan */ }
+}
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
@@ -65,6 +86,7 @@ export default function TickerModal({ ticker, context, onClose }) {
   const [aiNarrative, setAiNarrative] = useState(null) // null = loading/n.a., else {narrative, cached, available}
   const [personalData, setPersonalData] = useState(null) // null = loading/n.a. (context bukan personal_*)
   const [narrativeAsked, setNarrativeAsked] = useState(false) // user membuka section yang butuh narasi
+  const [notesOn, setNotesOn] = useState(loadReadingPref)
 
   useEffect(() => {
     let cancelled = false
@@ -167,6 +189,14 @@ export default function TickerModal({ ticker, context, onClose }) {
             <h2>{ticker}</h2>
             <LiveQuoteBadge live={live} />
           </div>
+          <button
+            className={`readbtn${notesOn ? ' on' : ''}`}
+            onClick={() => { const next = !notesOn; setNotesOn(next); saveReadingPref(next) }}
+            title="Keterangan cara membaca tiap angka — pilihanmu diingat"
+          >
+            <span className="readbtn-dot" />
+            Cara baca
+          </button>
           <button className="x" onClick={onClose}>
             &times;
           </button>
@@ -181,6 +211,7 @@ export default function TickerModal({ ticker, context, onClose }) {
               aiNarrative={aiNarrative}
               personalData={personalData}
               onNeedNarrative={() => setNarrativeAsked(true)}
+              notesOn={notesOn}
             />
           )}
         </div>
@@ -786,12 +817,12 @@ function LensGrid({ reasoning, historical }) {
         <thead>
           <tr>
             <th className="l">Lensa</th>
-            <th>Skor</th>
-            <th>Δ run</th>
-            <th className="c">Riwayat</th>
-            <th className="l">Stance</th>
-            <th className="l">Keyakinan</th>
-            <th className="l">Metrik teratas</th>
+            <ColHead label="Skor" note="skor" />
+            <ColHead label="Δ run" note="delta" />
+            <ColHead label="Riwayat" note="riwayat" align="c" />
+            <ColHead label="Stance" note="stance" align="l" />
+            <ColHead label="Keyakinan" note="keyakinan" align="l" />
+            <ColHead label="Metrik teratas" note="metrik" align="l" />
             <th />
           </tr>
         </thead>
@@ -943,6 +974,19 @@ function LensRows({ module, output: o, series, index, isOpen, onToggle }) {
   )
 }
 
+// Kepala kolom + aturan bacanya. Aturan kolom SELALU tampil (di luar tombol
+// "Cara baca"): teksnya pendek, kepala tabel memang tempatnya, dan kolom
+// tanpa aturannya justru yang paling sering disalahbaca -- "Δ run" dibaca
+// "sejak awal", "Skor" dibaca sebagai probabilitas.
+function ColHead({ label, note, align }) {
+  return (
+    <th className={align || ''}>
+      {label}
+      <span className="th-help">{readingNote('column', note)}</span>
+    </th>
+  )
+}
+
 // Deret skor tesis satu lensa dari riwayat pribadi, urut waktu.
 //
 // Datanya SUDAH tersimpan di personal_history.json sejak lama (14 snapshot
@@ -966,12 +1010,12 @@ function PersonalCallTable({ callSet, history }) {
         <thead>
           <tr>
             <th className="l">Lensa</th>
-            <th>Skor</th>
-            <th>Δ run</th>
-            <th className="c">Riwayat</th>
-            <th className="l">Stance</th>
-            <th className="l">Aksi</th>
-            <th className="l">Horizon</th>
+            <ColHead label="Skor" note="skor" />
+            <ColHead label="Δ run" note="delta" />
+            <ColHead label="Riwayat" note="riwayat" align="c" />
+            <ColHead label="Stance" note="stance" align="l" />
+            <ColHead label="Aksi" note="aksi" align="l" />
+            <ColHead label="Horizon" note="horizon" align="l" />
             <th />
           </tr>
         </thead>
@@ -1288,17 +1332,30 @@ function BullBearCase({ reasoning }) {
 // bukan tanda centang. Lebarnya sengaja tidak pernah menyempit jadi satu:
 // Reasoning bertiga, Aksi bertiga, dan simpul Sintesis di antaranya adalah
 // HITUNGAN titik temu, bukan vonis (D-04/D-07).
-function ChainStep({ label, value, sub, tone, here, wide }) {
+function ChainStep({ label, value, sub, tone, here, wide, note }) {
   return (
-    <div className={`mchain-step${here ? ' here' : ''}`} style={wide ? { minWidth: wide } : undefined}>
+    <div
+      className={`mchain-step${here ? ' here' : ''}${note ? ' with-note' : ''}`}
+      style={wide ? { minWidth: wide } : undefined}
+    >
       <div className="mchain-k">{label}</div>
       <div className={`mchain-v${tone ? ` ${tone}` : ''}`}>{value}</div>
       {sub && <div className="mchain-s">{sub}</div>}
+      {note && <div className="mchain-help">{note}</div>}
     </div>
   )
 }
 
-function ChainTrace({ data, personalData, originId }) {
+function ChainTrace({ data, personalData, originId, notesOn }) {
+  // Keterangan diambil dari satu peta di format.js, bukan ditulis di sini --
+  // dan `synthesis` butuh besar populasi run ini, jadi konteksnya diteruskan.
+  const note = (key) => (notesOn
+    ? readingNote('chain', key, { populationSize: data.aggregator?.synthesis?.population_baseline?.sample_size })
+    : null)
+  return <ChainTraceBody data={data} personalData={personalData} originId={originId} note={note} />
+}
+
+function ChainTraceBody({ data, personalData, originId, note }) {
   const { evidence, knowledge, peer, confidence, risk, reasoning, aggregator } = data
   const meta = knowledge?.metadata
   const halted = !!(aggregator?.halted || risk?.halted)
@@ -1322,31 +1379,31 @@ function ChainTrace({ data, personalData, originId }) {
   return (
     <div className="mchain">
       <ChainStep
-        label="Screening" here={originId === 'screening'}
+        label="Screening" note={note('screening')} here={originId === 'screening'}
         value={knowledge ? (screenFlags.length ? `${screenFlags.length} flag` : 'lolos') : '—'}
         tone={knowledge && !screenFlags.length ? 'good' : screenFlags.length ? 'warn' : 'faint'}
         sub={knowledge ? [knowledge.sector, knowledge.size_category].filter(Boolean).join(' · ') || null : 'tidak ada profil'}
       />
       <ChainStep
-        label="Evidence" here={originId === 'evidence'}
+        label="Evidence" note={note('evidence')} here={originId === 'evidence'}
         value={sources.length ? `${sources.length} sumber` : evidence ? 'ada' : '—'}
         tone={sources.length ? null : 'faint'}
         sub={confidence?.evidence_age_days != null ? `umur ${confidence.evidence_age_days} hari` : meta?.evidence_date?.slice(0, 10)}
       />
       <ChainStep
-        label="Knowledge" here={originId === 'knowledge'}
+        label="Knowledge" note={note('knowledge')} here={originId === 'knowledge'}
         value={meta ? `${meta.fields_completed}/${meta.fields_expected}` : '—'}
         tone={meta ? (gaps.length ? 'warn' : 'good') : 'faint'}
         sub={meta ? (gaps.length ? `${gaps.length} field hilang` : '0 field hilang') : null}
       />
       <ChainStep
-        label="Confidence" here={originId === 'confidence'}
+        label="Confidence" note={note('confidence')} here={originId === 'confidence'}
         value={confidence?.overall ? fmtNum(confidence.overall.score, 1) : '—'}
         tone={confidence?.overall ? bandTone(confidence.overall.band) : 'faint'}
         sub={confidence?.overall?.band || null}
       />
       <ChainStep
-        label="Risk" here={originId === 'risk'} wide={halted ? 150 : undefined}
+        label="Risk" note={note('risk')} here={originId === 'risk'} wide={halted ? 150 : undefined}
         value={halted ? 'HALTED' : risk ? (triggered.length ? `${triggered.length} menyala` : 'bersih') : '—'}
         tone={halted ? 'bad' : triggered.length ? 'warn' : risk ? 'good' : 'faint'}
         sub={
@@ -1358,13 +1415,13 @@ function ChainTrace({ data, personalData, originId }) {
         }
       />
       <ChainStep
-        label="Reasoning" here={originId === 'reasoning'} wide={168}
+        label="Reasoning" note={note('reasoning')} here={originId === 'reasoning'} wide={168}
         value={scores.length ? scores.map((s) => fmtNum(s, 0)).join(' · ') : halted ? 'dilewati' : '—'}
         tone={scores.length ? null : 'faint'}
         sub={scores.length ? (chainDeltas(data) || `${scores.length} lensa, tidak dirata-rata`) : halted ? 'hard-gate Risk' : null}
       />
       <ChainStep
-        label="Sintesis" here={originId === 'synthesis'} wide={150}
+        label="Sintesis" note={note('synthesis')} here={originId === 'synthesis'} wide={150}
         value={syn ? `${(syn.agreements || []).length} searah` : halted ? 'dilewati' : '—'}
         tone={syn ? null : 'faint'}
         sub={
@@ -1375,14 +1432,14 @@ function ChainTrace({ data, personalData, originId }) {
       />
       {nextCat && (
         <ChainStep
-          label="Katalis" here={originId === 'catalyst'} wide={132}
+          label="Katalis" note={note('catalyst')} here={originId === 'catalyst'} wide={132}
           value={nextCat.kind || 'katalis'}
           sub={[nextCat.expected_at, daysUntilLabel(nextCat.expected_at)].filter(Boolean).join(' · ')}
         />
       )}
       {peer && (
         <ChainStep
-          label="Peer" here={originId === 'peer'}
+          label="Peer" note={note('peer')} here={originId === 'peer'}
           value={`${countComparisons(peer)} metrik`}
           tone={peer.low_sample_size ? 'warn' : null}
           sub={peer.low_sample_size ? 'sampel tipis' : null}
@@ -1390,7 +1447,7 @@ function ChainTrace({ data, personalData, originId }) {
       )}
       {calls.length > 0 && (
         <ChainStep
-          label="Aksi pribadi" here={originId === 'personal'} wide={168}
+          label="Aksi pribadi" note={note('personal')} here={originId === 'personal'} wide={168}
           value={`${calls.length} call`} tone="acc"
           sub={calls.map((c) => prettyAction(c.action)).join(' · ')}
         />
@@ -1445,7 +1502,7 @@ function daysUntilLabel(dateStr) {
 // tidak pernah dirender sama sekali. Yang paling mahal justru yang paling
 // jarang dibuka (RawDataTable + tabel kuartalan Evidence), jadi kalau body-nya
 // elemen biasa, "terlipat" cuma menyembunyikan biaya yang tetap dibayar.
-function SectionRow({ id, label, summary, pill, asal, hasData, isOpen, onToggle, body }) {
+function SectionRow({ id, label, summary, pill, asal, hasData, isOpen, onToggle, body, note }) {
   if (!hasData) {
     return (
       <div className="msec kosong" id={`sec-${id}`}>
@@ -1466,12 +1523,13 @@ function SectionRow({ id, label, summary, pill, asal, hasData, isOpen, onToggle,
         {pill}
         <span className="msec-sum">{summary}</span>
       </button>
+      {note && <div className="msec-help">{note}</div>}
       {isOpen && <div className="msec-body">{body()}</div>}
     </div>
   )
 }
 
-function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }) {
+function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative, notesOn }) {
   const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
   const originId = CONTEXT_ORIGIN[context] || 'evidence'
   const [open, setOpen] = useState(() => new Set([originId]))
@@ -1721,7 +1779,7 @@ function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }
   return (
     <>
       <IdentityLine evidence={evidence} knowledge={knowledge} />
-      <ChainTrace data={data} personalData={personalData} originId={originId} />
+      <ChainTrace data={data} personalData={personalData} originId={originId} notesOn={notesOn} />
       {ordered.map((d) => (
         <SectionRow
           key={d.id}
@@ -1729,6 +1787,7 @@ function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }
           asal={d.id === originId}
           isOpen={open.has(d.id)}
           onToggle={() => toggle(d.id)}
+          note={notesOn ? readingNote('section', d.id) : null}
         />
       ))}
     </>
