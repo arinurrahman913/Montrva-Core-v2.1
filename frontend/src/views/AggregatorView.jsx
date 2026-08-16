@@ -160,7 +160,7 @@ function TopPicksSection({ outs, onSelectTicker }) {
 // Synthesis: agreements/divergences), confidence terendah, surprise
 // (keunikan kombinasi stance vs populasi sesi), dan status halted.
 export default function AggregatorView({ onSelectTicker }) {
-  const { data, error } = useStageData(api.aggregator)
+  const { data, error } = useStageData(api.aggregatorSummary)
 
   if (error) return <div className="empty">Gagal memuat data/final_recommendations.json: {error}</div>
   if (!data) return <div className="loading">Memuat…</div>
@@ -168,7 +168,7 @@ export default function AggregatorView({ onSelectTicker }) {
   const outs = data.recommendations || []
   const halted = outs.filter((o) => o.halted).length
   const fullConv = outs.filter((o) => o.synthesis?.full_convergence).length
-  const withDivergence = outs.filter((o) => (o.synthesis?.divergences?.length || 0) > 0).length
+  const withDivergence = outs.filter((o) => (o.synthesis?.divergences || 0) > 0).length
 
   const stats = [
     { label: 'Total', value: outs.length },
@@ -194,14 +194,14 @@ export default function AggregatorView({ onSelectTicker }) {
     {
       key: 'agreements',
       label: 'Kesepakatan',
-      render: (r) => r.synthesis?.agreements?.length ?? '—',
-      sortValue: (r) => r.synthesis?.agreements?.length ?? -1,
+      render: (r) => r.synthesis?.agreements ?? '—',
+      sortValue: (r) => r.synthesis?.agreements ?? -1,
     },
     {
       key: 'divergences',
       label: 'Perbedaan',
-      render: (r) => r.synthesis?.divergences?.length ?? '—',
-      sortValue: (r) => r.synthesis?.divergences?.length ?? -1,
+      render: (r) => r.synthesis?.divergences ?? '—',
+      sortValue: (r) => r.synthesis?.divergences ?? -1,
     },
     {
       key: 'confidence',
@@ -222,10 +222,12 @@ export default function AggregatorView({ onSelectTicker }) {
       key: 'flags',
       label: 'Risk Flags',
       render: (r) => {
-        const triggered = (r.risk_flags || []).filter((f) => f.status === 'triggered').length
-        return triggered > 0 ? <span className="pill warn">{triggered} triggered</span> : (r.risk_flags?.length ?? 0)
+        // Hitungannya sudah diringkas backend (/api/aggregator/summary) —
+        // isi lengkap risk_flags tidak pernah dirender di halaman ini.
+        const triggered = r.risk_flags_triggered ?? 0
+        return triggered > 0 ? <span className="pill warn">{triggered} triggered</span> : (r.risk_flags_total ?? 0)
       },
-      sortValue: (r) => (r.risk_flags || []).filter((f) => f.status === 'triggered').length,
+      sortValue: (r) => r.risk_flags_triggered ?? 0,
     },
   ]
 

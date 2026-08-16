@@ -238,6 +238,53 @@ def _compress_response(response):
     return response
 
 
+@app.get("/api/aggregator/summary")
+def get_aggregator_summary():
+    """Proyeksi ringkas final_recommendations.json untuk AggregatorView.
+
+    Berkas penuhnya 40,5 MB dan dikirim UTUH ke browser tiap halaman Aggregator
+    dibuka — terukur 43.323.035 byte, 3,3 detik. Padahal halaman itu cuma
+    merender: ticker, halted, stance per modul, jumlah agreement/divergence,
+    confidence & surprise Synthesis, dan hitungan risk flag. Isi lengkap
+    agreement/divergence, seluruh confidence_report, dan seluruh catalysts
+    ikut terkirim tanpa ada yang membacanya.
+
+    Pola yang sama sudah dipakai untuk halaman Riwayat Pribadi (160 MB -> 2,4
+    MB). Rute lama /api/aggregator SENGAJA dibiarkan hidup: ia satu-satunya
+    cara melihat isi penuh satu ticker lewat API, dan menutupnya berarti
+    membuang data yang tidak tergantikan hanya demi ukuran.
+    """
+    rows = _get_stage("aggregator").get("recommendations", [])
+    out = []
+    for r in rows:
+        syn = r.get("synthesis") or {}
+        flags = r.get("risk_flags") or []
+        out.append({
+            "ticker": r.get("ticker"),
+            "halted": r.get("halted"),
+            "halt_reason": r.get("halt_reason"),
+            # Cuma module + stance + skor: tiga field yang dibaca
+            # findModuleOutput()/topPicks(), bukan seluruh ModuleOutput yang
+            # memuat rationale, key_metrics, dan score_breakdown.
+            "module_outputs": [
+                {"module": m.get("module"), "stance": m.get("stance"),
+                 "thesis_score": m.get("thesis_score")}
+                for m in (r.get("module_outputs") or [])
+            ],
+            # JUMLAHNYA saja — halaman ini memang cuma memanggil `.length`.
+            "synthesis": {
+                "full_convergence": syn.get("full_convergence"),
+                "agreements": len(syn.get("agreements") or []),
+                "divergences": len(syn.get("divergences") or []),
+                "confidence": syn.get("confidence"),
+                "surprise": syn.get("surprise"),
+            } if syn else None,
+            "risk_flags_total": len(flags),
+            "risk_flags_triggered": sum(1 for f in flags if f.get("status") == "triggered"),
+        })
+    return jsonify({"recommendations": out, "session_id": _get_stage("aggregator").get("session_id")})
+
+
 @app.get("/api/<stage>")
 def get_stage(stage: str):
     if stage not in STAGE_FILES:

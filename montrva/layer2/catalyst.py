@@ -31,6 +31,12 @@ METHOD_VERSION = "1.0.0"
 DEFAULT_HORIZON_DAYS = 90
 
 
+# Panjang lockup IPO yang lazim di AS. Konstanta, bukan angka di tengah kode:
+# kalau suatu saat panjangnya diambil dari prospektus (S-1) per-emiten, yang
+# berubah cuma sumber nilainya, bukan letak logikanya.
+LOCKUP_DAYS = 180
+
+
 def _epoch_to_date(ts) -> str | None:
     """Unix epoch seconds -> ISO date (UTC). None kalau bukan angka valid."""
     if ts is None:
@@ -96,6 +102,42 @@ def build_catalyst_set(
                 expected_at=ex_div,
                 certainty="scheduled",
                 expires_at=(d + timedelta(days=1)).isoformat(),
+                source=source,
+            ))
+
+    # --- Lockup expiry pasca-IPO ---------------------------------------
+    #
+    # DITAMBAHKAN 15 Agu 2026 sesudah audit menemukan katalis nyaris tidak
+    # membedakan apa pun: laju dasar 79,1% ticker punya katalis mendatang, dan
+    # di kelompok berskor tinggi cuma 82,6% — selisih +3,5pp. Sebabnya cuma ada
+    # dua jenis katalis, earnings (3.105) & dividen (916), DUA-DUANYA KUARTALAN,
+    # jadi hampir semua perusahaan punya. Stance "asimetri_berkatalis" praktis
+    # berarti "punya earnings terjadwal", bukan "punya pemicu yang tidak
+    # dimiliki orang lain".
+    #
+    # Lockup expiry memecah pola itu justru karena TIDAK kuartalan: ia terjadi
+    # sekali seumur hidup perusahaan, ~180 hari sesudah IPO, dan melepas pasokan
+    # lembar baru ke pasar. Terukur di universe 15 Agu: 76 ticker punya lockup
+    # yang jatuh dalam horizon 90 hari — 1,8% populasi, bukan 79%.
+    #
+    # NOL PANGGILAN JARINGAN BARU: `firstTradeDateEpochUtc` ada di dict `.info`
+    # yang sudah dibaca fungsi ini untuk earnings & dividen.
+    #
+    # certainty="expected", BUKAN "scheduled": 180 hari adalah konvensi pasar
+    # yang lazim, bukan tanggal yang diumumkan emiten. Panjang lockup yang
+    # sebenarnya ada di prospektus S-1 dan bisa 90-360 hari. Menandainya
+    # "scheduled" akan mengklaim kepastian yang tidak dimiliki sumbernya.
+    first_trade = _epoch_to_date(info.get("firstTradeDateEpochUtc"))
+    if first_trade:
+        ipo = datetime.fromisoformat(first_trade).date()
+        lockup = ipo + timedelta(days=LOCKUP_DAYS)
+        if today <= lockup <= horizon_end:
+            catalysts.append(Catalyst(
+                catalyst_id=f"lockup_expiry_{lockup.isoformat()}",
+                kind="other",
+                expected_at=lockup.isoformat(),
+                certainty="expected",
+                expires_at=(lockup + timedelta(days=7)).isoformat(),
                 source=source,
             ))
 

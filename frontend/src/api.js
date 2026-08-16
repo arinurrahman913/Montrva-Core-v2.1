@@ -72,6 +72,11 @@ export const api = {
   confidence: () => getJSON('/api/confidence'),
   risk: () => getJSON('/api/risk'),
   reasoning: () => getJSON('/api/reasoning'),
+  // Proyeksi ~2 MB, bukan 43 MB berkas penuh. Halaman Aggregator cuma
+  // merender stance per modul + hitungan agreement/divergence/risk flag.
+  aggregatorSummary: () => getJSON('/api/aggregator/summary'),
+  // Isi penuh satu populasi — TIDAK dipakai halaman mana pun (43 MB).
+  // Dibiarkan untuk debugging manual; jangan panggil dari komponen.
   aggregator: () => getJSON('/api/aggregator'),
   historical: () => getJSON('/api/historical'),
   historicalSummary: () => getJSON('/api/historical/summary'),
