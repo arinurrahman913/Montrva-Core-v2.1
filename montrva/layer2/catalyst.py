@@ -37,6 +37,14 @@ DEFAULT_HORIZON_DAYS = 90
 LOCKUP_DAYS = 180
 
 
+def _ms_to_seconds(ms):
+    """Milidetik -> detik. None tetap None."""
+    try:
+        return float(ms) / 1000.0 if ms is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _epoch_to_date(ts) -> str | None:
     """Unix epoch seconds -> ISO date (UTC). None kalau bukan angka valid."""
     if ts is None:
@@ -127,7 +135,16 @@ def build_catalyst_set(
     # yang lazim, bukan tanggal yang diumumkan emiten. Panjang lockup yang
     # sebenarnya ada di prospektus S-1 dan bisa 90-360 hari. Menandainya
     # "scheduled" akan mengklaim kepastian yang tidak dimiliki sumbernya.
-    first_trade = _epoch_to_date(info.get("firstTradeDateEpochUtc"))
+    # DUA NAMA, dan yang benar bukan yang pertama kutulis. Dict `.info` yang
+    # dipakai fungsi ini memuat `firstTradeDateMilliseconds` (MILIDETIK);
+    # `firstTradeDateEpochUtc` cuma muncul di sebagian respons yfinance.
+    # Versi pertama kode ini hanya membaca nama kedua, dan akibatnya lolos
+    # seluruh pengujian lalu menghasilkan NOL katalis di run produksi 15 Agu —
+    # gagal diam-diam, bukan error. Uji unitnya ikut lolos karena memakai dict
+    # buatan sendiri dengan nama yang dipilih penulisnya, bukan bentuk yang
+    # benar-benar dikirim produsennya.
+    first_trade = (_epoch_to_date(info.get("firstTradeDateEpochUtc"))
+                   or _epoch_to_date(_ms_to_seconds(info.get("firstTradeDateMilliseconds"))))
     if first_trade:
         ipo = datetime.fromisoformat(first_trade).date()
         lockup = ipo + timedelta(days=LOCKUP_DAYS)
