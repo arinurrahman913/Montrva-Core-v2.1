@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Mockup — Menyambungkan antar-halaman (Montrva)</title>
+<style>
+:root{
+  --ink:#0A0D14; --panel:#12151E; --panel2:#181C28; --panel3:#1F2433;
+  --rule:rgba(255,255,255,.07); --rule-strong:rgba(255,255,255,.14);
+  --text:#E7E9EE; --dim:#98A2B8; --faint:#616B80;
+  --accent:#22D3EE; --accent2:#818CF8; --warn:#FBBF7A; --bad:#FB7185; --good:#4ADE80;
+  --gold:#e8b84b; --gold-hi:#f5cf6f;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace; --sans:-apple-system,"Segoe UI",Inter,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55;padding:26px 30px 60px;font-variant-numeric:tabular-nums}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.lead{font-size:12.5px;color:var(--faint);margin-bottom:14px;max-width:900px}
+.sec{margin-bottom:34px}
+.tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(34,211,238,.3);background:rgba(34,211,238,.08);padding:2px 8px;border-radius:999px;margin-bottom:8px}
+.pill{display:inline-block;padding:3px 9px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:999px;text-transform:uppercase}
+.pill.ok{color:var(--good);background:rgba(74,222,128,.12)}
+.pill.warn{color:var(--warn);background:rgba(251,191,122,.12)}
+.pill.bad{color:var(--bad);background:rgba(251,113,133,.12)}
+.pill.neutral{color:var(--dim);background:rgba(255,255,255,.06)}
+.ticker{font-family:var(--mono);font-weight:700;color:var(--accent)}
+.mono{font-family:var(--mono)}
+.dim{color:var(--dim)} .faint{color:var(--faint)} .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+
+/* ---------- MODAL ---------- */
+.modal{background:var(--panel);border:1px solid var(--rule-strong);border-radius:14px;max-width:1080px;overflow:hidden}
+.mhead{padding:14px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:12px}
+.mhead .ticker{font-size:18px}
+.mhead .nm{font-size:12.5px;color:var(--dim)}
+.mclose{margin-left:auto;color:var(--faint);font-size:17px}
+
+/* Jejak rantai — inti desain 1 */
+.chain{display:flex;align-items:stretch;gap:0;padding:12px 18px;background:var(--panel2);border-bottom:1px solid var(--rule);overflow-x:auto}
+.step{min-width:132px;padding:0 13px;border-left:1px solid var(--rule);position:relative}
+.step:first-child{border-left:none;padding-left:0}
+.step-k{font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+.step-v{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text)}
+.step-s{font-size:10.5px;color:var(--dim);margin-top:2px}
+.step.here{background:linear-gradient(180deg,rgba(34,211,238,.10),transparent)}
+.step.here .step-k{color:var(--accent)}
+.arrow{align-self:center;color:var(--faint);font-size:13px;padding:0 2px;flex:none}
+
+/* Bagian modal */
+.msec{border-bottom:1px solid var(--rule)}
+.msec-h{display:flex;align-items:center;gap:9px;padding:10px 18px;cursor:pointer}
+.msec-h:hover{background:var(--panel2)}
+.caret{color:var(--faint);font-size:14px;display:inline-block;transition:transform .15s}
+.caret.open{transform:rotate(90deg)}
+.msec-t{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.msec-sum{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+.msec.asal .msec-t{color:var(--accent)}
+.msec-body{padding:2px 18px 15px;background:var(--panel2)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 20px;font-size:12.5px}
+.kv div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--rule);padding:4px 0}
+.kv span{color:var(--dim)} .kv b{font-family:var(--mono);font-weight:600}
+.badge-asal{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--accent);border:1px solid rgba(34,211,238,.35);padding:1px 6px;border-radius:999px}
+
+/* ---------- Sel bisa diklik ---------- */
+.grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.card-h{padding:10px 14px;border-bottom:1px solid var(--rule);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;text-align:left;padding:7px 12px;color:var(--faint);border-bottom:1px solid var(--rule);background:var(--panel2)}
+td{padding:8px 12px;border-bottom:1px solid var(--rule)}
+tbody tr:last-child td{border-bottom:none}
+.cell{cursor:pointer}
+.cell:hover{background:var(--panel3);outline:1px solid rgba(34,211,238,.35);outline-offset:-1px}
+.cell.aktif{background:rgba(34,211,238,.10);outline:1px solid var(--accent);outline-offset:-1px}
+.cnt{display:block;font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px}
+.mati{opacity:.38}
+.hint{font-size:10.5px;color:var(--faint);padding:8px 14px;border-top:1px solid var(--rule)}
+.row-t{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--rule);cursor:pointer;font-size:12px}
+.row-t:hover{background:var(--panel2)}
+.row-t:last-child{border-bottom:none}
+.note{font-size:11.5px;color:var(--faint);line-height:1.65;margin-top:10px;max-width:920px}
+.note b{color:var(--dim)}
+</style>
+</head>
+<body>
+
+<!-- =============== DESAIN 1 =============== -->
+<div class="sec">
+  <div class="tag">Desain 1</div>
+  <h2>Modal berhenti menyembunyikan bagian — satu ticker, rantai penuh</h2>
+  <p class="lead">Sekarang modal cuma menampilkan bagian yang cocok dengan halaman asalmu, jadi dari Knowledge kamu tidak bisa melihat Risk-nya, dan dari Risk tidak bisa melihat Reasoning-nya. Padahal datanya sudah diambil semua — cuma tidak dirender.</p>
+
+  <div class="modal">
+    <div class="mhead">
+      <span class="ticker">MU</span>
+      <span class="nm">Micron Technology, Inc. · Technology · mid cap</span>
+      <span class="mclose">✕</span>
+    </div>
+
+    <!-- Jejak rantai: inti desainnya -->
+    <div class="chain">
+      <div class="step">
+        <div class="step-k">Evidence</div>
+        <div class="step-v">7 sumber</div>
+        <div class="step-s">1 gagal (news)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step here">
+        <div class="step-k">Knowledge ← kamu di sini</div>
+        <div class="step-v">15 / 18</div>
+        <div class="step-s">3 field kosong</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-k">Confidence</div>
+        <div class="step-v">82</div>
+        <div class="step-s">band high</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-k">Risk</div>
+        <div class="step-v">2 flag</div>
+        <div class="step-s">1 tinggi</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-k">Reasoning</div>
+        <div class="step-v">67,4</div>
+        <div class="step-s">ruang_sempit</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-k">Sintesis</div>
+        <div class="step-v">tahan</div>
+        <div class="step-s">1–2 tahun</div>
+      </div>
+    </div>
+
+    <div class="msec asal">
+      <div class="msec-h"><span class="caret open">›</span><span class="msec-t">Knowledge</span>
+        <span class="badge-asal">asal</span>
+        <span class="msec-sum">15/18 field · sektor Technology</span></div>
+      <div class="msec-body">
+        <div class="kv">
+          <div><span>Net margin (kini)</span><b>22,4%</b></div>
+          <div><span>Debt / Equity</span><b>0,31</b></div>
+          <div><span>Revenue YoY</span><b class="good">+18,2%</b></div>
+          <div><span>P/E trailing</span><b>14,6×</b></div>
+          <div><span>Institutional own.</span><b>81,3%</b></div>
+          <div><span>TAM estimate</span><b class="faint">—</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="msec"><div class="msec-h"><span class="caret">›</span><span class="msec-t">Confidence</span>
+      <span class="msec-sum">82 · high · 0 penalti</span></div></div>
+    <div class="msec"><div class="msec-h"><span class="caret">›</span><span class="msec-t">Risk / Red Flags</span>
+      <span class="msec-sum">2 flag · insider_selling_90d <span class="pill bad" style="margin-left:6px">triggered</span></span></div></div>
+    <div class="msec"><div class="msec-h"><span class="caret">›</span><span class="msec-t">Catalyst</span>
+      <span class="msec-sum">earnings 2026-09-24 · 39 hari lagi</span></div></div>
+    <div class="msec"><div class="msec-h"><span class="caret">›</span><span class="msec-t">Reasoning — 3 lensa</span>
+      <span class="msec-sum">ruang_sempit · compounding_kuat · asimetri_berkatalis</span></div></div>
+    <div class="msec"><div class="msec-h"><span class="caret">›</span><span class="msec-t">Sintesis + Jalur keputusan</span>
+      <span class="msec-sum">tahan · tambah · tahan_sampai_katalis</span></div></div>
+  </div>
+
+  <p class="note"><b>Yang berubah:</b> semua bagian selalu ada, bagian dari halaman asalmu terbuka dan ditandai <span class="badge-asal">asal</span>, sisanya terlipat dengan ringkasan satu baris — jadi rantainya terbaca tanpa harus membuka semuanya. <b>Jejak di atas</b> adalah intinya: satu baris yang menunjukkan bagaimana ticker ini berjalan dari Evidence sampai action, lengkap dengan angkanya di tiap simpul. Itu yang menjawab "kenapa MU dapat <i>tahan</i>", bukan daftar field.</p>
+</div>
+
+<!-- =============== DESAIN 2 =============== -->
+<div class="sec">
+  <div class="tag">Desain 2</div>
+  <h2>Sel aturan &amp; irisan kalibrasi jadi bisa diklik</h2>
+  <p class="lead">Aturan Keputusan menunjukkan sel berisi 2.276 ticker; Rapor Kalibrasi menunjukkan irisan dengan hit rate 45%. Dua-duanya angka tanpa jalan masuk — kamu tidak bisa bertanya "ticker mana saja itu?"</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h">Aturan Keputusan — Multibagger, belum punya posisi</div>
+      <table>
+        <thead><tr><th>Stance</th><th>Skor ≥70</th><th>Skor 50–69</th><th>Skor &lt;50</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono dim">ruang_terbuka</td>
+            <td class="cell"><span class="pill ok">mulai posisi</span><span class="cnt">312 ticker</span></td>
+            <td class="cell"><span class="pill ok">cicil bertahap</span><span class="cnt">548 ticker</span></td>
+            <td class="cell mati"><span class="pill ok">cicil bertahap</span><span class="cnt">tidak pernah</span></td>
+          </tr>
+          <tr>
+            <td class="mono dim">ruang_sempit</td>
+            <td class="cell"><span class="pill ok">cicil bertahap</span><span class="cnt">401 ticker</span></td>
+            <td class="cell aktif"><span class="pill neutral">pantau</span><span class="cnt">2.276 ticker · dipilih</span></td>
+            <td class="cell"><span class="pill neutral">pantau</span><span class="cnt">198 ticker</span></td>
+          </tr>
+          <tr>
+            <td class="mono dim">ruang_tertutup</td>
+            <td class="cell mati"><span class="pill bad">lewati</span><span class="cnt">tidak pernah</span></td>
+            <td class="cell"><span class="pill bad">lewati</span><span class="cnt">21 ticker</span></td>
+            <td class="cell"><span class="pill bad">lewati</span><span class="cnt">3 ticker</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="hint">Klik sel mana pun untuk melihat ticker yang mendarat di sana. Sel redup tidak bisa diklik — memang kosong.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Isi sel — ruang_sempit × skor 50–69 → pantau</div>
+      <div style="max-height:270px;overflow-y:auto">
+        <div class="row-t"><span class="ticker">MU</span><span class="dim">skor 67,4</span><span class="faint" style="margin-left:auto">Technology</span></div>
+        <div class="row-t"><span class="ticker">AAPL</span><span class="dim">skor 64,1</span><span class="faint" style="margin-left:auto">Technology</span></div>
+        <div class="row-t"><span class="ticker">BKH</span><span class="dim">skor 56,6</span><span class="faint" style="margin-left:auto">Utilities</span></div>
+        <div class="row-t"><span class="ticker">CMRE</span><span class="dim">skor 61,0</span><span class="faint" style="margin-left:auto">Industrials</span></div>
+        <div class="row-t"><span class="ticker">TLN</span><span class="dim">skor 60,4</span><span class="faint" style="margin-left:auto">Utilities</span></div>
+        <div class="row-t"><span class="ticker">HAFN</span><span class="dim">skor 58,8</span><span class="faint" style="margin-left:auto">Energy</span></div>
+      </div>
+      <div class="hint">2.276 ticker · diurutkan skor tertinggi · klik satu untuk membuka modal rantai penuh (Desain 1)</div>
+    </div>
+  </div>
+
+  <p class="note"><b>Pola yang sama dipakai Rapor Kalibrasi:</b> klik irisan “stance <span class="mono">asimetri_berkatalis</span> — hit 45,0%” dan panelnya berisi tesis-tesis yang membentuk angka itu, lengkap dengan vonis masing-masing. Angka kalibrasi berhenti jadi persentase yang harus dipercaya begitu saja, dan jadi sesuatu yang bisa kamu buka isinya. <b>Batas yang kupegang:</b> daftarnya dipotong (mis. 200 teratas) dan disajikan backend, bukan mengirim ribuan baris ke browser — halaman Aggregator sudah pernah mengajarkan apa akibatnya.</p>
+</div>
+
+</body>
+</html>

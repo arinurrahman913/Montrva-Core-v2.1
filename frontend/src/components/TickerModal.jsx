@@ -18,18 +18,42 @@ const DILUTION_WARN_THRESHOLD_PCT = 10.0 // sama dengan risk.py DILUTION_THRESHO
 
 const MODULES = ['multibagger', 'quality_compound', 'speculative']
 
-// Kontext dari halaman asal klik menentukan section mana yang ditampilkan
-// (D-04 "jangan campur" — user eksplisit minta modal fokus per stage,
-// bukan dump semua sekaligus). Nama-nama di sini = key activeView di App.jsx.
-// personal_aggregator/personal_historical BUKAN pengecualian dari aturan ini
-// (§9 draft personal layer): tetap fokus, cuma sumber datanya beda endpoint
-// (/api/personal/ticker/<t>, bukan /api/ticker/<t>) -- lihat useEffect terpisah
-// di bawah, sama pola dengan aiNarrative yang juga context-gated.
-const STAGE_CONTEXTS = new Set([
-  'reasoning', 'aggregator', 'risk', 'confidence', 'catalyst', 'knowledge', 'historical', 'peer',
-  'personal_aggregator', 'personal_historical',
-])
+// Halaman asal klik menentukan section mana yang TERBUKA -- bukan lagi section
+// mana yang ADA. Nama-nama di sini = key activeView di App.jsx.
+//
+// [BERUBAH 2026-08-16] Versi lama menggerbang render-nya: `showRisk = context
+// === 'risk'` dst, jadi satu response /api/ticker (9 stage, 172 KB, sudah
+// diambil utuh) cuma dipakai satu stage dan 8 sisanya dibuang tanpa dirender.
+// Akibat nyatanya: dari Knowledge kamu melihat "18/18 field terisi" tanpa apa
+// pun yang memberi tahu bahwa ticker itu sedang membawa flag risiko menyala.
+//
+// Fokus per stage TETAP dijaga, cuma pindah lapisan: section asal terbuka dan
+// bertanda, delapan sisanya terlipat jadi satu baris ringkasan dan BARU
+// dirender saat dibuka (lihat SectionRow -- body-nya thunk, bukan elemen).
+// Yang dilarang D-04 adalah mengompres 3 lensa jadi satu vonis; menampilkan
+// tahap-tahapnya berdampingan justru kebalikannya.
+//
+// personal_aggregator/personal_historical tetap beda endpoint
+// (/api/personal/ticker/<t>, §3 draft personal layer: lapisan pribadi tidak
+// nebeng ke response publik) -- jadi simpul "Aksi pribadi" di jejak rantai
+// TIDAK muncul di modal non-pribadi, bukan muncul kosong.
+const CONTEXT_ORIGIN = {
+  reasoning: 'reasoning',
+  aggregator: 'synthesis',
+  risk: 'risk',
+  confidence: 'confidence',
+  catalyst: 'catalyst',
+  knowledge: 'knowledge',
+  historical: 'historical',
+  peer: 'peer',
+  personal_aggregator: 'personal',
+  personal_historical: 'personal',
+}
 const PERSONAL_CONTEXTS = new Set(['personal_aggregator', 'personal_historical'])
+// Section yang isinya butuh /api/ticker/<t>/ai-narrative. Panggilannya tetap
+// malas: konteks aslinya memicu langsung, section lain baru memicu kalau
+// user benar-benar membukanya (lihat needNarrative di bawah).
+const NARRATIVE_CONTEXTS = new Set(['knowledge', 'catalyst', 'peer'])
 
 export default function TickerModal({ ticker, context, onClose }) {
   const [data, setData] = useState(null)
@@ -37,6 +61,7 @@ export default function TickerModal({ ticker, context, onClose }) {
   const [live, setLive] = useState(null) // null = loading, {stale:true} = failed, else fresh quote
   const [aiNarrative, setAiNarrative] = useState(null) // null = loading/n.a., else {narrative, cached, available}
   const [personalData, setPersonalData] = useState(null) // null = loading/n.a. (context bukan personal_*)
+  const [narrativeAsked, setNarrativeAsked] = useState(false) // user membuka section yang butuh narasi
 
   useEffect(() => {
     let cancelled = false
@@ -74,11 +99,20 @@ export default function TickerModal({ ticker, context, onClose }) {
   }, [ticker])
 
   useEffect(() => {
+    setNarrativeAsked(false)
+  }, [ticker, context])
+
+  useEffect(() => {
     // Relevan buat modal Knowledge (qualitative + quantitative_highlights)
     // dan Catalyst (catalyst_note) — satu response yang sama dipakai dua
     // context sekaligus (1 API call, bukan 2). Context lain gak butuh ini,
     // jangan buang panggilan API walau ada cache.
-    if (context !== 'knowledge' && context !== 'catalyst' && context !== 'peer') {
+    //
+    // [2026-08-16] Ketiga section itu sekarang ADA di semua konteks, tapi
+    // terlipat. Gerbangnya karena itu tidak dilebarkan ke semua konteks —
+    // panggilannya nunggu section-nya benar-benar dibuka (narrativeAsked),
+    // supaya membuka modal dari Risk tidak diam-diam membayar panggilan AI.
+    if (!NARRATIVE_CONTEXTS.has(context) && !narrativeAsked) {
       setAiNarrative(null)
       return
     }
@@ -95,7 +129,7 @@ export default function TickerModal({ ticker, context, onClose }) {
     return () => {
       cancelled = true
     }
-  }, [ticker, context])
+  }, [ticker, context, narrativeAsked])
 
   useEffect(() => {
     // Endpoint TERPISAH dari api.ticker() di atas (§3 draft personal layer:
@@ -137,7 +171,15 @@ export default function TickerModal({ ticker, context, onClose }) {
         <div className="modal-body">
           {error && <div className="empty">Gagal memuat detail: {error}</div>}
           {!error && !data && <div className="loading">Memuat detail…</div>}
-          {data && <ModalBody data={data} context={context} aiNarrative={aiNarrative} personalData={personalData} />}
+          {data && (
+            <ModalBody
+              data={data}
+              context={context}
+              aiNarrative={aiNarrative}
+              personalData={personalData}
+              onNeedNarrative={() => setNarrativeAsked(true)}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -1112,204 +1154,360 @@ function BullBearCase({ reasoning }) {
   )
 }
 
-function DecisionFlow({ data }) {
-  const { evidence, knowledge, catalyst, peer, risk, confidence, reasoning, aggregator } = data
-  const halted = !!aggregator?.halted
-  const stages = [
-    { label: 'Market Context', ok: true },
-    { label: 'Evidence', ok: !!evidence },
-    { label: 'Knowledge', ok: !!knowledge },
-    { label: 'Catalyst & Peer', ok: !!(catalyst || peer) },
-    { label: 'Risk & Red Flags', ok: !!risk, halt: halted },
-    { label: 'Confidence', ok: !!confidence && !halted, skipped: halted },
-    { label: 'Reasoning', ok: !!reasoning && !halted, skipped: halted },
-  ]
+// Jejak rantai — MENGGANTIKAN DecisionFlow, yang menampilkan 7 tahap yang sama
+// tapi cuma sebagai ✓/○ "stage ini ada datanya". Pertanyaan yang sebenarnya
+// muncul saat membuka satu ticker bukan "tahapnya jalan semua?" melainkan
+// "kenapa akhirnya jadi begitu" — dan itu butuh ANGKA keputusan tiap tahap,
+// bukan tanda centang. Lebarnya sengaja tidak pernah menyempit jadi satu:
+// Reasoning bertiga, Aksi bertiga, dan simpul Sintesis di antaranya adalah
+// HITUNGAN titik temu, bukan vonis (D-04/D-07).
+function ChainStep({ label, value, sub, tone, here, wide }) {
+  return (
+    <div className={`mchain-step${here ? ' here' : ''}`} style={wide ? { minWidth: wide } : undefined}>
+      <div className="mchain-k">{label}</div>
+      <div className={`mchain-v${tone ? ` ${tone}` : ''}`}>{value}</div>
+      {sub && <div className="mchain-s">{sub}</div>}
+    </div>
+  )
+}
+
+function ChainTrace({ data, personalData, originId }) {
+  const { evidence, knowledge, peer, confidence, risk, reasoning, aggregator } = data
+  const meta = knowledge?.metadata
+  const halted = !!(aggregator?.halted || risk?.halted)
+
+  const screenFlags = knowledge?.screening_flags || []
+  const sources = meta?.sources_used || []
+  const gaps = meta?.missing_fields || []
+
+  const flags = risk?.flags || []
+  const triggered = flags.filter((f) => f.status === 'triggered')
+  const legacyFlags = (risk?.red_flags || []).length
+
+  const scores = MODULES.map((m) => reasoning?.[m]?.thesis_score).filter((s) => s != null)
+  const syn = aggregator?.synthesis
+  const calls = personalData?.call_set
+    ? MODULES.map((m) => personalData.call_set[m]).filter(Boolean)
+    : []
+
+  const nextCat = (data.catalyst?.catalysts || [])[0]
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 14, fontSize: 10.5 }}>
-      {stages.map((s, i) => (
-        <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span
-            style={{
-              padding: '3px 8px',
-              borderRadius: 4,
-              background: s.halt ? 'rgba(251,113,133,.15)' : s.skipped ? 'var(--panel3)' : s.ok ? 'rgba(74,222,128,.1)' : 'var(--panel3)',
-              color: s.halt ? 'var(--bad)' : s.skipped ? 'var(--faint)' : s.ok ? 'var(--good)' : 'var(--faint)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {s.halt ? '⛔ ' : s.skipped ? '— ' : s.ok ? '✓ ' : '○ '}
-            {s.label}
-          </span>
-          {i < stages.length - 1 && <span style={{ color: 'var(--faint)' }}>→</span>}
-        </div>
-      ))}
-      {halted && (
-        <span style={{ color: 'var(--bad)', marginLeft: 4 }}>
-          Berhenti di Risk — {aggregator?.halt_reason || 'red flag severity ekstrem terpicu'}
-        </span>
+    <div className="mchain">
+      <ChainStep
+        label="Screening" here={originId === 'screening'}
+        value={knowledge ? (screenFlags.length ? `${screenFlags.length} flag` : 'lolos') : '—'}
+        tone={knowledge && !screenFlags.length ? 'good' : screenFlags.length ? 'warn' : 'faint'}
+        sub={knowledge ? [knowledge.sector, knowledge.size_category].filter(Boolean).join(' · ') || null : 'tidak ada profil'}
+      />
+      <ChainStep
+        label="Evidence" here={originId === 'evidence'}
+        value={sources.length ? `${sources.length} sumber` : evidence ? 'ada' : '—'}
+        tone={sources.length ? null : 'faint'}
+        sub={confidence?.evidence_age_days != null ? `umur ${confidence.evidence_age_days} hari` : meta?.evidence_date?.slice(0, 10)}
+      />
+      <ChainStep
+        label="Knowledge" here={originId === 'knowledge'}
+        value={meta ? `${meta.fields_completed}/${meta.fields_expected}` : '—'}
+        tone={meta ? (gaps.length ? 'warn' : 'good') : 'faint'}
+        sub={meta ? (gaps.length ? `${gaps.length} field hilang` : '0 field hilang') : null}
+      />
+      <ChainStep
+        label="Confidence" here={originId === 'confidence'}
+        value={confidence?.overall ? fmtNum(confidence.overall.score, 1) : '—'}
+        tone={confidence?.overall ? bandTone(confidence.overall.band) : 'faint'}
+        sub={confidence?.overall?.band || null}
+      />
+      <ChainStep
+        label="Risk" here={originId === 'risk'} wide={halted ? 150 : undefined}
+        value={halted ? 'HALTED' : risk ? (triggered.length ? `${triggered.length} menyala` : 'bersih') : '—'}
+        tone={halted ? 'bad' : triggered.length ? 'warn' : risk ? 'good' : 'faint'}
+        sub={
+          halted
+            ? (aggregator?.halt_reason || risk?.halt_reason || 'flag ekstrem terpicu')
+            : risk
+              ? `${flags.length} spec flag${legacyFlags ? ` · ${legacyFlags} lama` : ''}`
+              : null
+        }
+      />
+      <ChainStep
+        label="Reasoning" here={originId === 'reasoning'} wide={148}
+        value={scores.length ? scores.map((s) => fmtNum(s, 0)).join(' · ') : halted ? 'dilewati' : '—'}
+        tone={scores.length ? null : 'faint'}
+        sub={scores.length ? `${scores.length} lensa, tidak dirata-rata` : halted ? 'hard-gate Risk' : null}
+      />
+      <ChainStep
+        label="Sintesis" here={originId === 'synthesis'} wide={150}
+        value={syn ? `${(syn.agreements || []).length} searah` : halted ? 'dilewati' : '—'}
+        tone={syn ? null : 'faint'}
+        sub={
+          syn
+            ? `${(syn.divergences || []).length} divergen${syn.surprise != null ? ` · surprise ${fmtNum(syn.surprise, 2)}` : ''}`
+            : null
+        }
+      />
+      {nextCat && (
+        <ChainStep
+          label="Katalis" here={originId === 'catalyst'} wide={132}
+          value={nextCat.kind || 'katalis'}
+          sub={[nextCat.expected_at, daysUntilLabel(nextCat.expected_at)].filter(Boolean).join(' · ')}
+        />
+      )}
+      {peer && (
+        <ChainStep
+          label="Peer" here={originId === 'peer'}
+          value={`${countComparisons(peer)} metrik`}
+          tone={peer.low_sample_size ? 'warn' : null}
+          sub={peer.low_sample_size ? 'sampel tipis' : null}
+        />
+      )}
+      {calls.length > 0 && (
+        <ChainStep
+          label="Aksi pribadi" here={originId === 'personal'} wide={168}
+          value={`${calls.length} call`} tone="acc"
+          sub={calls.map((c) => prettyAction(c.action)).join(' · ')}
+        />
       )}
     </div>
   )
 }
 
-function ModalBody({ data, context, aiNarrative, personalData }) {
-  const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
-  const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
+function bandTone(band) {
+  if (band === 'high') return 'good'
+  if (band === 'low') return 'bad'
+  return 'warn'
+}
 
+function countComparisons(peer) {
+  return Object.entries(peer || {}).filter(([k, v]) => k.endsWith('_comparison') && v).length
+}
+
+function daysUntilLabel(dateStr) {
+  if (!dateStr) return null
+  const then = Date.parse(dateStr)
+  if (Number.isNaN(then)) return null
+  const days = Math.round((then - Date.now()) / 86400000)
+  if (days < 0) return 'lewat'
+  return `${days} hari`
+}
+
+// Satu section terlipat. `body` sengaja THUNK, bukan elemen: yang belum dibuka
+// tidak pernah dirender sama sekali. Yang paling mahal justru yang paling
+// jarang dibuka (RawDataTable + tabel kuartalan Evidence), jadi kalau body-nya
+// elemen biasa, "terlipat" cuma menyembunyikan biaya yang tetap dibayar.
+function SectionRow({ id, label, summary, pill, asal, hasData, isOpen, onToggle, body }) {
+  if (!hasData) {
+    return (
+      <div className="msec kosong" id={`sec-${id}`}>
+        <div className="msec-h">
+          <span className="msec-caret">·</span>
+          <span className="msec-t">{label}</span>
+          <span className="msec-sum">tidak ada data</span>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className={`msec${asal ? ' asal' : ''}`} id={`sec-${id}`}>
+      <button className="msec-h" onClick={onToggle} aria-expanded={isOpen}>
+        <span className="msec-caret">{isOpen ? '▾' : '▸'}</span>
+        <span className="msec-t">{label}</span>
+        {asal && <span className="msec-badge">asal</span>}
+        {pill}
+        <span className="msec-sum">{summary}</span>
+      </button>
+      {isOpen && <div className="msec-body">{body()}</div>}
+    </div>
+  )
+}
+
+function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }) {
+  const { aggregator, reasoning, risk, confidence, catalyst, peer, knowledge, evidence, historical } = data
+  const originId = CONTEXT_ORIGIN[context] || 'evidence'
+  const [open, setOpen] = useState(() => new Set([originId]))
+
+  // Ganti ticker/halaman asal = kembali ke satu section terbuka. Tanpa ini
+  // section yang dibuka di ticker sebelumnya ikut terbawa, dan modal berikutnya
+  // membuka 5 section sekaligus tanpa diminta.
+  useEffect(() => { setOpen(new Set([originId])) }, [originId, data.ticker])
+
+  const anySection = aggregator || reasoning || risk || confidence || catalyst || knowledge || evidence || historical
   if (!anySection && !PERSONAL_CONTEXTS.has(context)) {
     return <div className="empty">Tidak ada detail untuk ticker ini.</div>
   }
 
   const synthesis = aggregator?.synthesis
+  const halted = !!aggregator?.halted
+  const meta = knowledge?.metadata
 
-  // Modal fokus per stage sesuai halaman asal klik — bukan dump semua
-  // sekaligus (lihat catatan di STAGE_CONTEXTS). Konteks yang nggak
-  // punya section khusus (screening/peer/dst) fallback ke grup Evidence,
-  // karena itu paling relevan sebagai "profil dasar" ticker.
-  const showReasoning = context === 'reasoning' || context === 'aggregator'
-  const showRisk = context === 'risk'
-  const showConfidence = context === 'confidence'
-  const showCatalyst = context === 'catalyst'
-  const showKnowledge = context === 'knowledge'
-  const showHistorical = context === 'historical'
-  const showPeer = context === 'peer'
-  const showPersonal = PERSONAL_CONTEXTS.has(context)
-  const showEvidence = !STAGE_CONTEXTS.has(context)
+  function toggle(id) {
+    const wasOpen = open.has(id)
+    // Efek samping DI LUAR updater: React boleh memanggil updater dua kali
+    // (StrictMode), dan panggilan AI tidak boleh ikut dobel.
+    if (!wasOpen && NARRATIVE_CONTEXTS.has(id)) onNeedNarrative()
+    const next = new Set(open)
+    if (wasOpen) next.delete(id)
+    else next.add(id)
+    setOpen(next)
+  }
 
-  return (
-    <>
-      {showEvidence && (
-        <CompanyHeaderSection profile={evidence?.company_profile} fundamental={evidence?.fundamental} />
-      )}
+  const nextCat = (catalyst?.catalysts || [])[0]
+  const triggered = (risk?.flags || []).filter((f) => f.status === 'triggered')
+  const stances = MODULES.map((m) => reasoning?.[m]?.stance).filter(Boolean)
+  const price = evidence?.price_market?.last_price ?? evidence?.price_market?.close
 
-      {showPersonal && (
-        <PersonalDetailSection
-          personalData={personalData}
-          showHistory={context === 'personal_historical'}
-        />
-      )}
-
-      {showReasoning && (
-        <div className="msection">
-          <div className="msection-title">Decision Flow</div>
-          <DecisionFlow data={data} />
-        </div>
-      )}
-
-      {showReasoning && aggregator?.halted && (
-        <div className="msection">
-          <div className="flag">
-            <strong>HALTED</strong> — {aggregator.halt_reason || 'red flag severity ekstrem terpicu'}.
-            Saham ini tidak diteruskan ke modul reasoning (hard-gate keselamatan).
+  const defs = [
+    {
+      id: 'personal',
+      label: 'Lapisan Pribadi',
+      hasData: PERSONAL_CONTEXTS.has(context),
+      summary: personalData?.call_set ? `${MODULES.filter((m) => personalData.call_set[m]).length} call` : 'memuat…',
+      body: () => (
+        <PersonalDetailSection personalData={personalData} showHistory={context === 'personal_historical'} />
+      ),
+    },
+    {
+      id: 'knowledge',
+      label: 'Knowledge',
+      hasData: !!knowledge,
+      summary: meta ? `${meta.fields_completed}/${meta.fields_expected} field` : null,
+      body: () => (
+        <>
+          <AiNarrativeBlock aiNarrative={aiNarrative} />
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dim)', letterSpacing: '.04em', textTransform: 'uppercase', margin: '18px 0 10px' }}>
+            Data Pendukung Lengkap
           </div>
-        </div>
-      )}
-
-      {showReasoning && (synthesis || (reasoning && !aggregator?.halted)) && (
-        <div className="msection" id="sec-reasoning">
-          <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{context === 'aggregator' ? 'Aggregator — Sintesis Final' : 'Reasoning — 3 Lensa'}</span>
-            {synthesis && (
-              <span className={`pill ${synthesis.full_convergence ? 'ok' : 'neutral'}`}>
-                {synthesis.full_convergence ? 'konvergen' : 'divergen'}
-              </span>
-            )}
-            {synthesis?.confidence && (
-              <span className={`pill ${bandClass(synthesis.confidence.band)}`}>
-                confidence {synthesis.confidence.score.toFixed(0)} · {synthesis.confidence.band}
-              </span>
-            )}
-            {synthesis?.surprise != null && (
-              <span className="pill neutral">surprise {synthesis.surprise.toFixed(2)}</span>
-            )}
-          </div>
-
-          {synthesis?.narrative && <p className="narrative" style={{ marginBottom: 12 }}>{synthesis.narrative}</p>}
-
-          {context === 'aggregator' ? (
-            <>
-              {/* Aggregator's job is synthesis, not raw lenses -- SynthesisSection
-                  (agreements/divergences) leads, 3-lens detail is secondary/collapsed. */}
-              <SynthesisSection synthesis={synthesis} />
-              {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
-              {reasoning && !aggregator?.halted && (
-                <details className="lens-details" style={{ marginTop: 4 }}>
-                  <summary style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                    Detail 3 Lensa (Multibagger / Quality / Speculative)
-                  </summary>
-                  <div style={{ marginTop: 12 }}>
-                    <LensGrid reasoning={reasoning} />
-                  </div>
-                </details>
-              )}
-            </>
-          ) : (
-            <>
-              {reasoning && !aggregator?.halted && <BullBearCase reasoning={reasoning} />}
-              {reasoning && !aggregator?.halted && <LensGrid reasoning={reasoning} />}
-              <SynthesisSection synthesis={synthesis} />
-            </>
+          <KnowledgeDetailCards knowledge={knowledge} evidence={evidence} />
+        </>
+      ),
+    },
+    {
+      id: 'risk',
+      label: 'Risk / Red Flags',
+      hasData: !!risk && ((risk.flags || []).length > 0 || (risk.red_flags || []).length > 0),
+      pill: halted
+        ? <span className="pill bad">halted</span>
+        : triggered.length > 0
+          ? <span className="pill warn">{triggered.length} menyala</span>
+          : null,
+      summary: risk
+        ? [
+            triggered.length ? triggered.map((f) => f.flag_id).join(', ') : 'tidak ada yang menyala',
+            risk.risk_score != null ? `skor ${fmtNum(risk.risk_score, 0)}` : null,
+          ].filter(Boolean).join(' · ')
+        : null,
+      body: () => (
+        <>
+          {halted && (
+            <div className="flag">
+              <strong>HALTED</strong> — {aggregator.halt_reason || 'red flag severity ekstrem terpicu'}.
+              Saham ini tidak diteruskan ke modul reasoning (hard-gate keselamatan).
+            </div>
           )}
-        </div>
-      )}
-
-      {showRisk && (risk?.flags?.length > 0 || risk?.red_flags?.length > 0) && (
-        <div className="msection" id="sec-risk">
-          <div className="msection-title">
-            Risk / Red Flags{risk.risk_score != null ? ` (score ${risk.risk_score.toFixed(0)})` : ''}
-          </div>
           <RiskFlagsBySeverity flags={risk.flags} assessedAt={risk.assessed_at} />
           {(risk.red_flags || []).map((f, i) => (
             <div className={`flag${f.severity === 'medium' ? ' medium' : ''}`} key={`rf${i}`}>
               <strong>{f.flag_type}</strong> ({f.severity}) — {f.description}
             </div>
           ))}
-        </div>
-      )}
-
-      {showConfidence && confidence && (
-        <div className="msection" id="sec-confidence">
-          <div className="msection-title">Confidence Report</div>
-          <ConfidenceDetail confidence={confidence} />
-        </div>
-      )}
-
-      {showCatalyst && catalyst && (
-        <div className="msection" id="sec-catalyst">
-          <div className="msection-title">Katalis Mendatang</div>
+        </>
+      ),
+    },
+    {
+      id: 'reasoning',
+      label: 'Reasoning — 3 Lensa',
+      hasData: !!reasoning && !halted,
+      summary: stances.length ? stances.map(prettyStance).join(' · ') : null,
+      body: () => (
+        <>
+          <BullBearCase reasoning={reasoning} />
+          <LensGrid reasoning={reasoning} />
+        </>
+      ),
+    },
+    {
+      id: 'synthesis',
+      label: 'Sintesis',
+      hasData: !!synthesis,
+      pill: synthesis && (
+        <span className={`pill ${synthesis.full_convergence ? 'ok' : 'neutral'}`}>
+          {synthesis.full_convergence ? 'konvergen' : 'divergen'}
+        </span>
+      ),
+      summary: synthesis
+        ? [
+            `${(synthesis.agreements || []).length} searah`,
+            `${(synthesis.divergences || []).length} divergen`,
+            synthesis.surprise != null ? `surprise ${fmtNum(synthesis.surprise, 2)}` : null,
+          ].filter(Boolean).join(' · ')
+        : null,
+      body: () => (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            {synthesis.confidence && (
+              <span className={`pill ${bandClass(synthesis.confidence.band)}`}>
+                confidence {synthesis.confidence.score.toFixed(0)} · {synthesis.confidence.band}
+              </span>
+            )}
+            {synthesis.surprise != null && (
+              <span className="pill neutral">surprise {synthesis.surprise.toFixed(2)}</span>
+            )}
+          </div>
+          {synthesis.narrative && <p className="narrative" style={{ marginBottom: 12 }}>{synthesis.narrative}</p>}
+          <SynthesisSection synthesis={synthesis} />
+        </>
+      ),
+    },
+    {
+      id: 'confidence',
+      label: 'Confidence Report',
+      hasData: !!confidence,
+      pill: confidence?.overall && <span className={`pill ${bandClass(confidence.overall.band)}`}>{confidence.overall.band}</span>,
+      summary: confidence?.overall
+        ? `${fmtNum(confidence.overall.score, 1)} · ${Object.keys(confidence.by_section || {}).length} section`
+        : null,
+      body: () => <ConfidenceDetail confidence={confidence} />,
+    },
+    {
+      id: 'catalyst',
+      label: 'Katalis',
+      hasData: !!catalyst,
+      summary: nextCat
+        ? [nextCat.kind, nextCat.expected_at, daysUntilLabel(nextCat.expected_at)].filter(Boolean).join(' · ')
+        : 'tidak ada katalis mendatang',
+      body: () => (
+        <>
           <CatalystCountdownCard catalyst={catalyst} aiNarrative={aiNarrative} />
           <CatalystHistoryBar history={catalyst.resolved_history} />
-        </div>
-      )}
-
-      {showPeer && (
-        <div className="msection" id="sec-peer">
-          <div className="msection-title">Peer Comparison</div>
-          <PeerComparisonCard peer={peer} aiNarrative={aiNarrative} />
-        </div>
-      )}
-
-      {showKnowledge && knowledge && (
-        <div className="msection" id="sec-knowledge">
-          <AiNarrativeBlock aiNarrative={aiNarrative} />
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--dim)', letterSpacing: '.04em', textTransform: 'uppercase', margin: '18px 0 10px' }}>
-            Data Pendukung Lengkap
-          </div>
-          <KnowledgeDetailCards knowledge={knowledge} evidence={evidence} />
-        </div>
-      )}
-
-      {showEvidence && evidence && (
-        <div className="msection" id="sec-evidence">
-          <div className="msection-title">Evidence — Sumber Data</div>
+        </>
+      ),
+    },
+    {
+      id: 'peer',
+      label: 'Peer Comparison',
+      hasData: !!peer,
+      pill: peer?.low_sample_size ? <span className="pill warn">sampel tipis</span> : null,
+      summary: peer ? `${countComparisons(peer)} metrik dibanding` : null,
+      body: () => <PeerComparisonCard peer={peer} aiNarrative={aiNarrative} />,
+    },
+    {
+      id: 'evidence',
+      label: 'Evidence — Sumber Data',
+      hasData: !!evidence,
+      summary: [
+        price != null ? fmtMoney(price) : null,
+        (meta?.sources_used || []).length ? `${meta.sources_used.length} sumber` : null,
+      ].filter(Boolean).join(' · '),
+      body: () => (
+        <>
+          <CompanyHeaderSection profile={evidence.company_profile} fundamental={evidence.fundamental} />
 
           <PriceSnapshotBlock priceMarket={evidence.price_market} />
 
           {evidence.analyst_estimates && (
             <AnalystEstimatesBlock
               estimates={evidence.analyst_estimates}
-              currentPrice={evidence.price_market?.last_price ?? evidence.price_market?.close}
+              currentPrice={price}
             />
           )}
 
@@ -1328,30 +1526,69 @@ function ModalBody({ data, context, aiNarrative, personalData }) {
             <NewsBlock news={evidence.news} />
           </div>
 
+          {evidence.institutional_activity && <InsiderActivitySection activity={evidence.institutional_activity} />}
+          {evidence.institutional_ownership && <InstitutionalHoldersSection ownership={evidence.institutional_ownership} />}
+
           <RawDataTable evidence={evidence} />
-        </div>
-      )}
-
-      {showEvidence && evidence?.institutional_activity && (
-        <InsiderActivitySection activity={evidence.institutional_activity} />
-      )}
-
-      {showEvidence && evidence?.institutional_ownership && (
-        <InstitutionalHoldersSection ownership={evidence.institutional_ownership} />
-      )}
-
-      {showHistorical && historical && (historical.entries || []).length > 0 && (
-        <div className="msection" id="sec-historical">
-          <div className="msection-title">
-            Historical Tracking ({historical.total_entries || historical.entries.length} snapshot)
-          </div>
+        </>
+      ),
+    },
+    {
+      id: 'historical',
+      label: 'Riwayat',
+      hasData: !!historical && (historical.entries || []).length > 0,
+      summary: historical
+        ? [
+            `${historical.total_entries || historical.entries.length} snapshot`,
+            historical.first_entry_date && historical.last_entry_date
+              ? `${historical.first_entry_date.slice(0, 10)} → ${historical.last_entry_date.slice(0, 10)}`
+              : null,
+          ].filter(Boolean).join(' · ')
+        : null,
+      body: () => (
+        <>
           {historical.entries.slice().reverse().map((entry, i) => (
             <HistoricalEntryRow key={i} entry={entry} />
           ))}
-        </div>
-      )}
+        </>
+      ),
+    },
+  ]
+
+  // Section asal naik ke atas; sisanya tetap urutan pipeline. Lapisan pribadi
+  // cuma ada kalau endpointnya memang dipanggil (konteks pribadi).
+  const visible = defs.filter((d) => d.id !== 'personal' || PERSONAL_CONTEXTS.has(context))
+  const ordered = [
+    ...visible.filter((d) => d.id === originId),
+    ...visible.filter((d) => d.id !== originId),
+  ]
+
+  return (
+    <>
+      <IdentityLine evidence={evidence} knowledge={knowledge} />
+      <ChainTrace data={data} personalData={personalData} originId={originId} />
+      {ordered.map((d) => (
+        <SectionRow
+          key={d.id}
+          {...d}
+          asal={d.id === originId}
+          isOpen={open.has(d.id)}
+          onToggle={() => toggle(d.id)}
+        />
+      ))}
     </>
   )
+}
+
+// Nama perusahaan dulu cuma muncul di konteks Evidence (CompanyHeaderSection
+// ada di dalam grup itu). Sekarang grup Evidence bisa terlipat, jadi identitas
+// dasarnya diangkat keluar — satu baris, selalu terlihat.
+function IdentityLine({ evidence, knowledge }) {
+  const name = evidence?.company_profile?.long_name
+  const sector = evidence?.fundamental?.sector || knowledge?.sector
+  const bits = [name, sector, knowledge?.exchange || evidence?.exchange].filter(Boolean)
+  if (!bits.length) return null
+  return <div className="mident">{bits.join(' · ')}</div>
 }
 
 // Satu baris riwayat publik. Entry TERAKHIR menyimpan snapshot penuh (ada

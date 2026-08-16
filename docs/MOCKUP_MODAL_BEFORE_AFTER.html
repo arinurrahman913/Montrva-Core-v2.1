@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Before / After — Modal Ticker (Montrva)</title>
+<style>
+:root{
+  --ink:#0A0D14; --panel:#12151E; --panel2:#181C28; --panel3:#1F2433;
+  --rule:rgba(255,255,255,.07); --rule-strong:rgba(255,255,255,.14);
+  --text:#E7E9EE; --dim:#98A2B8; --faint:#616B80;
+  --accent:#22D3EE; --accent2:#818CF8; --warn:#FBBF7A; --bad:#FB7185; --good:#4ADE80;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace; --sans:-apple-system,"Segoe UI",Inter,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55;padding:26px 30px 70px;font-variant-numeric:tabular-nums}
+h1{font-size:17px;font-weight:600;margin-bottom:5px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.lead{font-size:12.5px;color:var(--faint);margin-bottom:16px;max-width:980px}
+.sec{margin-bottom:38px}
+.tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(34,211,238,.3);background:rgba(34,211,238,.08);padding:2px 8px;border-radius:999px;margin-bottom:8px}
+.tag.b{color:var(--warn);border-color:rgba(251,191,122,.3);background:rgba(251,191,122,.08)}
+.pill{display:inline-block;padding:3px 9px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:999px;text-transform:uppercase}
+.pill.ok{color:var(--good);background:rgba(74,222,128,.12)}
+.pill.warn{color:var(--warn);background:rgba(251,191,122,.12)}
+.pill.bad{color:var(--bad);background:rgba(251,113,133,.12)}
+.pill.neutral{color:var(--dim);background:rgba(255,255,255,.06)}
+.mono{font-family:var(--mono)} .dim{color:var(--dim)} .faint{color:var(--faint)}
+.good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .acc{color:var(--accent)}
+
+.note{font-size:11.5px;color:var(--faint);line-height:1.7;margin-top:12px;max-width:1000px}
+.note b{color:var(--dim)}
+.callout{border:1px solid rgba(251,191,122,.28);background:rgba(251,191,122,.06);border-radius:10px;padding:11px 14px;font-size:12px;color:var(--dim);max-width:1000px;margin-bottom:18px}
+.callout b{color:var(--warn)}
+
+/* ---------- kolom banding ---------- */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:1180px){.cmp{grid-template-columns:1fr}}
+.col-h{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.col-h .t{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.col-h.before .t{color:var(--warn)} .col-h.after .t{color:var(--accent)}
+.col-h .s{font-size:11px;color:var(--faint)}
+
+/* ---------- modal ---------- */
+.modal{background:var(--panel);border:1px solid var(--rule-strong);border-radius:13px;overflow:hidden}
+.mhead{padding:12px 16px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
+.mhead .tk{font-family:var(--mono);font-weight:700;font-size:17px;color:var(--accent)}
+.mhead .nm{font-size:12px;color:var(--dim)}
+.mhead .px{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.mclose{color:var(--faint);font-size:16px;margin-left:8px}
+
+/* jejak rantai */
+.chain{display:flex;align-items:stretch;padding:11px 16px;background:var(--panel2);border-bottom:1px solid var(--rule);overflow-x:auto}
+.step{min-width:118px;padding:0 11px;border-left:1px solid var(--rule);flex:none}
+.step:first-child{border-left:none;padding-left:0}
+.step-k{font-size:8.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.step-v{font-family:var(--mono);font-size:12px;font-weight:600}
+.step-s{font-size:10px;color:var(--dim);margin-top:2px;line-height:1.4}
+.step.here{background:linear-gradient(180deg,rgba(34,211,238,.10),transparent)}
+.step.here .step-k{color:var(--accent)}
+
+/* section modal */
+.msec{border-bottom:1px solid var(--rule)}
+.msec:last-child{border-bottom:none}
+.msec-h{display:flex;align-items:center;gap:9px;padding:9px 16px}
+.msec-h:hover{background:var(--panel2)}
+.caret{color:var(--faint);font-size:13px;display:inline-block;width:9px}
+.caret.open{color:var(--accent)}
+.msec-t{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.msec-sum{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right}
+.msec.asal{background:rgba(34,211,238,.03)}
+.msec.asal .msec-t{color:var(--accent)}
+.badge-asal{font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--accent);border:1px solid rgba(34,211,238,.35);padding:1px 6px;border-radius:999px}
+.msec-body{padding:2px 16px 14px;background:var(--panel2)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:6px 18px;font-size:12px}
+.kv div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--rule);padding:4px 0}
+.kv span{color:var(--dim)} .kv b{font-family:var(--mono);font-weight:600}
+.narr{font-size:12px;color:var(--dim);line-height:1.6;padding:8px 0 4px}
+
+/* daftar yang hilang */
+.gone{border:1px dashed rgba(251,113,133,.3);background:rgba(251,113,133,.04);border-radius:10px;margin:14px 0 0;padding:11px 14px}
+.gone h4{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bad);margin-bottom:7px}
+.gone ul{list-style:none;font-size:11.5px;color:var(--faint);line-height:1.85}
+.gone li:before{content:"×";color:var(--bad);font-family:var(--mono);margin-right:8px}
+.gone .mono{color:var(--dim)}
+
+/* matriks */
+table{width:100%;border-collapse:collapse;font-size:11.5px;max-width:1050px}
+th{font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;text-align:center;padding:7px 6px;color:var(--faint);border-bottom:1px solid var(--rule);background:var(--panel2)}
+th.l,td.l{text-align:left;padding-left:12px}
+td{padding:6px;border-bottom:1px solid var(--rule);text-align:center;font-family:var(--mono)}
+tbody tr:hover{background:var(--panel2)}
+.y{color:var(--good)} .n{color:rgba(255,255,255,.13)}
+.tblwrap{border:1px solid var(--rule);border-radius:11px;overflow:auto;background:var(--panel);max-width:1050px}
+</style>
+</head>
+<body>
+
+<h1>Before / After — modal ticker berhenti menyembunyikan rantainya</h1>
+<p class="lead">
+Semua angka di halaman ini nyata, diambil dari <span class="mono">/api/ticker/AAPL</span> + <span class="mono">/api/personal/ticker/AAPL</span> pada run <span class="mono">session-20260816T031747</span> (16 Agu 03:17, evidence 03:46, call pribadi 06:34). Tidak ada nilai karangan.
+</p>
+
+<div class="callout">
+<b>Ini membalik keputusanmu sendiri.</b> Komentar di <span class="mono">TickerModal.jsx:21</span> menulis: “user eksplisit minta modal fokus per stage, bukan dump semua sekaligus”. Yang kuusulkan <b>bukan</b> kembali ke dump: bagian asalmu tetap satu-satunya yang terbuka, sisanya terlipat jadi satu baris ringkasan. Yang berubah cuma — bagian lain <i>ada</i> dan bisa dibuka, bukan tidak dirender sama sekali. Kalau kamu tetap mau bentuk lama, cukup bilang, mockup ini yang menyesuaikan.
+</div>
+
+<!-- ============ 1. SIDE BY SIDE ============ -->
+<div class="sec">
+  <span class="tag">Skenario — klik AAPL dari halaman Knowledge</span>
+  <h2>Yang sama-sama sudah ada di memori browser, dua cara menampilkannya</h2>
+  <p class="lead">Response <span class="mono">/api/ticker/AAPL</span> berukuran <b>172 KB berisi 9 stage</b> (evidence, knowledge, catalyst, peer, confidence, risk, reasoning, aggregator, historical) — terverifikasi hari ini, bukan asumsi. Kolom kiri membuang 8 di antaranya.</p>
+
+  <div class="cmp">
+
+    <!-- BEFORE -->
+    <div>
+      <div class="col-h before"><span class="t">Sebelum</span><span class="s">— yang jalan sekarang</span></div>
+      <div class="modal">
+        <div class="mhead">
+          <span class="tk">AAPL</span><span class="nm">Apple Inc. · NASDAQ</span>
+          <span class="px">$305,93</span><span class="mclose">✕</span>
+        </div>
+
+        <div class="msec asal">
+          <div class="msec-h"><span class="caret open">▾</span><span class="msec-t">Knowledge</span></div>
+          <div class="msec-body">
+            <p class="narr">Ringkasan AI + <span class="mono">KnowledgeDetailCards</span> — 7 section, 18/18 field terisi.</p>
+            <div class="kv">
+              <div><span>financial_health</span><b>8/9</b></div>
+              <div><span>valuation</span><b>lengkap</b></div>
+              <div><span>historical_trend</span><b>6/6</b></div>
+              <div><span>ownership</span><b>3/3</b></div>
+              <div><span>governance</span><b>2/2</b></div>
+              <div><span>competitive_*</span><b>4/4</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gone" style="margin:0;border-radius:0;border-left:none;border-right:none;border-bottom:none">
+          <h4>Tidak dirender sama sekali (padahal ada di response)</h4>
+          <ul>
+            <li><span class="mono">risk</span> — <span class="bad">insider_selling_90d TRIGGERED (tinggi)</span>, baru menyala sejak Form 4 hidup kemarin</li>
+            <li><span class="mono">reasoning</span> — 3 stance lensa + skor tesis</li>
+            <li><span class="mono">aggregator.synthesis</span> — 1 titik searah, surprise 2,20</li>
+            <li><span class="mono">confidence</span> — 97,8 high</li>
+            <li><span class="mono">catalyst</span> — earnings 29 Okt (74 hari lagi)</li>
+            <li><span class="mono">peer</span> — 11 metrik dibanding</li>
+            <li><span class="mono">evidence</span> — harga, filing, berita, 4 sumber</li>
+            <li><span class="mono">historical</span> — 18 snapshot (23 Jul → 16 Agu)</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note"><b>Akibatnya konkret:</b> dari Knowledge kamu melihat “18/18 field terisi, semua sehat” dan tidak ada apa pun yang memberi tahu bahwa ticker ini sedang membawa flag risiko yang menyala. Untuk tahu itu kamu harus tutup modal, pindah ke halaman Risk, cari AAPL, buka lagi.</p>
+    </div>
+
+    <!-- AFTER -->
+    <div>
+      <div class="col-h after"><span class="t">Sesudah</span><span class="s">— usulan</span></div>
+      <div class="modal">
+        <div class="mhead">
+          <span class="tk">AAPL</span><span class="nm">Apple Inc. · NASDAQ</span>
+          <span class="px">$305,93</span><span class="mclose">✕</span>
+        </div>
+
+        <div class="chain">
+          <div class="step"><div class="step-k">Screening</div><div class="step-v good">lolos</div><div class="step-s">0 soft flag · large</div></div>
+          <div class="step"><div class="step-k">Evidence</div><div class="step-v">4 sumber</div><div class="step-s">umur 0 hari</div></div>
+          <div class="step here"><div class="step-k">Knowledge</div><div class="step-v">18/18</div><div class="step-s">0 field hilang</div></div>
+          <div class="step"><div class="step-k">Confidence</div><div class="step-v good">97,8</div><div class="step-s">high</div></div>
+          <div class="step"><div class="step-k">Risk</div><div class="step-v warn">1 menyala</div><div class="step-s">tidak halted</div></div>
+          <div class="step"><div class="step-k">Reasoning</div><div class="step-v">75 · 82 · 63</div><div class="step-s">3 lensa</div></div>
+          <div class="step"><div class="step-k">Sintesis</div><div class="step-v">1 searah</div><div class="step-s">surprise 2,20</div></div>
+          <div class="step"><div class="step-k">Aksi</div><div class="step-v acc">3 call</div><div class="step-s">tanpa posisi</div></div>
+        </div>
+
+        <div class="msec asal">
+          <div class="msec-h"><span class="caret open">▾</span><span class="msec-t">Knowledge</span><span class="badge-asal">asal</span><span class="msec-sum">18/18 field</span></div>
+          <div class="msec-body">
+            <p class="narr">Isi persis sama dengan kolom kiri — tidak ada yang dikurangi dari halaman asalmu.</p>
+            <div class="kv">
+              <div><span>financial_health</span><b>8/9</b></div>
+              <div><span>valuation</span><b>lengkap</b></div>
+              <div><span>historical_trend</span><b>6/6</b></div>
+              <div><span>ownership</span><b>3/3</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Risk</span><span class="pill warn">1 menyala</span><span class="msec-sum">insider_selling_90d · tinggi</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Reasoning — 3 lensa</span><span class="msec-sum">ruang_sempit · compounding_kuat · asimetri_berkatalis</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Sintesis</span><span class="pill neutral">divergen</span><span class="msec-sum">1 searah · 0 divergen · surprise 2,20</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Confidence</span><span class="pill ok">high</span><span class="msec-sum">97,8 · 7 section</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Katalis</span><span class="msec-sum">earnings 29 Okt · 74 hari</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Peer</span><span class="msec-sum">11 metrik dibanding</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Evidence</span><span class="msec-sum">$305,93 · 4 sumber</span></div></div>
+        <div class="msec"><div class="msec-h"><span class="caret">▸</span><span class="msec-t">Riwayat</span><span class="msec-sum">18 snapshot · 23 Jul → 16 Agu</span></div></div>
+      </div>
+      <p class="note"><b>Satu bagian terbuka, delapan terlipat.</b> Baris ringkasannya sendiri sudah menjawab sebagian besar pertanyaan “apa lagi yang perlu kutahu” tanpa perlu diklik — dan yang penting, “1 menyala” terbaca sebelum kamu memutuskan apa pun.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ 2. JEJAK RANTAI ============ -->
+<div class="sec">
+  <span class="tag">Inti desainnya</span>
+  <h2>Jejak rantai — satu baris, dari saringan sampai aksi</h2>
+  <p class="lead">Bukan daftar field. Tiap simpul membawa <b>angka keputusannya sendiri</b>, jadi terbaca di mana sebuah ticker menguat dan di mana ia kehilangan poin. Ini nilai AAPL apa adanya hari ini.</p>
+
+  <div class="modal" style="max-width:1050px">
+    <div class="chain" style="padding:14px 18px">
+      <div class="step" style="min-width:132px"><div class="step-k">Screening</div><div class="step-v good">lolos</div><div class="step-s">Technology · large<br>0 soft flag</div></div>
+      <div class="step" style="min-width:132px"><div class="step-k">Evidence</div><div class="step-v">4 sumber</div><div class="step-s">yahoo · finnhub<br>sec_edgar · sec_form4</div></div>
+      <div class="step" style="min-width:132px"><div class="step-k">Knowledge</div><div class="step-v">18 / 18</div><div class="step-s">0 field hilang<br>16 Agu 03:46</div></div>
+      <div class="step" style="min-width:132px"><div class="step-k">Confidence</div><div class="step-v good">97,8 <span class="pill ok" style="font-size:8.5px">high</span></div><div class="step-s">financial_health 88,9<br>satu-satunya &lt;100</div></div>
+      <div class="step here" style="min-width:150px"><div class="step-k">Risk</div><div class="step-v warn">skor 0,0 · 1 menyala</div><div class="step-s"><span class="bad">insider_selling_90d</span> tinggi<br>litigation: tak tentu</div></div>
+      <div class="step" style="min-width:172px"><div class="step-k">Reasoning</div><div class="step-v">75 · 82 · 63</div><div class="step-s">ruang_sempit<br>compounding_kuat<br>asimetri_berkatalis</div></div>
+      <div class="step" style="min-width:140px"><div class="step-k">Sintesis</div><div class="step-v">1 searah</div><div class="step-s">return_1y +31,9%<br>surprise 2,20</div></div>
+      <div class="step" style="min-width:150px"><div class="step-k">Aksi pribadi</div><div class="step-v acc">3 call</div><div class="step-s">cicil_bertahap · 1-2 th<br>akumulasi · 5 th<br>tunggu_katalis · bulanan</div></div>
+    </div>
+    <div class="msec-body" style="background:var(--panel);padding:12px 18px">
+      <p class="narr" style="padding:0">
+        Dibaca kiri-ke-kanan: data AAPL <b>lengkap dan segar</b> (97,8 high, umur 0 hari), jadi ketiga lensa bicara dengan keyakinan penuh — dan justru karena itu perbedaan ketiganya bukan soal data kurang. Yang menahan Multibagger (<span class="mono">ruang_sempit</span>) sementara Quality menguat (<span class="mono">compounding_kuat</span>) adalah ukuran, bukan kualitas. Satu-satunya flag yang menyala <span class="mono bad">insider_selling_90d</span> — flag yang baru <b>bisa</b> menyala sejak parsing Form 4 hidup kemarin.
+      </p>
+    </div>
+  </div>
+  <p class="note"><b>Kenapa ini yang paling penting:</b> pertanyaan yang selalu muncul saat membuka satu ticker bukan “apa isi field-nya”, tapi “kenapa akhirnya jadi <i>cicil_bertahap</i>”. Jawabannya selalu berbentuk rantai, dan sekarang rantai itu tersebar di 8 halaman. <b>Batas yang kupegang:</b> jejak ini <span class="bad">bukan</span> skor tunggal dan tidak merangking apa pun — ketiga lensa tetap tampil bertiga, sesuai D-04.</p>
+</div>
+
+<!-- ============ 3. MATRIKS ============ -->
+<div class="sec">
+  <span class="tag b">Bukti masalahnya, bukan kesan</span>
+  <h2>Yang benar-benar dirender per halaman asal (kode sekarang)</h2>
+  <p class="lead">Dibaca langsung dari <span class="mono">TickerModal.jsx:1170-1178</span>. Tiap baris = satu halaman tempat kamu klik ticker; kolom = section yang muncul. Kolom terakhir mengingatkan: seluruh baris ini memakai response yang isinya sama persis.</p>
+
+  <div class="tblwrap">
+  <table>
+    <thead><tr>
+      <th class="l">Klik dari halaman</th><th>Evidence</th><th>Knowledge</th><th>Confidence</th><th>Risk</th><th>Reasoning</th><th>Sintesis</th><th>Katalis</th><th>Peer</th><th>Riwayat</th><th>Pribadi</th><th class="l">Dikirim API</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="l">Knowledge</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Risk</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Reasoning</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Aggregator</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Confidence</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Katalis</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Peer</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Riwayat</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Screening / Evidence / lainnya</td><td class="y">✓</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="l dim">9 stage</td></tr>
+      <tr><td class="l">Pribadi (2 halaman)</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="n">•</td><td class="y">✓</td><td class="l dim">9 stage + pribadi</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="note">
+    <b>Yang terbaca dari tabel ini:</b> 10 baris, dan tidak ada satu pun sel silang — tiap halaman melihat tepat satu kolomnya sendiri. Halaman Reasoning/Aggregator satu-satunya yang melihat dua, dan itu pun karena Sintesis memang milik keluarga yang sama.
+    <b>Sisi biayanya:</b> perubahan ini <span class="good">nol panggilan API baru</span> — semua kolom “•” sudah ada di response yang sama; yang ditambah cuma render + komponen terlipat. Lapisan pribadi tetap endpoint terpisah (§3 draft personal layer), jadi baris terakhir tidak ikut dilebur.
+  </p>
+</div>
+
+<!-- ============ 4. BATAS ============ -->
+<div class="sec">
+  <span class="tag">Batas yang kupegang</span>
+  <h2>Apa yang <i>tidak</i> berubah</h2>
+  <p class="note" style="margin-top:6px">
+    <b>1. Fokus tetap ada.</b> Cuma bagian asal yang terbuka. Delapan sisanya satu baris — modal tidak jadi lebih panjang saat dibuka, cuma jadi lebih dalam kalau kamu mau.<br>
+    <b>2. Tidak ada skor tunggal.</b> Jejak rantai menampilkan 3 skor lensa berdampingan, tidak dirata-rata, tidak dirangking (D-04, dan Sintesis sendiri dilarang punya verdict).<br>
+    <b>3. Lapisan pribadi tidak nebeng ke response publik.</b> Simpul “Aksi pribadi” cuma terisi kalau <span class="mono">/api/personal/ticker/&lt;t&gt;</span> memang dipanggil — di modal non-pribadi simpul itu tidak muncul, bukan diisi nol.<br>
+    <b>4. Section berat tetap malas.</b> Yang terlipat tidak dirender sampai dibuka — <span class="mono">RawDataTable</span> + tabel kuartalan Evidence yang paling mahal, dan itu justru yang paling sering tidak dibuka.
+  </p>
+</div>
+
+</body>
+</html>

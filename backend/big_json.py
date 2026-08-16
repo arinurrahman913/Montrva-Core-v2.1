@@ -69,6 +69,12 @@ _KEY_BEFORE_BRACE = re.compile(rb'"([^"]{1,15})"\s*:\s*$')
 # record pertama.
 _VALIDATE_SAMPLES = 8
 
+# Jendela byte yang dibaca mundur dari awal record berikutnya untuk menemukan
+# kurung tutup record sebelumnya. Celahnya cuma pemisah (`,` + kunci + spasi),
+# jadi 512 byte sudah jauh lebih dari cukup untuk kunci ticker terpanjang di
+# berkas ber-indent sekalipun.
+_GAP_WINDOW = 512
+
 
 class RecordIndex:
     """Peta ticker -> (offset awal, offset akhir) di dalam satu berkas JSON.
@@ -268,7 +274,15 @@ def build_evidence_index(path: Path) -> RecordIndex | None:
 
 
 def build_historical_index(path: Path) -> RecordIndex | None:
-    """Indeks `historical_timeline.json` -- objek top-level berkunci ticker."""
+    """Indeks berkas berbentuk objek top-level berkunci ticker, tiap nilainya
+    memuat `total_entries` tepat sekali.
+
+    Dipakai `historical_timeline.json` DAN `dashboard/data/personal/
+    personal_history.json` -- bentuk keduanya identik (montrva/layer2/
+    historical.py dan montrva/personal/personal_history.py menulis dataclass
+    yang sebangun). Yang kedua ditulis `indent=2` + CRLF, jadi perhitungan
+    akhir-record di bawah TIDAK boleh mengasumsikan pemisah rapat.
+    """
     try:
         mtime = path.stat().st_mtime
     except OSError:
@@ -302,16 +316,29 @@ def build_historical_index(path: Path) -> RecordIndex | None:
     if close_at == -1:
         return None
 
-    # Record berakhir tepat sebelum koma pemisah yang mendahului kunci
-    # berikutnya; record terakhir berakhir sebelum `}` penutup top-level.
+    # Record berakhir di `}` TERAKHIR sebelum awal record berikutnya; record
+    # terakhir berakhir di `}` penutup top-level.
+    #
+    # Versi pertama menghitungnya aritmetis dari panjang kunci berikutnya
+    # (`,"KEY":{`), yang benar HANYA untuk berkas rapat. personal_history.json
+    # ditulis indent=2 + CRLF, jadi pemisahnya `}\r\n  "KEY": {` dan aritmetika
+    # itu meleset -- gejalanya bukan data salah (indeks yang meleset ditolak
+    # _validate) melainkan diam-diam jatuh ke json.load 291 MB, persis biaya
+    # yang mau dihindari. Aturan "kurung tutup terakhir sebelum record
+    # berikutnya" tidak peduli spasi, jadi satu jalur melayani kedua format.
+    # Celah antar-record murni struktural -- tidak ada string di sana -- jadi
+    # `}` yang ketemu tidak mungkin `}` di dalam teks.
     ends: list[int] = []
     for i, start in enumerate(starts):
-        if i + 1 < len(starts):
-            next_key_quote = starts[i + 1] - 1
-            key_len = len(keys[i + 1].encode("utf-8"))
-            ends.append(next_key_quote - key_len - 3)
-        else:
+        if i + 1 >= len(starts):
             ends.append(close_at)
+            continue
+        gap_start = max(start, starts[i + 1] - _GAP_WINDOW)
+        gap = _read_at(path, gap_start, starts[i + 1] - gap_start)
+        brace = gap.rfind(b"}")
+        if brace == -1:
+            return None
+        ends.append(gap_start + brace + 1)
 
     spans: dict[str, tuple[int, int]] = {}
     for key, start, end in zip(keys, starts, ends):

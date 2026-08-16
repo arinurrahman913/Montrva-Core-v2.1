@@ -22,6 +22,7 @@ from pathlib import Path
 
 from flask import Response, jsonify, request
 
+from backend import big_json
 from montrva.layer2 import rehydrate
 from montrva.layer2.sources.live_quote import fetch_live_quote
 from montrva.personal import build_personal_call_set, due_for_review
@@ -104,6 +105,42 @@ def _load_json(path: Path) -> dict:
 
 def _index_by_ticker(items: list[dict]) -> dict[str, dict]:
     return {item["ticker"]: item for item in items if "ticker" in item}
+
+
+# Indeks offset personal_history.json, dipegang per-mtime. Bentuknya identik
+# dengan historical_timeline.json (objek berkunci ticker, tiap nilai memuat
+# `total_entries` sekali), jadi builder yang sama dipakai -- bukan builder
+# kedua yang menebak format yang sama.
+_history_index: dict[str, tuple[float, object]] = {}
+
+
+def _history_record(path: Path, ticker: str) -> dict | None:
+    """Satu ticker dari personal_history.json TANPA mem-parse seluruhnya.
+
+    Kenapa ini ada: berkasnya 291 MB dan `json.load`-nya terukur 10,7 detik
+    (18,3 detik saat memori sesak) sambil memegang GIL, jadi SEMUA permintaan
+    lain ikut tertahan selama itu -- termasuk /api/ticker/<t> yang tidak ada
+    hubungannya. Gejalanya di browser: modal berhenti di "Memuat detail…"
+    sampai 25 detik, muncul-hilang tanpa pola karena cuma terjadi ketika TTL
+    120 detik kebetulan sudah lewat. Terukur sesudah indeks: 5 ms per ticker.
+
+    Jatuh ke `_load_json` kalau indeksnya gagal dibangun (bentuk berkas
+    berubah) -- lambat, tidak pernah salah data: `build_historical_index`
+    memvalidasi hasilnya dan mengembalikan None kalau penandanya meleset.
+    """
+    if not path.exists():
+        return None
+    mtime = path.stat().st_mtime
+    key = str(path)
+    cached = _history_index.get(key)
+    if cached is None or cached[0] != mtime:
+        cached = (mtime, big_json.build_historical_index(path))
+        _history_index[key] = cached
+    index = cached[1]
+    if index is None:
+        history = _load_json(path)
+        return (history.get("timelines") or history).get(ticker)
+    return index.get(ticker)
 
 
 def _derived_json(path: Path, key: str, build) -> Response:
@@ -365,11 +402,10 @@ def register(app, data_dir: Path, get_stage=None) -> None:
     def get_personal_ticker(ticker: str):
         ticker = ticker.upper()
         calls = _index_by_ticker(_load_json(personal_dir / "personal_calls.json").get("call_sets", []))
-        history = _load_json(personal_dir / "personal_history.json")
         return jsonify({
             "ticker": ticker,
             "call_set": calls.get(ticker),
-            "history": history.get(ticker),
+            "history": _history_record(personal_dir / "personal_history.json", ticker),
         })
 
     @app.get("/api/personal/action-table")
@@ -464,9 +500,12 @@ def register(app, data_dir: Path, get_stage=None) -> None:
                 "error": f"maksimal {_MAX_TICKERS_PER_REQUEST} ticker per permintaan",
                 "requested": len(wanted),
             }), 400
-        history = _load_json(personal_dir / "personal_history.json")
-        timelines = history.get("timelines", history)
-        return jsonify({"timelines": {t: timelines[t] for t in wanted if t in timelines}})
+        # Lewat indeks offset juga: 35 timeline = 35 seek+parse potongan
+        # (terukur ~5 ms masing-masing), bukan satu parse 291 MB yang menahan
+        # GIL belasan detik untuk seluruh backend.
+        path = personal_dir / "personal_history.json"
+        found = {t: rec for t in wanted if (rec := _history_record(path, t)) is not None}
+        return jsonify({"timelines": found})
 
     @app.get("/api/personal/history/previous-picks")
     def get_personal_history_previous_picks():
