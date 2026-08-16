@@ -36,7 +36,7 @@ const TITLES = {
   aggregator: ['Aggregator + Synthesis', '3 lensa berdampingan + peta kesepakatan/perbedaan — tanpa skor tunggal (D-04)'],
   historical: ['Historical Tracking', 'Snapshot per hari: yang terakhir utuh, yang lebih tua ringkas (evaluasi outcome menyusul v2.1)'],
   portfolio: ['Portofolio', 'Posisi riil + buku transaksi. holdings.json diturunkan dari halaman ini — tidak diedit tangan, tidak pernah masuk git'],
-  personal_aggregator: ['Sintesis', 'Action + horizon per lens, dibaca dari stance Reasoning — tidak pernah dipublikasikan'],
+  personal_aggregator: ['Sintesis', 'Action + horizon per lensa, dibaca dari stance Reasoning — satu-satunya lapisan yang menyebut beli/tahan/jual'],
   personal_historical: ['Rekam Jejak', 'Snapshot keputusan per hari — outcome dievaluasi otomatis begitu call jatuh tempo'],
   action_rules: ['Aturan Keputusan', 'ACTION_TABLE utuh berdampingan dengan berapa kali tiap selnya benar-benar menyala — stance + skor masuk, action keluar, tanpa mesin skor kedua'],
   personal_calibration: ['Rapor Kalibrasi', 'Hit rate per irisan keputusan, dengan gerbang bukti — melaporkan juga apa yang belum bisa dinilai'],

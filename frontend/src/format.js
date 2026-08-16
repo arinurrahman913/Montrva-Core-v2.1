@@ -204,10 +204,10 @@ export const READING_NOTES = {
     },
     catalyst: 'Peristiwa terjadwal yang bisa menggerakkan harga. Mayoritas ticker punya earnings terjadwal (terukur ~79% pada audit 15 Agu 2026), jadi yang membedakan jaraknya — bukan adanya.',
     peer: 'Dibanding median grup sektornya, bukan pesaing yang dipilih tangan.',
-    personal: 'Terjemahan stance jadi tindakan untukmu, memperhitungkan posisi yang kamu pegang.',
+    personal: 'Terjemahan stance jadi tindakan, memperhitungkan posisi yang kamu pegang.',
   },
   section: {
-    personal: 'Terjemahan stance jadi TINDAKAN untukmu, memperhitungkan posisi yang kamu pegang. Tidak pernah dipublikasikan dan tidak ikut ke data publik.',
+    personal: 'Terjemahan stance jadi TINDAKAN, memperhitungkan posisi yang kamu pegang. Satu-satunya bagian yang menyebut beli/tahan/jual — sisanya cuma menilai, tidak menyuruh.',
     knowledge: 'Bukti mentah yang sudah distrukturkan jadi 7 section — bahan baku semua lensa, belum ada tafsiran.',
     risk: 'Bahaya yang bisa MEMBATALKAN tesis, bukan yang membuatnya bagus. Flag "ekstrem" menghentikan ticker sebelum Reasoning jalan. Skor risiko bukan "sekian dari 100" — ia jumlah bobot flag yang terpicu.',
     reasoning: 'Tiga cara memandang saham yang sama, sengaja tidak digabung. Stance "tak terbaca" ≠ jelek — artinya data lensa itu terlalu tipis untuk menyimpulkan apa pun.',

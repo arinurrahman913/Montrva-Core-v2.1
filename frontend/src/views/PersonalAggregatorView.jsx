@@ -354,7 +354,7 @@ function TopPicksSection({ callSets, prevPicks, onSelectTicker, calibration }) {
   return (
     <div style={{ marginBottom: 22 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-        Top Pick Pribadi — Action Terkuat per Lensa
+        Top Pick — Action Terkuat per Lensa
       </div>
       <p style={{ fontSize: 11, color: 'var(--faint)', margin: '2px 0 14px', lineHeight: 1.5 }}>
         Filter dari <code>action</code> yang sudah dihitung tiap lensa (cuma yang belum dipegang), diranking pakai{' '}

@@ -1126,8 +1126,8 @@ function PersonalCallRows({ module, call, series, index, isOpen, onToggle }) {
 }
 
 function PersonalDetailSection({ personalData, showHistory }) {
-  if (!personalData) return <div className="loading">Memuat data pribadi…</div>
-  if (personalData.error) return <div className="empty">Gagal memuat data pribadi: {personalData.error}</div>
+  if (!personalData) return <div className="loading">Memuat keputusan…</div>
+  if (personalData.error) return <div className="empty">Gagal memuat keputusan: {personalData.error}</div>
 
   const callSet = personalData.call_set
   const history = personalData.history
@@ -1135,13 +1135,10 @@ function PersonalDetailSection({ personalData, showHistory }) {
   return (
     <>
       <div className="msection" id="sec-personal">
-        <div className="msection-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Agregator Pribadi</span>
-          <span className="pill neutral">privat · tidak dipublikasikan</span>
-        </div>
+        <div className="msection-title">Aksi per Lensa</div>
         {!callSet ? (
           <p className="narrative" style={{ fontSize: 12, color: 'var(--faint)' }}>
-            Belum ada rekomendasi pribadi untuk ticker ini — jalankan pipeline (Generate) dulu.
+            Belum ada keputusan untuk ticker ini — jalankan pipeline (Generate) dulu.
           </p>
         ) : (
           <PersonalCallTable callSet={callSet} history={history} />
@@ -1151,7 +1148,7 @@ function PersonalDetailSection({ personalData, showHistory }) {
       {showHistory && history && (history.entries || []).length > 0 && (
         <div className="msection" id="sec-personal-history">
           <div className="msection-title">
-            Riwayat Pribadi ({history.total_entries || history.entries.length} snapshot)
+            Riwayat Keputusan ({history.total_entries || history.entries.length} snapshot)
           </div>
           {history.entries.slice().reverse().map((e, i, arr) => {
             const cs = e.personal_call_set || {}
@@ -1447,7 +1444,7 @@ function ChainTraceBody({ data, personalData, originId, note }) {
       )}
       {calls.length > 0 && (
         <ChainStep
-          label="Aksi pribadi" note={note('personal')} here={originId === 'personal'} wide={168}
+          label="Keputusan" note={note('personal')} here={originId === 'personal'} wide={168}
           value={`${calls.length} call`} tone="acc"
           sub={calls.map((c) => prettyAction(c.action)).join(' · ')}
         />
@@ -1567,7 +1564,7 @@ function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative, 
   const defs = [
     {
       id: 'personal',
-      label: 'Lapisan Pribadi',
+      label: 'Keputusan',
       hasData: PERSONAL_CONTEXTS.has(context),
       summary: personalData?.call_set ? `${MODULES.filter((m) => personalData.call_set[m]).length} call` : 'memuat…',
       body: () => (

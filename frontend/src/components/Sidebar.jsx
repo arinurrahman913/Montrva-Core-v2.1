@@ -59,7 +59,13 @@ const NAV_GROUPS = [
 // membuat capabilities.personal_enabled otomatis false, grup ini hilang
 // total tanpa menyentuh NAV_GROUPS publik di atas sama sekali.
 const PERSONAL_NAV_GROUP = {
-  title: 'Pribadi',
+  // Judulnya "Keputusan", bukan "Pribadi": yang membedakan grup ini dari
+  // halaman publik BUKAN kerahasiaannya melainkan apa yang dikerjakannya --
+  // ini satu-satunya tempat sistem menyebut beli/tahan/jual, dan satu-satunya
+  // tempat pengguna menulis. Nama lama juga menjanjikan hal yang tidak
+  // dijamin: data ini tetap ada di berkas biasa, bukan terenkripsi.
+  // Gerbangnya sendiri tidak berubah (personalEnabled).
+  title: 'Keputusan',
   items: [
     // Paling atas: satu-satunya halaman tempat pengguna MENULIS, dan yang
     // memberi makan seluruh sisa grup ini (holdings.json -> position_status

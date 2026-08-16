@@ -359,7 +359,7 @@ export default function PortfolioView({ onSelectTicker }) {
           <b>{data.pending_next_run.length} posisi belum masuk run pipeline terakhir</b> ({data.pending_next_run.join(', ')}).
           <span>
             {' '}Kolom aksi di bawah dihitung ulang sekarang juga dari hasil reasoning run terakhir lewat fungsi pipeline yang sama,
-            jadi isinya benar — tapi halaman Agregator Pribadi masih menampilkan versi <code>no_holding</code> sampai run berikutnya.
+            jadi isinya benar — tapi halaman Sintesis masih menampilkan versi <code>no_holding</code> sampai run berikutnya.
           </span>
         </div>
       )}

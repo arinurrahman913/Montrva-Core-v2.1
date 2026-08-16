@@ -617,7 +617,7 @@ export default function PersonalHistoricalView({ onSelectTicker }) {
       <StatCards stats={stats} />
       <MissBreakdown tally={missTally} terbukti={terbukti} entryDates={entryDates} />
       <p className="narrative" style={{ margin: '0 0 12px', color: 'var(--dim)', fontSize: 13 }}>
-        Cuma ticker yang PERNAH jadi Top Pick (lihat Agregator Pribadi) yang tercatat di sini — begitu lolos jadi top
+        Cuma ticker yang PERNAH jadi Top Pick (lihat halaman Sintesis) yang tercatat di sini — begitu lolos jadi top
         pick sekali, dia tetap kesimpen walau kemudian keluar dari daftar top pick (holding, atau action-nya melemah).
         Outcome dievaluasi otomatis begitu call jatuh tempo (umur snapshot &gt; batas atas horizon-nya), dibandingkan
         pergerakan harga sejak action itu pertama muncul terhadap threshold per horizon — hasilnya (terbukti/meleset)
