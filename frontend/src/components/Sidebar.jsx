@@ -1,5 +1,21 @@
 import Icon from './Icon'
 
+// Halaman yang tahapnya TETAP DIHITUNG pipeline tapi nav-nya disembunyikan
+// (15 Agu 2026, atas permintaan pengguna). Menghapus itemnya dari daftar di
+// bawah akan menghilangkan alasannya juga; disimpan sebagai set terpisah supaya
+// mengembalikannya cukup mengosongkan set ini.
+//
+// KENAPA disembunyikan, bukan tahapnya dibuang: ongkos MENGHITUNG keduanya cuma
+// 14 detik dari 17.026 (0,08% satu run penuh). Yang berat justru penyajiannya —
+// /api/aggregator mengirim 43 MB ke browser tiap halaman itu dibuka. Nav yang
+// disembunyikan menghapus 43 MB itu tanpa membuang datanya.
+//
+// `reasoning` SENGAJA TIDAK di sini walau juga jarang dibuka: seluruh lapisan
+// pribadi berdiri di atasnya (action pribadi = tabel lookup dari stance yang
+// dihasilkan reasoning.py, "tidak ada mesin skor kedua"). Aggregator &
+// Historical umum diperiksa dan TIDAK disentuh montrva/personal/ sama sekali.
+const HIDDEN_NAV_ITEMS = new Set(['aggregator', 'historical'])
+
 const NAV_GROUPS = [
   { title: 'Market', items: [{ id: 'layer1', label: 'Layer 1 — Context' }] },
   {
@@ -46,7 +62,16 @@ const PERSONAL_NAV_GROUP = {
 }
 
 export default function Sidebar({ activeView, onSelect, personalEnabled }) {
-  const groups = personalEnabled ? [...NAV_GROUPS, PERSONAL_NAV_GROUP] : NAV_GROUPS
+  const all = personalEnabled ? [...NAV_GROUPS, PERSONAL_NAV_GROUP] : NAV_GROUPS
+  // Grup yang seluruh itemnya tersembunyi ikut hilang — kalau tidak, "Tracking"
+  // tersisa sebagai judul tanpa isi (Historical satu-satunya penghuninya).
+  const groups = all
+    // `personal` ditandai eksplisit, BUKAN dibandingkan lewat identitas objek:
+    // .map() di bawah membuat objek baru, jadi `group === PERSONAL_NAV_GROUP`
+    // akan diam-diam jadi false dan grup Pribadi kehilangan gembok + gayanya.
+    .map((g) => ({ ...g, personal: g === PERSONAL_NAV_GROUP,
+                   items: g.items.filter((i) => !HIDDEN_NAV_ITEMS.has(i.id)) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <div className="sidebar">
@@ -68,9 +93,9 @@ export default function Sidebar({ activeView, onSelect, personalEnabled }) {
       </div>
 
       {groups.map((group) => (
-        <div className={`nav-group${group === PERSONAL_NAV_GROUP ? ' nav-group-personal' : ''}`} key={group.title}>
+        <div className={`nav-group${group.personal ? ' nav-group-personal' : ''}`} key={group.title}>
           <div className="nav-group-title">
-            {group === PERSONAL_NAV_GROUP && (
+            {group.personal && (
               <span className="nav-lock"><Icon name="lock" size={11} /></span>
             )}
             {group.title}
