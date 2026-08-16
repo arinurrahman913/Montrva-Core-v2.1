@@ -39,9 +39,19 @@ const NAV_GROUPS = [
       { id: 'risk', label: 'Risk / Red Flags' },
       { id: 'reasoning', label: 'Reasoning' },
       { id: 'aggregator', label: 'Aggregator' },
+      // Butuh backend PERSONAL_ENABLED. Sejak ia keluar dari grup bersyarat,
+      // penyaringnya harus PER ITEM — grup ini publik dan tetap dirender di
+      // rilis publik, jadi tanpa penanda ini menu-nya muncul lalu 404.
+      { id: 'personal_aggregator', label: 'Sintesis', personal: true },
     ],
   },
-  { title: 'Tracking', items: [{ id: 'historical', label: 'Historical' }] },
+  {
+    title: 'Tracking',
+    items: [
+      { id: 'historical', label: 'Historical' },
+      { id: 'personal_historical', label: 'Rekam Jejak', personal: true },
+    ],
+  },
 ]
 
 // Grup terpisah, dirender cuma kalau personalEnabled (backend /api/
@@ -55,8 +65,6 @@ const PERSONAL_NAV_GROUP = {
     // memberi makan seluruh sisa grup ini (holdings.json -> position_status
     // -> kolom `holding` di ACTION_TABLE).
     { id: 'portfolio', label: 'Portofolio' },
-    { id: 'personal_aggregator', label: 'Agregator Pribadi' },
-    { id: 'personal_historical', label: 'Riwayat Pribadi' },
     { id: 'personal_calibration', label: 'Rapor Kalibrasi' },
   ],
 }
@@ -70,7 +78,8 @@ export default function Sidebar({ activeView, onSelect, personalEnabled }) {
     // .map() di bawah membuat objek baru, jadi `group === PERSONAL_NAV_GROUP`
     // akan diam-diam jadi false dan grup Pribadi kehilangan gembok + gayanya.
     .map((g) => ({ ...g, personal: g === PERSONAL_NAV_GROUP,
-                   items: g.items.filter((i) => !HIDDEN_NAV_ITEMS.has(i.id)) }))
+                   items: g.items.filter((i) => !HIDDEN_NAV_ITEMS.has(i.id)
+                                          && (!i.personal || personalEnabled)) }))
     .filter((g) => g.items.length > 0)
 
   return (
