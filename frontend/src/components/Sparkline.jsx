@@ -54,6 +54,33 @@ export default function Sparkline({ trend = 'flat', color = '#e8b84b', seed = 'x
   )
 }
 
+// Sparkline DATA NYATA -- sengaja komponen terpisah dari `Sparkline` di atas,
+// yang bentuknya dikarang dari seed. Keduanya terlihat sama di layar, dan itu
+// persis bahayanya: satu grafik karangan yang nyelip di tabel angka akan
+// dibaca sebagai riwayat sungguhan. Yang ini menerima deret apa adanya dan
+// tidak menggambar apa pun kalau titiknya kurang dari dua.
+export function DataSpark({ values, width = 88, height = 26, pathRef = null }) {
+  const pts = (values || []).filter((v) => v != null && Number.isFinite(v))
+  if (pts.length < 2) {
+    return <span style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>
+  }
+  const min = Math.min(...pts)
+  const max = Math.max(...pts)
+  const span = max - min || 1
+  const x = (i) => 1 + (i / (pts.length - 1)) * (width - 2)
+  const y = (v) => height - 2 - ((v - min) / span) * (height - 4)
+  const d = pts.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
+  const rising = pts[pts.length - 1] >= pts[pts.length - 2]
+  const color = rising ? 'var(--good)' : 'var(--bad)'
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} style={{ display: 'block' }}>
+      <path ref={pathRef} d={d} fill="none" stroke={color} strokeWidth="1.3" opacity=".9" />
+      <circle cx={x(pts.length - 1)} cy={y(pts[pts.length - 1])} r="1.9" fill={color} />
+    </svg>
+  )
+}
+
 // Bar "N/total input" untuk komponen degraded (mis. market_sentiment).
 export function InputBar({ used = 1, total = 4, color = '#4fd1e0', height = 34 }) {
   const W = 320

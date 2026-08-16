@@ -84,6 +84,10 @@ export const api = {
   ticker: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}`),
   liveQuote: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/live`),
   aiNarrative: (ticker) => getJSON(`/api/ticker/${encodeURIComponent(ticker)}/ai-narrative`),
+  // Bar OHLCV harian dari cache pipeline (bukan kutipan live) -- lihat
+  // docstring endpoint-nya di backend/app.py.
+  tickerOhlc: (ticker, days = 90) =>
+    getJSON(`/api/ticker/${encodeURIComponent(ticker)}/ohlc?days=${days}`),
   sectors: () => getJSON('/api/sectors'),
   capabilities: () => getJSON('/api/capabilities'),
   consistency: () => getJSON('/api/consistency'),

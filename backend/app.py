@@ -25,12 +25,13 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from montrva import runlock  # noqa: E402
+from montrva import cache, runlock  # noqa: E402
+from montrva.json_safe import dumps_safe  # noqa: E402
 from backend import big_json  # noqa: E402
 from montrva.layer2.sources.live_quote import fetch_live_quote  # noqa: E402
 from montrva.layer2.sources.sector_map import (  # noqa: E402
@@ -350,6 +351,69 @@ def get_ticker_live_quote(ticker: str):
     Best-effort — times out and returns {"stale": true} rather than blocking
     the request if Yahoo is slow/unreachable."""
     return jsonify(fetch_live_quote(ticker))
+
+
+_OHLC_MAX_BARS = 501            # sebesar isi cache-nya sendiri (fetch 2y harian)
+_OHLC_TICKER = re.compile(r"^[A-Z0-9.\-^]{1,12}$")
+
+
+@app.get("/api/ticker/<ticker>/ohlc")
+def get_ticker_ohlc(ticker: str):
+    """Bar OHLCV harian satu ticker, dari cache pipeline yang SUDAH ada.
+
+    `.cache/price_history/<TICKER>.json` ditulis tiap run Screening (501 bar,
+    2 tahun, ~91 KB per ticker) dan sejauh ini cuma dipakai di dalam pipeline.
+    Endpoint ini tidak menambah satu pun panggilan jaringan ke Yahoo: ia
+    membaca berkas yang sudah di disk dan mengirim `days` bar terakhir saja
+    (90 bar ≈ 4 KB, bukan 91 KB penuh).
+
+    Dibaca lewat `cache.get_stale`, BUKAN `cache.get`: TTL 6 jam di sini
+    bukan alasan untuk tidak menampilkan apa-apa -- grafik 90 hari tetap
+    benar walau bar terakhirnya kemarin. Umurnya dikirim (`age_hours`,
+    `last_bar`) supaya UI bisa MELABELI kesegarannya, bukan menyamarkannya;
+    kutipan harga sekarang tetap lewat /api/ticker/<t>/live.
+
+    Diserialkan dengan dumps_safe: bar dari pandas bisa memuat NaN (bar tanpa
+    perdagangan), dan `json.dumps` menulisnya sebagai token `NaN` yang membuat
+    JSON.parse di browser menolak SELURUH respons -- kelas bug yang sudah tiga
+    kali muncul di proyek ini (lihat montrva/json_safe.py).
+    """
+    ticker = ticker.upper()
+    if not _OHLC_TICKER.match(ticker):
+        return jsonify({"error": "ticker tidak valid"}), 400
+    try:
+        days = int(request.args.get("days", 90))
+    except (TypeError, ValueError):
+        days = 90
+    days = max(5, min(days, _OHLC_MAX_BARS))
+
+    entry = cache.get_stale("price_history", ticker)
+    if entry is None:
+        return jsonify({
+            "ticker": ticker, "available": False, "bars": [],
+            "reason": "belum ada cache price_history untuk ticker ini",
+        }), 404
+
+    rows, age_seconds = entry
+    bars = []
+    for r in (rows or [])[-days:]:
+        date = r.get("__date__")
+        close = r.get("Close")
+        if not date or close is None:
+            continue        # bar tanpa penutupan bukan bar; dibuang, tidak dinolkan
+        bars.append([date, r.get("Open"), r.get("High"), r.get("Low"), close, r.get("Volume")])
+
+    payload = {
+        "ticker": ticker,
+        "available": bool(bars),
+        "bars": bars,                       # [tanggal, O, H, L, C, V] -- array, bukan objek: 90 baris x 6 kunci = 540 nama field yang diulang percuma
+        "requested_days": days,
+        "total_cached": len(rows or []),
+        "age_hours": round(age_seconds / 3600, 1),
+        "last_bar": bars[-1][0] if bars else None,
+        "source": "cache pipeline (Screening), bukan kutipan live",
+    }
+    return Response(dumps_safe(payload), mimetype="application/json")
 
 
 @app.get("/api/ticker/<ticker>/ai-narrative")

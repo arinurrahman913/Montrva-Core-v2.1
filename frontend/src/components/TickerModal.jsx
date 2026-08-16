@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { RiskBadge } from './ThesisProof'
 import DecisionPath from './DecisionPath'
 import KnowledgeDetailCards from './KnowledgeDetailCards'
+import CandleChart from './CandleChart'
+import { DataSpark } from './Sparkline'
+import { drawPath, useCountUp } from '../anim'
 import {
   fmtPct, fmtMoney, fmtNum, ratingClass, stanceClass, prettyStance, bandClass, prettyLabel,
   fmtMetricValue, firstSentence, fmtCompact, sparklinePoints, trendSpanLabel, MODULE_LABELS,
@@ -952,6 +955,144 @@ function PersonalCallCard({ module, call }) {
   )
 }
 
+// Deret skor tesis satu lensa dari riwayat pribadi, urut waktu.
+//
+// Datanya SUDAH tersimpan di personal_history.json sejak lama (14 snapshot
+// untuk AAPL) tapi tidak pernah muncul di modal -- jadi skor Spekulatif yang
+// naik 13 poin dalam satu run terbaca sama saja dengan skor yang diam sebulan.
+// Entry paling tua tidak menyimpan thesis_score (lihat catatan di
+// personal_checkpoint.py), jadi nilai kosong DIBUANG, bukan dijadikan 0 --
+// nol akan menggambar jurang palsu di ujung kiri sparkline.
+function thesisSeries(history, module) {
+  return (history?.entries || [])
+    .map((e) => (e.personal_call_set || {})[module]?.thesis_score)
+    .filter((v) => v != null && Number.isFinite(v) && v > 0)
+}
+
+function PersonalCallTable({ callSet, history }) {
+  const [open, setOpen] = useState(null)
+
+  return (
+    <div className="numgrid-wrap">
+      <table className="numgrid">
+        <thead>
+          <tr>
+            <th className="l">Lensa</th>
+            <th>Skor</th>
+            <th>Δ run</th>
+            <th className="c">Riwayat</th>
+            <th className="l">Stance</th>
+            <th className="l">Aksi</th>
+            <th className="l">Horizon</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {MODULES.map((m, i) => (
+            <PersonalCallRows
+              key={m}
+              module={m}
+              call={callSet[m]}
+              series={thesisSeries(history, m)}
+              index={i}
+              isOpen={open === m}
+              onToggle={() => setOpen(open === m ? null : m)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PersonalCallRows({ module, call, series, index, isOpen, onToggle }) {
+  const sparkRef = useRef(null)
+  const score = call?.thesis_score
+  const shown = useCountUp(score ?? null, 2, index * 60)
+
+  useEffect(() => { drawPath(sparkRef.current, { duration: 500, delay: index * 60 }) }, [index, series.length])
+
+  if (!call) {
+    return (
+      <tr className="numgrid-empty">
+        <td className="l">{MODULE_LABELS[module]}</td>
+        <td colSpan={7} className="l faint">Belum ada data.</td>
+      </tr>
+    )
+  }
+
+  // Δ dibandingkan ke snapshot SEBELUMNYA, bukan ke awal riwayat: yang ingin
+  // dijawab kolom ini adalah "apa yang berubah di run ini", bukan "sudah
+  // sejauh apa dari dulu" (itu tugas sparkline di sebelahnya).
+  const prev = series.length >= 2 ? series[series.length - 2] : null
+  const delta = prev != null && score != null ? +(score - prev).toFixed(2) : null
+  const statusInfo = horizonStatusInfo(call.horizon_status)
+
+  return (
+    <>
+      <tr className="numgrid-row">
+        <td className="l">
+          <span className="ng-lens">{MODULE_LABELS[module]}</span>
+          <span className="ng-sub">conf {call.source_confidence?.toFixed(0) ?? '—'}</span>
+        </td>
+        <td className="ng-num" title="Skor kekuatan tesis lensa ini (0-100, netral 50) — beda dari confidence (kelengkapan data)">
+          {shown}
+        </td>
+        <td className={`ng-delta ${delta == null ? 'faint' : delta > 0 ? 'good' : delta < 0 ? 'bad' : 'faint'}`}>
+          {delta == null ? '—' : `${delta > 0 ? '▲' : delta < 0 ? '▼' : ''} ${Math.abs(delta).toFixed(2)}`}
+        </td>
+        <td className="c">
+          <DataSpark values={series} pathRef={sparkRef} />
+        </td>
+        <td className="l ng-stance">{call.source_stance || '—'}</td>
+        <td className="l">
+          <span className={`pill ${personalActionClass(call.action)}`}>{prettyAction(call.action)}</span>
+          {call.action_downgraded_from && <span className="pill warn" title={`Diturunkan dari ${prettyAction(call.action_downgraded_from)} — data lensa ini tipis`}>↓</span>}
+        </td>
+        <td className="l faint">
+          {prettyHorizon(call.horizon)}
+          {statusInfo && <span className="warn"> · {statusInfo.label}</span>}
+        </td>
+        <td>
+          <button className="ng-why" onClick={onToggle}>{isOpen ? 'tutup' : 'kenapa'}</button>
+        </td>
+      </tr>
+      {isOpen && (
+        <tr className="numgrid-why">
+          <td colSpan={8}>
+            {call.action_downgraded_from && (
+              <p className="warn" style={{ marginBottom: 6 }}>
+                ⓘ Diturunkan dari <strong>{prettyAction(call.action_downgraded_from)}</strong> — data lensa ini tipis, belum cukup untuk eksposur penuh.
+              </p>
+            )}
+            {call.action_rationale && <p>{call.action_rationale}</p>}
+            {call.horizon_basis && <p className="faint" style={{ marginTop: 5 }}>{call.horizon_basis}</p>}
+            {call.horizon_anchor && <p className="faint">Jangkar: {call.horizon_anchor}</p>}
+            <div style={{ marginTop: 7 }}><RiskBadge call={call} /></div>
+            <p className="faint" style={{ marginTop: 7 }}>
+              {call.position_status === 'holding'
+                ? <>Dipegang sejak {call.holding_since || '—'}
+                    {call.unrealized_return_pct != null && (
+                      <span className={call.unrealized_return_pct >= 0 ? 'good' : 'bad'}>
+                        {' '}· {call.unrealized_return_pct >= 0 ? '+' : ''}{call.unrealized_return_pct.toFixed(1)}%
+                      </span>
+                    )}
+                  </>
+                : 'Belum dipegang'}
+              {call.price_at_call != null && (
+                <> · harga saat call ${call.price_at_call.toFixed(2)}
+                  {call.benchmark_at_call != null && ` · S&P 500 ${call.benchmark_at_call.toFixed(0)}`}
+                </>
+              )}
+            </p>
+            <DecisionPath module={module} call={call} />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
 function PersonalDetailSection({ personalData, showHistory }) {
   if (!personalData) return <div className="loading">Memuat data pribadi…</div>
   if (personalData.error) return <div className="empty">Gagal memuat data pribadi: {personalData.error}</div>
@@ -971,9 +1112,7 @@ function PersonalDetailSection({ personalData, showHistory }) {
             Belum ada rekomendasi pribadi untuk ticker ini — jalankan pipeline (Generate) dulu.
           </p>
         ) : (
-          <div className="lens-grid">
-            {MODULES.map((m) => <PersonalCallCard key={m} module={m} call={callSet[m]} />)}
-          </div>
+          <PersonalCallTable callSet={callSet} history={history} />
         )}
       </div>
 
@@ -1231,10 +1370,10 @@ function ChainTrace({ data, personalData, originId }) {
         }
       />
       <ChainStep
-        label="Reasoning" here={originId === 'reasoning'} wide={148}
+        label="Reasoning" here={originId === 'reasoning'} wide={168}
         value={scores.length ? scores.map((s) => fmtNum(s, 0)).join(' · ') : halted ? 'dilewati' : '—'}
         tone={scores.length ? null : 'faint'}
-        sub={scores.length ? `${scores.length} lensa, tidak dirata-rata` : halted ? 'hard-gate Risk' : null}
+        sub={scores.length ? (chainDeltas(data) || `${scores.length} lensa, tidak dirata-rata`) : halted ? 'hard-gate Risk' : null}
       />
       <ChainStep
         label="Sintesis" here={originId === 'synthesis'} wide={150}
@@ -1270,6 +1409,29 @@ function ChainTrace({ data, personalData, originId }) {
       )}
     </div>
   )
+}
+
+// Δ skor tiap lensa terhadap snapshot PUBLIK sebelumnya. Sumbernya
+// historical.entries yang memang sudah menyimpan thesis_score per modul --
+// jadi "berubah apa di run ini" bisa dijawab tanpa data tambahan. Null kalau
+// riwayatnya belum punya dua titik, dan pemanggil jatuh ke teks lamanya.
+function chainDeltas(data) {
+  const entries = data.historical?.entries || []
+  if (entries.length < 2) return null
+  const prev = readHistoricalEntry(entries[entries.length - 2])
+  if (!prev) return null
+  const byModule = Object.fromEntries((prev.lenses || []).map((l) => [l.module, l.thesis_score]))
+  const parts = MODULES.map((m) => {
+    const now = data.reasoning?.[m]?.thesis_score
+    const before = byModule[m]
+    if (now == null || before == null) return '—'
+    // Dibulatkan DULU, baru diputuskan arahnya: selisih −0,04 dicetak "0,0",
+    // dan "▼0,0" membaca seperti turun padahal angkanya sendiri bilang tidak.
+    const rounded = +(now - before).toFixed(1)
+    if (rounded === 0) return '0'
+    return `${rounded > 0 ? '▲' : '▼'}${Math.abs(rounded).toFixed(1)}`
+  })
+  return parts.every((p) => p === '—') ? null : `Δ ${parts.join(' · ')}`
 }
 
 function bandTone(band) {
@@ -1501,6 +1663,11 @@ function ModalBody({ data, context, aiNarrative, personalData, onNeedNarrative }
       body: () => (
         <>
           <CompanyHeaderSection profile={evidence.company_profile} fundamental={evidence.fundamental} />
+
+          {/* Bar harga dari cache pipeline. Dirender di sini, di dalam body
+              section yang malas -- jadi permintaan /ohlc baru terjadi kalau
+              bagian Evidence benar-benar dibuka. */}
+          <CandleChart ticker={data.ticker} catalystDate={nextCat?.expected_at} />
 
           <PriceSnapshotBlock priceMarket={evidence.price_market} />
 

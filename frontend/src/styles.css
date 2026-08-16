@@ -489,7 +489,7 @@ tr.expand-row td{white-space:normal}
 .mchain-k{font-family:var(--sans);font-size:8.5px;font-weight:600;letter-spacing:.07em;
   text-transform:uppercase;color:var(--faint);margin-bottom:3px}
 .mchain-step.here .mchain-k{color:var(--accent)}
-.mchain-v{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)}
+.mchain-v{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--text)}
 .mchain-v.good{color:var(--good)} .mchain-v.warn{color:var(--warn)}
 .mchain-v.bad{color:var(--bad)} .mchain-v.faint{color:var(--faint)} .mchain-v.acc{color:var(--accent)}
 .mchain-s{font-family:var(--sans);font-size:10px;color:var(--dim);margin-top:2px;line-height:1.4}
@@ -512,6 +512,66 @@ tr.expand-row td{white-space:normal}
 .msec.kosong{opacity:.45}
 .msec.kosong .msec-h{cursor:default}
 .msec.kosong .msec-h:hover{background:none}
+
+/* --- Grid angka (menggantikan 3 kartu prosa lensa) -----------------------
+   Aturannya satu: sebuah angka muncul SEKALI, rata kanan, monospace
+   tabular-nums. Di kartu lama skor yang sama muncul tiga kali (badge, dalam
+   kurung, lalu di dalam kalimat) dan rata kiri di tengah prosa, jadi tiga
+   lensa tidak pernah sejajar dan tidak bisa dibandingkan tanpa dibaca. */
+.numgrid-wrap{border:1px solid var(--rule);border-radius:10px;overflow-x:auto}
+.numgrid{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.numgrid th{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint);padding:7px 10px;text-align:right;white-space:nowrap;
+  border-bottom:1px solid var(--rule-strong);background:var(--panel2)}
+.numgrid th.l{text-align:left} .numgrid th.c{text-align:center}
+.numgrid td{padding:9px 10px;border-bottom:1px solid var(--rule);font-family:var(--mono);
+  font-size:12.5px;text-align:right;white-space:nowrap;vertical-align:middle}
+.numgrid td.l{text-align:left} .numgrid td.c{text-align:center}
+.numgrid tr:last-child td{border-bottom:none}
+.numgrid-row:hover{background:var(--panel2)}
+.ng-lens{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);display:block}
+.ng-sub{font-family:var(--sans);font-size:10px;color:var(--faint)}
+.ng-num{font-size:15px;font-weight:600;color:var(--text)}
+.ng-delta{font-size:11.5px}
+.ng-stance{font-size:11.5px;color:var(--dim)}
+.ng-why{font-family:var(--sans);font-size:10.5px;color:var(--faint);background:none;
+  border:1px solid var(--rule);border-radius:5px;padding:1px 7px;cursor:pointer}
+.ng-why:hover{color:var(--accent);border-color:rgba(34,211,238,.35)}
+.numgrid-why td{background:var(--panel2);font-family:var(--sans);font-size:11.5px;color:var(--dim);
+  text-align:left;line-height:1.6;white-space:normal}
+.numgrid-empty td{color:var(--faint)}
+.numgrid .good{color:var(--good)} .numgrid .bad{color:var(--bad)}
+.numgrid .warn{color:var(--warn)} .numgrid .faint{color:var(--faint)}
+
+/* --- Candle ---
+   Bar dari cache pipeline (.cache/price_history), BUKAN kutipan live -- kaki
+   grafik menulis umurnya, jangan pernah dihapus supaya angka di sini tidak
+   terbaca sebagai harga sekarang. */
+.candle-block{margin:12px 0 16px}
+.candle-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.candle-title{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--dim)}
+.candle-ranges{margin-left:auto;display:flex;gap:4px}
+.candle-range{font-family:var(--mono);font-size:10px;color:var(--faint);background:var(--panel2);
+  border:1px solid var(--rule);border-radius:5px;padding:2px 8px;cursor:pointer}
+.candle-range:hover{color:var(--text)}
+.candle-range.active{color:var(--accent);border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08)}
+.candle-meta{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;font-family:var(--mono);
+  font-size:11px;color:var(--faint);margin-bottom:6px}
+.candle-meta b{font-size:15px;color:var(--text);font-weight:600}
+.candle-svg{display:block;width:100%;height:auto;background:var(--panel2);border:1px solid var(--rule);
+  border-radius:9px}
+.candle-foot{font-family:var(--sans);font-size:10px;color:var(--faint);margin-top:5px}
+.cdl-grid{stroke:var(--rule);stroke-width:1}
+.cdl-ax{font-family:var(--mono);font-size:8.5px;fill:var(--faint)}
+.cdl-wick{stroke-width:1;opacity:.8}
+.cdl-wick.up,.cdl-body.up{stroke:var(--good);fill:var(--good)}
+.cdl-wick.down,.cdl-body.down{stroke:var(--bad);fill:var(--bad)}
+.cdl-body{opacity:.92}
+.cdl-vol{opacity:.26}
+.cdl-vol.up{fill:var(--good)} .cdl-vol.down{fill:var(--bad)}
+.cdl-ma{fill:none;stroke:var(--accent);stroke-width:1.2;opacity:.85}
+.cdl-event{stroke:var(--warn);stroke-width:1;stroke-dasharray:3 3;opacity:.75}
 /* Market Regime aggregation section */
 .agg-summary{display:flex;gap:12px;margin-bottom:10px;font-family:var(--sans);font-size:12px;font-weight:700}
 .agg-bull{color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent);padding:4px 8px;border-radius:6px}
