@@ -90,7 +90,11 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
     price_market = fetch_price_market_data(ticker)
     fundamental = fetch_fundamental_data(ticker)
     institutional = fetch_institutional_ownership(ticker)
-    institutional_activity = fetch_institutional_activity(ticker)
+    # 90 hari, bukan 30: flag risiko yang memakainya bernama
+    # `insider_selling_90d` dan menjumlahkan penjualan 90 hari. Memberi makan
+    # jendela 30 hari ke pertanyaan 90 hari akan membuat flag itu diam-diam
+    # melaporkan kurang, dan tidak ada yang bisa melihatnya dari keluarannya.
+    institutional_activity = fetch_institutional_activity(ticker, days_lookback=90)
     news = fetch_company_news(ticker)
     sec_filings = fetch_sec_filings(ticker)
     company_profile = fetch_company_profile(ticker)

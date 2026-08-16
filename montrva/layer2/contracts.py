@@ -333,6 +333,13 @@ class InstitutionalActivity:
     net_shares_30d: int = 0  # positive = net buys; MVP: belum dilacak, selalu 0
     top_buyer: str | None = None  # who bought most; MVP: placeholder generik, bukan nama asli
     top_seller: str | None = None  # who sold most; MVP: belum dilacak, selalu None
+    # Jumlah FORM 4 yang diajukan, terlepas dari isinya. Dipisah dari
+    # buy_count_30d sejak parsing detail hidup (15 Agu 2026): sebelumnya
+    # buy_count_30d MERANGKAP dua arti, dan `insider_filing_activity_30d` di
+    # Knowledge memakainya sebagai proksi "ada aktivitas insider". Begitu
+    # buy_count_30d jadi jumlah pembelian PASAR yang sungguhan (jauh lebih
+    # jarang), proksi itu akan diam-diam runtuh tanpa field ini.
+    filing_count_30d: int = 0
 
 
 @dataclass

@@ -206,8 +206,34 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         # tidak pernah dibawa ke sini -- 0% terisi di seluruh universe
         # (audit 2026-07-29), bukan karena datanya memang jarang ada.
         insider_pct=evidence.institutional_ownership.insider_percentage,
-        insider_transactions=[],  # TODO: dari news/SEC filings
-        insider_filing_activity_30d=evidence.institutional_activity.buy_count_30d,  # Form 4 filings count
+        # SAMBUNGAN YANG SELAMA INI PUTUS (15 Agu 2026). Field ini `[]` sejak
+        # awal dengan komentar TODO, sehingga flag risiko `insider_selling_90d`
+        # berstatus `undetermined` di 4.270/4.270 ticker — bukan karena datanya
+        # tidak ada, tapi karena tidak pernah dibawa ke sini. Form 4 sudah
+        # ditarik tiap run ke EvidencePackage.institutional_activity; yang
+        # hilang cuma kawatnya.
+        #
+        # HANYA transaksi PASAR yang diteruskan. Hibah, exercise opsi, dan
+        # pemotongan pajak terjadi otomatis dan tidak mengandung pendapat
+        # siapa pun tentang harga — meneruskannya akan membuat hibah 500.000
+        # lembar (nyata: NVDA, 5 Agu 2026) terbaca sebagai penjualan insider
+        # raksasa. Bentuk dict-nya mengikuti apa yang sudah dibaca risk.py
+        # (`{date, type, amount_usd, exec_name}`), bukan bentuk baru.
+        insider_transactions=[
+            {
+                "date": t.transaction_date,
+                "type": t.transaction_type,
+                "amount_usd": (t.shares * t.price) if (t.shares and t.price) else None,
+                "exec_name": t.trader_name,
+                "shares": t.shares,
+                "price": t.price,
+            }
+            for t in (evidence.institutional_activity.recent_trades or [])
+            if t.transaction_type in ("buy", "sell")
+        ],
+        # Tetap jumlah FILING (proksi "ada aktivitas insider"), bukan
+        # buy_count_30d yang kini berarti pembelian pasar sungguhan.
+        insider_filing_activity_30d=evidence.institutional_activity.filing_count_30d,
         # Cakupan pemegang institusi -- lihat komentar di Ownership
         # (knowledge_contracts.py) soal kenapa yang dipakai rasionya, bukan
         # holders_total sendiri.

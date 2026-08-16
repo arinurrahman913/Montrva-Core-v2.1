@@ -13,15 +13,51 @@ Strategy (MVP):
 from __future__ import annotations
 
 import sys
+
+import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 
 from ... import cache
 from ..contracts import InstitutionalActivity, InstitutionalTrade, SourceMetadata
-from .sec_parser import get_cik_from_ticker
-from .sec_edgar import fetch_raw_submissions
+from .sec_parser import apply_sec_rate_limit, get_cik_from_ticker
+from .sec_edgar import _HEADERS, fetch_raw_submissions
 
 _FORM4_TTL = 24 * 3600  # 24 jam
+
+# --- Parsing detail transaksi (15 Agu 2026) --------------------------------
+#
+# Sebelum ini seluruh berkas berhenti di metadata: tiap Form 4 jadi satu "trade"
+# sintetis ber-transaction_type="filing", shares=0, price=None. Alasan yang
+# tertulis di kode: "SEC archive path per-filing tidak predictable, sering 404".
+#
+# DIUJI LANGSUNG DAN ALASAN ITU TIDAK BENAR. Path-nya sepenuhnya bisa dibangun
+# dari `accessionNumber` + `primaryDocument` di submissions JSON, dan 3 dari 3
+# filing yang diuji balik HTTP 200. Yang membuatnya terlihat gagal: SEC mengisi
+# `primaryDocument` dengan versi TAMPILAN hasil render XSL
+# ("xslF345X06/form4.xml") — HTML, bukan XML. XML mentahnya ada di folder
+# accession yang sama tanpa awalan itu. Satu potongan path, bukan ketidakpastian.
+#
+# `_parse_form4_xml` versi lama juga tidak akan pernah cocok walau XML-nya benar:
+# ia mencari `.//ownershipDocument` padahal itu ELEMEN ROOT, dan menelusuri
+# `transactionOrAmendment/documentType` yang bukan jalur Form 4 mana pun.
+_SEC_ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{doc}"
+
+# Kode transaksi Form 4 (SEC Table I). Yang dipisahkan di sini cuma yang
+# BERBEDA ARTINYA untuk pertanyaan "apakah insider menjual di pasar":
+#   P/S = beli/jual di pasar terbuka -> ini yang dihitung
+#   A   = hibah/award dari perusahaan (bukan keputusan beli)
+#   M   = exercise opsi (menambah lembar, tapi bukan pembelian pasar)
+#   F   = lembar ditahan untuk pajak (bukan penjualan sukarela)
+#   G   = hibah/gift
+# Tanpa pemisahan ini, "insider menjual" akan ikut menghitung pemotongan pajak
+# dan exercise opsi — dua hal yang terjadi otomatis dan tidak mengandung
+# pendapat siapa pun tentang harga.
+_TX_CODE_MEANING = {
+    "P": "buy", "S": "sell", "A": "grant", "M": "exercise",
+    "F": "tax", "G": "gift", "D": "disposition", "C": "conversion",
+}
+_MARKET_CODES = ("P", "S")  # cuma ini yang dianggap keputusan beli/jual
 
 
 def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> InstitutionalActivity:
@@ -41,7 +77,9 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
             )
         )
 
-    cache_key = f"form4_activity_{cik}"
+    # Lookback WAJIB masuk kunci: tanpa itu pemanggil 30-hari dan 90-hari
+    # saling memakan hasil satu sama lain.
+    cache_key = f"form4_activity_{cik}_{days_lookback}"
     cached = cache.get("sec_form4", cache_key, _FORM4_TTL)
     if cached:
         # Reconstruct SourceMetadata dari dict
@@ -77,10 +115,11 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
     forms = recent.get("form", [])
     dates = recent.get("filingDate", [])
     accessions = recent.get("accessionNumber", [])
+    primary_docs = recent.get("primaryDocument", [])
 
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_lookback)).date()
     trades: list[InstitutionalTrade] = []
-    buy_count = 0  # Not literal buys — counts Form 4 filings as an activity proxy (see docstring)
+    filing_count = 0  # jumlah Form 4 yang DIAJUKAN, terlepas dari isinya
 
     print(f"[sec_form4:{cik}] Scanning {len(forms)} total filings for Form 4...", file=sys.stderr)
 
@@ -94,29 +133,54 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
             if filing_date < cutoff_date:
                 break  # sorted descending
 
-            # Create synthetic trade entry: Form 4 filed = insider activity
-            # Assume filer is "insider" (we don't parse detailed names from XML)
-            # Direction: assume neutral (we don't know if buy/sell without parsing)
-            # but track that filing occurred
-            trade = InstitutionalTrade(
-                trader_name="[Form 4 Filer]",  # Placeholder, details would require XML parse
+            filing_count += 1
+            acc = accessions[i] if i < len(accessions) else None
+            doc = primary_docs[i] if i < len(primary_docs) else None
+            parsed = _fetch_and_parse(cik, acc, doc, date_str) if (acc and doc) else []
+            if parsed:
+                trades.extend(parsed)
+                continue
+
+            # Cadangan: XML tidak terambil/terbaca. Entri sintetis LAMA
+            # dipertahankan supaya satu filing yang bermasalah tidak
+            # menghilangkan fakta bahwa ada aktivitas insider -- tapi
+            # transaction_type="filing" menandai bahwa arahnya TIDAK diketahui,
+            # dan hitungan beli/jual di bawah sengaja tidak menghitungnya.
+            trades.append(InstitutionalTrade(
+                trader_name="[Form 4 Filer]",
                 relationship="Insider",
-                transaction_type="filing",  # Not buy/sell, just marks activity
-                shares=0,  # Unknown without parsing
+                transaction_type="filing",
+                shares=0,
                 price=None,
                 transaction_date=date_str,
                 form_type="4",
                 filing_date=date_str,
-                evidence_id=accessions[i] if i < len(accessions) else None,
-            )
-            trades.append(trade)
-            # For MVP, just track that filing occurred
-            buy_count += 1  # Count as activity (not literal buy, but insider involvement)
+                evidence_id=acc,
+            ))
 
         except (ValueError, IndexError):
             continue
 
-    print(f"[sec_form4:{cik}] Found {len(trades)} Form 4 filings in {days_lookback}-day window", file=sys.stderr)
+    # Menyebut KEDUANYA: sesudah parsing detail hidup, satu filing bisa berisi
+    # beberapa transaksi, dan pesan lama ("Found {len(trades)} Form 4 filings")
+    # membuat 8 transaksi dari 4 filing terbaca sebagai 8 filing.
+    print(f"[sec_form4:{cik}] {filing_count} Form 4 filing -> {len(trades)} transaksi "
+          f"({days_lookback} hari)", file=sys.stderr)
+
+    # Hitungan sekarang NYATA, bukan proksi jumlah filing. Cuma kode pasar
+    # (P/S) yang masuk: hibah, exercise, dan pemotongan pajak bukan keputusan
+    # beli/jual siapa pun.
+    beli = [t for t in trades if t.transaction_type == "buy"]
+    jual = [t for t in trades if t.transaction_type == "sell"]
+    net = sum(t.shares for t in beli) - sum(t.shares for t in jual)
+
+    def _terbesar(rows):
+        if not rows:
+            return None
+        per_orang: dict[str, int] = {}
+        for t in rows:
+            per_orang[t.trader_name] = per_orang.get(t.trader_name, 0) + t.shares
+        return max(per_orang.items(), key=lambda kv: kv[1])[0]
 
     result = InstitutionalActivity(
         metadata=SourceMetadata(
@@ -125,11 +189,15 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
             status="ok" if trades else "degraded",
         ),
         recent_trades=trades[:50],
-        buy_count_30d=buy_count,  # Counts Form 4 filings as insider activity indicators
-        sell_count_30d=0,  # Not tracked in MVP
-        net_shares_30d=0,  # Not tracked in MVP
-        top_buyer="[Form 4 Filers]" if trades else None,  # Generic for MVP
-        top_seller=None,
+        buy_count_30d=len(beli),
+        sell_count_30d=len(jual),
+        net_shares_30d=net,
+        top_buyer=_terbesar(beli),
+        top_seller=_terbesar(jual),
+        # Jumlah filing yang DIAJUKAN, bukan yang menghasilkan transaksi
+        # terparse: sebuah Form 4 bisa sah tapi cuma berisi transaksi
+        # derivatif, dan itu tetap aktivitas insider.
+        filing_count_30d=filing_count,
     )
 
     # Cache result
@@ -150,6 +218,7 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
             "filing_date": t.filing_date,
         } for t in result.recent_trades],
         "buy_count_30d": result.buy_count_30d,
+        "filing_count_30d": result.filing_count_30d,
         "sell_count_30d": result.sell_count_30d,
         "net_shares_30d": result.net_shares_30d,
         "top_buyer": result.top_buyer,
@@ -159,95 +228,93 @@ def fetch_institutional_activity(ticker: str, days_lookback: int = 30) -> Instit
     return result
 
 
-def _parse_form4_xml(xml_text: str, filing_date_str: str) -> list[InstitutionalTrade]:
-    """Parse Form 4 XML, extract transaction details."""
-    trades = []
+def _fetch_and_parse(cik: str, accession: str, primary_doc: str, filing_date: str) -> list[InstitutionalTrade]:
+    """Ambil XML mentah satu Form 4 lalu parse. [] kalau gagal — pemanggil
+    jatuh ke entri sintetis, jadi satu filing bermasalah tidak menghapus
+    fakta bahwa ada aktivitas insider.
 
+    KUNCI PATH-NYA: `primary_doc` dari SEC berbentuk "xslF345X06/form4.xml" —
+    itu versi TAMPILAN hasil render XSL (HTML). XML mentahnya ada di folder
+    accession yang sama tanpa awalan itu, jadi cukup ambil basename-nya.
+    """
+    acc = accession.replace("-", "")
+    url = _SEC_ARCHIVE_URL.format(cik=int(cik), acc=acc, doc=primary_doc.split("/")[-1])
+    key = f"form4_xml_{acc}"
+    xml_text = cache.get("sec_form4_xml", key, _FORM4_TTL * 30)
+    if xml_text is None:
+        try:
+            apply_sec_rate_limit()
+            r = requests.get(url, headers=_HEADERS, timeout=15)
+            if r.status_code != 200:
+                return []
+            xml_text = r.text
+        except Exception:  # noqa: BLE001 — jaringan/timeout: degradasi, bukan gagal
+            return []
+        # XML satu Form 4 tidak pernah berubah sesudah diajukan (amendemen
+        # datang sebagai filing BARU ber-accession sendiri), jadi TTL-nya jauh
+        # lebih panjang dari daftar filing-nya: sekali diambil, selamanya sah.
+        cache.set("sec_form4_xml", key, xml_text)
     try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as e:
-        raise ValueError(f"Malformed XML: {e}")
+        return _parse_form4_xml(xml_text, filing_date, accession)
+    except Exception:  # noqa: BLE001
+        return []
 
-    # Navigate to transactions (path varies, try common ones)
-    # Form 4 XML structure: root > form4 > ownershipDocument > transactionOrAmendment > ...
-    namespaces = {'': 'http://www.sec.gov/cgi-bin'}
 
-    # Find all transaction entries
-    for doc in root.findall(".//ownershipDocument"):
-        # Issuer info
-        issuer = doc.find(".//issuer")
-        # Skip if not a stock transaction
+def _parse_form4_xml(xml_text: str, filing_date: str, accession: str | None = None) -> list[InstitutionalTrade]:
+    """Transaksi non-derivatif dari satu Form 4.
 
-        # Owner info
-        owner = doc.find(".//reportingOwner")
-        if owner is None:
-            continue
+    Root dokumennya SENDIRI `ownershipDocument` — versi lama fungsi ini mencari
+    `.//ownershipDocument` (anak, bukan root) lalu menelusuri
+    `transactionOrAmendment/documentType` yang bukan jalur Form 4 mana pun, jadi
+    ia mengembalikan [] untuk setiap masukan yang sah sekalipun.
 
-        owner_name = owner.findtext(".//reportingOwnerId/rptOwnerName", "")
-        relationship = owner.findtext(".//reportingOwnerRelationship/isDirector", "")
-        if not relationship:
-            relationship = owner.findtext(".//reportingOwnerRelationship/isOfficer", "")
-        if not relationship:
-            relationship = "Insider"
+    Cuma `nonDerivativeTransaction` yang dibaca: transaksi derivatif (opsi,
+    RSU) tidak memindahkan lembar biasa pada saat itu, dan menghitungnya sebagai
+    beli/jual akan menggandakan exercise yang sudah muncul sebagai kode M.
+    """
+    root = ET.fromstring(xml_text)
+    nama = (root.findtext(".//reportingOwner/reportingOwnerId/rptOwnerName") or "").strip() or "[Insider]"
 
-        # Transactions
-        tx_doc = doc.find(".//transactionOrAmendment/documentType")
-        if tx_doc is not None and tx_doc.text != "4":
-            continue
+    rel = root.find(".//reportingOwner/reportingOwnerRelationship")
+    relasi = "Insider"
+    if rel is not None:
+        for tag, label in (("isDirector", "Director"), ("isOfficer", "Officer"),
+                           ("isTenPercentOwner", "10% Owner")):
+            if (rel.findtext(tag) or "").strip() in ("1", "true"):
+                relasi = rel.findtext("officerTitle") or label if tag == "isOfficer" else label
+                break
 
-        for tx in doc.findall(".//transactionOrAmendment/nonDerivativeTransaction"):
+    out: list[InstitutionalTrade] = []
+    for tx in root.findall(".//nonDerivativeTransaction"):
+        kode = (tx.findtext(".//transactionCoding/transactionCode") or "").strip().upper()
+        jenis = _TX_CODE_MEANING.get(kode, "other")
+        # Arah diambil dari transactionAcquiredDisposedCode, BUKAN ditebak dari
+        # kode: kode P/S sudah menyiratkan arah, tapi kode lain tidak, dan
+        # A/D-lah satu-satunya field yang menyatakannya secara eksplisit.
+        ad = (tx.findtext(".//transactionAcquiredDisposedCode/value") or "").strip().upper()
+        if kode in _MARKET_CODES:
+            jenis = "buy" if ad == "A" else "sell"
+
+        def _angka(path):
+            raw = tx.findtext(path)
             try:
-                trans_type_el = tx.find(".//transactionType")
-                trans_type = trans_type_el.text if trans_type_el is not None else "unknown"
+                return float(raw) if raw not in (None, "") else None
+            except ValueError:
+                return None
 
-                # Map transaction codes to buy/sell
-                trans_code = trans_type.upper()
-                if trans_code in ("P", "PURCHASE"):
-                    transaction_type = "buy"
-                elif trans_code in ("S", "SALE"):
-                    transaction_type = "sell"
-                elif trans_code in ("M", "EXERCISE"):
-                    transaction_type = "exercise"
-                elif trans_code in ("G", "GRANT"):
-                    transaction_type = "grant"
-                else:
-                    transaction_type = trans_type.lower()
+        lembar = _angka(".//transactionShares/value")
+        if lembar is None:
+            continue
+        out.append(InstitutionalTrade(
+            trader_name=nama,
+            relationship=relasi,
+            transaction_type=jenis,
+            shares=int(lembar),
+            price=_angka(".//transactionPricePerShare/value"),
+            transaction_date=(tx.findtext(".//transactionDate/value") or filing_date)[:10],
+            form_type="4",
+            filing_date=filing_date,
+            evidence_id=accession,
+        ))
+    return out
 
-                # Shares & price
-                shares_el = tx.find(".//transactionShares/value")
-                if shares_el is None:
-                    continue
-                try:
-                    shares = int(float(shares_el.text or 0))
-                except (ValueError, TypeError):
-                    continue
-
-                price_el = tx.find(".//transactionPricePerShare/value")
-                price = None
-                if price_el is not None:
-                    try:
-                        price = float(price_el.text or 0)
-                    except (ValueError, TypeError):
-                        pass
-
-                # Transaction date
-                trans_date_el = tx.find(".//transactionDate/value")
-                transaction_date = trans_date_el.text if trans_date_el is not None else filing_date_str
-
-                trade = InstitutionalTrade(
-                    trader_name=owner_name,
-                    relationship=relationship,
-                    transaction_type=transaction_type,
-                    shares=shares,
-                    price=price,
-                    transaction_date=transaction_date,
-                    form_type="4",
-                    filing_date=filing_date_str,
-                )
-                trades.append(trade)
-
-            except Exception as e:
-                # Skip malformed transaction
-                continue
-
-    return trades
