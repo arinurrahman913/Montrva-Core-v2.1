@@ -107,6 +107,11 @@ def build_evidence_for_ticker(candidate: ScreeningCandidate) -> EvidencePackage 
         fundamental.quarterly_data = [
             QuarterlyFundamental(**q) for q in quarterly_data["periods"]
         ]
+        # Dasar pengukuran revenue ikut dibawa, bukan cuma angkanya: margin
+        # bank dihitung atas pendapatan bunga bersih + non-bunga, penyebut
+        # yang beda dari perusahaan biasa. Tanpa penanda ini "net margin 28%"
+        # milik bank tampak setara dengan 28% milik manufaktur.
+        fundamental.revenue_basis = quarterly_data.get("revenue_basis")
 
     fundamental.cross_reference_notes = _cross_reference_fundamental(fundamental)
 

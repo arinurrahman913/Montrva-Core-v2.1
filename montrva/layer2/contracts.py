@@ -144,6 +144,12 @@ class FundamentalData:
     operating_margin: float | None = None
     gross_margin: float | None = None
     free_cash_flow: float | None = None
+    # Kas & setara kas (USD). Dari `.info` Yahoo (`totalCash`) yang MEMANG
+    # sudah diambil & di-cache lewat _fetch_yahoo_info — nol panggilan
+    # jaringan baru. Sebelum ini BalanceSheet.cash_and_equivalents di
+    # knowledge_contracts.py dideklarasikan tapi tak punya sumber sama sekali:
+    # 0 terisi dari 4.273 ticker.
+    total_cash: float | None = None
     dividend_yield: float | None = None
     payout_ratio: float | None = None
     book_value_per_share: float | None = None
@@ -152,7 +158,13 @@ class FundamentalData:
     interest_coverage: float | None = None
     sector: str | None = None
     industry: str | None = None
-    quarterly_data: list[QuarterlyFundamental] = field(default_factory=list)  # Last 8 quarters dari EDGAR
+    quarterly_data: list[QuarterlyFundamental] = field(default_factory=list)  # 24 kuartal terakhir dari EDGAR (dulu 8; CAGR 5Y butuh 24)
+    # Dasar pengukuran `quarterly_data[*].revenue`, dari sec_parser:
+    # "standard" (tag revenue biasa) | "financial_net_revenue" |
+    # "financial_composite" (bunga bersih + non-bunga, khas bank) | None.
+    # Margin yang dihitung atas dua basis terakhir TIDAK sebanding dengan
+    # margin perusahaan non-keuangan.
+    revenue_basis: str | None = None
     shares_outstanding_change_12m: float | None = None  # % perubahan ~12 bulan (SEC XBRL), baseline dilution
     field_availability: dict[str, DataAvailability] = field(default_factory=dict)
     field_quality: dict[str, DataQuality] = field(default_factory=dict)

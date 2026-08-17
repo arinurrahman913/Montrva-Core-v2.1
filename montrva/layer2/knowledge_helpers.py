@@ -305,6 +305,8 @@ def compute_financial_trends(quarterly_data: list | None) -> dict:
         'capex_pct_revenue_q2': float % or None,
         'capex_pct_revenue_q3': float % or None,
         'capex_pct_revenue_q4': float % or None,
+        'revenue_cagr_3y': float % or None,  # TTM kini vs TTM 3 tahun lalu
+        'revenue_cagr_5y': float % or None,  # butuh 24 kuartal tersimpan
     }
     """
     if not quarterly_data or len(quarterly_data) < 4:
@@ -357,7 +359,48 @@ def compute_financial_trends(quarterly_data: list | None) -> dict:
                     capex = getattr(period, 'capital_expenditures')
                     trends[f"capex_pct_revenue_{q_key}"] = (capex / rev) * 100
 
+    for years in (3, 5):
+        cagr = _revenue_cagr(quarterly_data, years)
+        if cagr is not None:
+            trends[f"revenue_cagr_{years}y"] = cagr
+
     return trends
+
+
+def _ttm_revenue(quarterly_data: list, start: int) -> float | None:
+    """Revenue 12 bulan dari 4 kuartal berurutan mulai indeks `start`.
+
+    Dijumlahkan dari kuartal, bukan diambil dari angka TTM Yahoo, supaya
+    pembilang dan penyebut CAGR berasal dari deret dan definisi tag yang sama
+    persis (lihat pemilihan tag di sec_parser._extract_quarterly_series).
+    """
+    if start + 4 > len(quarterly_data):
+        return None
+    total = 0.0
+    for period in quarterly_data[start:start + 4]:
+        rev = getattr(period, "revenue", None)
+        if rev is None:
+            return None  # satu kuartal bolong = TTM-nya bukan 12 bulan
+        total += rev
+    return total
+
+
+def _revenue_cagr(quarterly_data: list, years: int) -> float | None:
+    """CAGR revenue (%) atas `years` tahun, TTM-kini vs TTM-`years`-tahun-lalu.
+
+    Dua TTM dipakai (bukan kuartal tunggal) supaya musiman tidak terbaca
+    sebagai pertumbuhan. Butuh 4*(years+1) kuartal: 16 untuk 3Y, 24 untuk 5Y —
+    dan itu alasan `fetch_quarterly_financials` menyimpan 24 kuartal.
+
+    None kalau TTM pembanding <= 0: CAGR dari basis nol/negatif tidak punya
+    arti (akar dari rasio negatif), dan mengembalikan angka apa pun di situ
+    lebih buruk daripada mengaku tidak tahu.
+    """
+    now = _ttm_revenue(quarterly_data, 0)
+    then = _ttm_revenue(quarterly_data, 4 * years)
+    if now is None or then is None or then <= 0 or now < 0:
+        return None
+    return ((now / then) ** (1 / years) - 1) * 100
 
 
 def infer_size_category(market_cap: float | None, soft_flags: list[str]) -> str | None:

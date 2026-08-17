@@ -77,6 +77,20 @@ REVENUE_TAGS = [
     "Revenues",
     "SalesRevenueNet",
 ]
+# Tier KEDUA, dicoba HANYA kalau REVENUE_TAGS di atas kosong sama sekali.
+# Sengaja bukan tambahan di daftar yang sama: aturan pemilihan "kuartal
+# terbaru menang" tidak melihat arti tag, jadi menggabungkannya akan membuat
+# emiten non-keuangan yang kebetulan melaporkan pendapatan bunga sekuartal
+# lebih baru memilih pendapatan bunga sebagai "revenue"-nya.
+#
+# Bank tidak memakai `Revenues` sama sekali. Diukur pada 177 ticker sampel
+# yang tag revenue standarnya kosong: 4 punya RevenuesNetOfInterestExpense,
+# 21 punya pasangan InterestIncomeExpenseNet + NoninterestIncome dengan >= 4
+# kuartal beririsan. Totalnya menutup ~16% dari kelompok itu.
+REVENUE_TAGS_FINANCIAL = ["RevenuesNetOfInterestExpense"]
+NET_INTEREST_INCOME_TAG = "InterestIncomeExpenseNet"
+NONINTEREST_INCOME_TAG = "NoninterestIncome"
+
 GROSS_PROFIT_TAGS = ["GrossProfit"]
 OPERATING_INCOME_TAGS = ["OperatingIncomeLoss"]
 NET_INCOME_TAGS = ["NetIncomeLoss", "ProfitLoss"]
@@ -85,6 +99,7 @@ CAPEX_TAGS = ["PaymentsToAcquirePropertyPlantAndEquipment"]
 # Instant (point-in-time balance sheet date), bukan duration seperti tag di atas
 # — dipakai untuk baseline dilution 12-bulan (lihat fetch_shares_outstanding_change_12m).
 SHARES_OUTSTANDING_TAGS = ["CommonStockSharesOutstanding", "CommonStockSharesIssued"]
+
 
 _HEADERS = {"User-Agent": SEC_USER_AGENT}
 
@@ -188,43 +203,136 @@ def _fetch_company_facts(cik: str) -> dict | None:
     return data
 
 
-def _extract_quarterly_series(facts: dict, tags: list[str]) -> dict[str, float]:
-    """Ekstrak {fiscal_date_end: value} untuk satu metrik dari daftar tag fallback.
+def _series_for_tag(gaap: dict, tag: str) -> dict[str, float]:
+    """{fiscal_date_end: value} untuk SATU tag us-gaap.
 
     Filter hanya datapoint berdurasi ~1 kuartal (75-100 hari) dari form
     10-Q/10-K, supaya tidak tercampur dengan angka YTD/kumulatif atau
     tahunan penuh yang juga ada di XBRL companyfacts.
     """
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in tags:
-        node = gaap.get(tag)
-        if not node:
+    node = gaap.get(tag)
+    if not node:
+        return {}
+    series: dict[str, float] = {}
+    filed_at: dict[str, str] = {}
+    for point in node.get("units", {}).get("USD", []):
+        if point.get("form") not in ("10-Q", "10-Q/A", "10-K", "10-K/A"):
             continue
-        units = node.get("units", {}).get("USD", [])
-        series: dict[str, float] = {}
-        filed_at: dict[str, str] = {}
-        for point in units:
-            if point.get("form") not in ("10-Q", "10-Q/A", "10-K", "10-K/A"):
-                continue
-            start, end = point.get("start"), point.get("end")
-            if not start or not end:
-                continue
-            try:
-                d0 = datetime.fromisoformat(start)
-                d1 = datetime.fromisoformat(end)
-            except ValueError:
-                continue
-            duration_days = (d1 - d0).days
-            if not (75 <= duration_days <= 100):
-                continue  # buang YTD/kumulatif/tahunan
-            filed = point.get("filed", "")
-            if end in filed_at and filed <= filed_at[end]:
-                continue  # sudah ada revisi lebih baru untuk periode ini
-            series[end] = point.get("val")
-            filed_at[end] = filed
+        start, end = point.get("start"), point.get("end")
+        if not start or not end:
+            continue
+        try:
+            d0 = datetime.fromisoformat(start)
+            d1 = datetime.fromisoformat(end)
+        except ValueError:
+            continue
+        duration_days = (d1 - d0).days
+        if not (75 <= duration_days <= 100):
+            continue  # buang YTD/kumulatif/tahunan
+        filed = point.get("filed", "")
+        if end in filed_at and filed <= filed_at[end]:
+            continue  # sudah ada revisi lebih baru untuk periode ini
+        series[end] = point.get("val")
+        filed_at[end] = filed
+    return series
+
+
+def _extract_quarterly_series(facts: dict, tags: list[str]) -> tuple[dict[str, float], str | None]:
+    """Pilih SATU tag dari daftar fallback, lalu kembalikan (series, nama_tag).
+
+    Dulu fungsi ini mengembalikan tag PERTAMA yang berisi apa pun, tanpa
+    melihat tanggalnya. Itu salah karena perusahaan berganti tag saat standar
+    pelaporan berubah dan tag lamanya tetap tertinggal di companyfacts:
+
+        NVDA  RevenueFromContractWithCustomer...  12 titik, 2017-04 s/d 2020-01
+              Revenues                            64 titik, 2008-07 s/d 2026-04
+
+    Yang dipakai adalah baris pertama — jadi tren revenue NVDA membeku di
+    Januari 2020 sementara data 2026 tersedia dua tag di bawahnya. Terukur di
+    artefak produksi `session-20260815T131949`: 304 dari 4.273 ticker punya
+    kuartal terbaru <=2024 (ada yang 2011), dan 37 dari 60 sampel acak
+    kelompok itu (62%) sebenarnya punya data 2026 di tag lain — termasuk HCA,
+    GLW, AMP, TER, UPST.
+
+    Kriteria pilih: kuartal TERBARU paling akhir menang; kalau seri berakhir
+    di tanggal yang sama, yang titiknya lebih banyak; kalau masih seri, urutan
+    prioritas daftar.
+
+    Kedalaman sengaja TIDAK didahulukan, walau deret panjang kelihatan lebih
+    berguna (YoY butuh 8 kuartal berurutan). Sudah dicoba dan hasilnya lebih
+    buruk: MS mundur ke 2015, MBOT & BNY ke 2016, GEOS & RITM masing-masing
+    satu kuartal — deret panjang yang sudah berhenti bertahun-tahun lalu
+    mengalahkan deret pendek yang mutakhir. Trennya jadi ada, tapi tren tahun
+    2016 yang dipajang sebagai "kini", dan itu persis bug yang sedang
+    diperbaiki di sini. YoY yang hilang jujur; YoY dari kuartal 2016 tidak.
+
+    Tidak ada toleransi tanggal: dua tag milik emiten yang SAMA memakai
+    kalender fiskal yang sama, jadi tanggal tutup yang berbeda memang berarti
+    kuartalnya berbeda, bukan sekadar geser penanggalan.
+
+    Sengaja TIDAK menggabungkan beberapa tag jadi satu deret: `Revenues` dan
+    `RevenueFromContractWithCustomer...` tidak selalu mendefinisikan hal yang
+    sama, dan YoY/margin membandingkan periode dengan periode — deret campuran
+    akan membandingkan dua definisi berbeda dan kelihatan seperti
+    pertumbuhan/penyusutan yang tidak pernah terjadi.
+    """
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    candidates: list[tuple[int, str, dict[str, float]]] = []
+    for priority, tag in enumerate(tags):
+        series = _series_for_tag(gaap, tag)
         if series:
-            return series
-    return {}
+            candidates.append((priority, tag, series))
+    if not candidates:
+        return {}, None
+
+    priority, tag, series = max(candidates, key=lambda c: (max(c[2]), len(c[2]), -c[0]))
+    return series, tag
+
+
+def _financial_revenue_series(facts: dict) -> tuple[dict[str, float], str | None]:
+    """Padanan "revenue" untuk bank/lembaga keuangan, dua jalur berurutan.
+
+    1. `RevenuesNetOfInterestExpense` — memang total pendapatan bank, dipakai
+       apa adanya kalau ada.
+    2. Kalau tidak, JUMLAHKAN pendapatan bunga bersih + pendapatan
+       non-bunga per periode. Ini penjumlahan dua komponen dari SATU periode
+       yang sama menjadi satu besaran yang terdefinisi (itu yang disebut
+       "total revenue" untuk bank), bukan penyambungan dua definisi berbeda
+       antar-waktu seperti yang sengaja dihindari di _extract_quarterly_series.
+       Hanya periode yang punya KEDUA komponen yang dipakai — periode dengan
+       satu komponen saja akan tampak seperti pendapatan yang anjlok.
+
+    Bases-nya dikembalikan supaya bisa dibaca hilir: net margin bank yang
+    dihitung atas pendapatan bunga bersih tidak sebanding dengan net margin
+    perusahaan biasa, dan pembacanya harus bisa tahu itu.
+    """
+    series, tag = _extract_quarterly_series(facts, REVENUE_TAGS_FINANCIAL)
+    if series:
+        return series, "financial_net_revenue"
+
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    nii = _series_for_tag(gaap, NET_INTEREST_INCOME_TAG)
+    noninterest = _series_for_tag(gaap, NONINTEREST_INCOME_TAG)
+    shared = set(nii) & set(noninterest)
+    if len(shared) < 4:
+        return {}, None
+    return {d: nii[d] + noninterest[d] for d in shared}, "financial_composite"
+
+
+def _is_subset_measure(standard: dict[str, float], financial: dict[str, float]) -> bool:
+    """True kalau deret `standard` tampak cuma mengukur SEBAGIAN dari deret
+    `financial` — dibandingkan pada periode terbaru yang dimiliki keduanya.
+
+    Dibandingkan per-periode, bukan lewat total atau rata-rata, supaya
+    perbedaan panjang deret tidak ikut terhitung sebagai perbedaan besaran.
+    Kalau tidak ada periode yang beririsan, jawabannya False: tanpa titik
+    banding yang sah, biarkan tag standar yang menang.
+    """
+    shared = set(standard) & set(financial)
+    if not shared:
+        return False
+    latest = max(shared)
+    return financial[latest] > standard[latest]
 
 
 def _extract_instant_series(facts: dict, tags: list[str]) -> dict[str, float]:
@@ -232,9 +340,19 @@ def _extract_instant_series(facts: dict, tags: list[str]) -> dict[str, float]:
     mis. shares outstanding per tanggal neraca) — beda dari
     _extract_quarterly_series yang untuk fakta DURATION (revenue per periode).
     Instant facts di XBRL cuma punya 'end' (tanggal snapshot), tidak ada
-    'start', jadi tidak ada filter durasi 75-100 hari di sini."""
+    'start', jadi tidak ada filter durasi 75-100 hari di sini.
+
+    Pemilihan tag memakai aturan yang sama dengan _extract_quarterly_series
+    (snapshot terbaru menang, bukan urutan daftar) — masalahnya identik:
+    emiten bisa berhenti melaporkan CommonStockSharesOutstanding dan lanjut
+    dengan CommonStockSharesIssued, dan yang lama tetap tertinggal di
+    companyfacts. Deret tetap diambil dari SATU tag: baseline 12 bulan
+    dibandingkan di dalam deret yang sama, jadi mencampur "outstanding" dengan
+    "issued" akan menghasilkan selisih dilusi yang tidak pernah terjadi."""
     gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in tags:
+    best: tuple[str, int, int] | None = None
+    best_series: dict[str, float] = {}
+    for priority, tag in enumerate(tags):
         node = gaap.get(tag)
         if not node:
             continue
@@ -252,9 +370,12 @@ def _extract_instant_series(facts: dict, tags: list[str]) -> dict[str, float]:
                 continue  # sudah ada revisi lebih baru untuk tanggal ini
             series[end] = point.get("val")
             filed_at[end] = filed
-        if series:
-            return series
-    return {}
+        if not series:
+            continue
+        rank = (max(series), len(series), -priority)
+        if best is None or rank > best:
+            best, best_series = rank, series
+    return best_series
 
 
 def fetch_shares_outstanding_change_12m(ticker: str) -> float | None:
@@ -311,11 +432,17 @@ def fetch_shares_outstanding_change_12m(ticker: str) -> float | None:
     return ((latest_val - baseline_val) / baseline_val) * 100
 
 
-def fetch_quarterly_financials(ticker: str, max_periods: int = 8) -> dict | None:
+def fetch_quarterly_financials(ticker: str, max_periods: int = 24) -> dict | None:
     """Fetch quarterly financial data dari SEC EDGAR XBRL company facts.
 
     Returns dict dengan 'periods' (list terurut dari terbaru), atau None kalau
     ticker tidak ditemukan / tidak punya data XBRL (mis. baru IPO, foreign issuer).
+
+    `max_periods` dulu 8. Dinaikkan ke 24 (6 tahun) supaya CAGR 3 & 5 tahun
+    bisa dihitung dari TTM — 3Y butuh 16 kuartal, 5Y butuh 24. Ini **tidak
+    menambah satu pun panggilan jaringan**: payload companyfacts yang sudah
+    diambil memang memuat seluruh riwayat (NVDA punya 64 titik revenue), yang
+    berubah cuma berapa banyak yang kita simpan.
     """
     cik = get_cik_from_ticker(ticker)
     if not cik:
@@ -325,17 +452,52 @@ def fetch_quarterly_financials(ticker: str, max_periods: int = 8) -> dict | None
     if not facts:
         return None
 
-    revenue = _extract_quarterly_series(facts, REVENUE_TAGS)
-    if not revenue:
-        return None  # Tanpa revenue, quarterly trend tidak berguna
+    revenue, revenue_tag = _extract_quarterly_series(facts, REVENUE_TAGS)
+    revenue_basis = "standard" if revenue else None
 
-    gross_profit = _extract_quarterly_series(facts, GROSS_PROFIT_TAGS)
-    operating_income = _extract_quarterly_series(facts, OPERATING_INCOME_TAGS)
-    net_income = _extract_quarterly_series(facts, NET_INCOME_TAGS)
-    cash_ops = _extract_quarterly_series(facts, CASH_OPS_TAGS)
-    capex = _extract_quarterly_series(facts, CAPEX_TAGS)
+    # Tier keuangan dipakai kalau tag standar kosong, TAPI juga kalau tag
+    # standar ternyata cuma mengukur SEBAGIAN pendapatan bank. Fulton
+    # Financial (FULT) melaporkan pendapatan jasa/fee-nya di bawah
+    # `RevenueFromContractWithCustomerIncludingAssessedTax` — 79,3 jt untuk
+    # kuartal yang pendapatan sesungguhnya 363,6 jt (bunga bersih 284,2 jt +
+    # non-bunga 79,3 jt). Tag standarnya "berhasil", jadi jalur ini tidak
+    # pernah dicoba, dan net margin-nya keluar 129% (laba bersih 102,4 jt
+    # dibagi pendapatan fee saja). Bukan bug baru — begitu sejak dulu, cuma
+    # tidak kelihatan selama blok kuartalannya ikut terbuang.
+    #
+    # Pasangan InterestIncomeExpenseNet + NoninterestIncome praktis khas
+    # lembaga keuangan, dan syarat "lebih besar dari angka tag standar pada
+    # periode yang sama" memastikan penggantian hanya terjadi saat tag
+    # standar memang cuma sepotong.
+    financial, financial_basis = _financial_revenue_series(facts)
+    if financial and (not revenue or _is_subset_measure(revenue, financial)):
+        revenue, revenue_basis = financial, financial_basis
+        revenue_tag = (
+            REVENUE_TAGS_FINANCIAL[0] if revenue_basis == "financial_net_revenue"
+            else f"{NET_INTEREST_INCOME_TAG}+{NONINTEREST_INCOME_TAG}"
+        )
 
-    end_dates = sorted(revenue.keys(), reverse=True)[:max_periods]
+    gross_profit, _ = _extract_quarterly_series(facts, GROSS_PROFIT_TAGS)
+    operating_income, _ = _extract_quarterly_series(facts, OPERATING_INCOME_TAGS)
+    net_income, _ = _extract_quarterly_series(facts, NET_INCOME_TAGS)
+    cash_ops, _ = _extract_quarterly_series(facts, CASH_OPS_TAGS)
+    capex, _ = _extract_quarterly_series(facts, CAPEX_TAGS)
+
+    # Tulang punggung periode diambil dari revenue kalau ada, kalau tidak dari
+    # net income. Dulu `if not revenue: return None` membuang SELURUH blok
+    # kuartalan begitu tag revenue tidak ketemu — padahal net income dan arus
+    # kas operasinya ada. 1.302 dari 4.273 ticker nol kuartal karena ini, dan
+    # 15 dari 60 sampel acak (25%) punya net income sampai 2026-06-30 yang
+    # ikut terbuang; semua contohnya bank (BY, CCNE, RNST, FBNC, EBMT), yang
+    # memang tidak memakai tag `Revenues` — laporan mereka berbasis
+    # pendapatan bunga. Margin tetap None tanpa revenue (perhitungannya di
+    # extract_quarterly_metrics sudah menjaga itu), tapi tren laba dan arus
+    # kasnya sekarang terbaca alih-alih hilang.
+    spine = revenue or net_income
+    if not spine:
+        return None
+
+    end_dates = sorted(spine.keys(), reverse=True)[:max_periods]
 
     periods = []
     for end_date in end_dates:
@@ -354,7 +516,16 @@ def fetch_quarterly_financials(ticker: str, max_periods: int = 8) -> dict | None
         "periods": periods,
         "source": "sec_edgar",
         "last_updated": datetime.now(timezone.utc).isoformat(),
-        "status": "ok" if len(periods) >= 4 else "limited",
+        # Umur data DIPISAH dari kelengkapannya: `latest_fiscal_date` bikin
+        # kuartal 2018 tidak bisa lagi menyamar jadi "kini" di dashboard, dan
+        # `revenue_tag` menyebut deret mana yang akhirnya dipakai supaya
+        # pilihan tag bisa diaudit tanpa mengulang parsing.
+        "latest_fiscal_date": end_dates[0] if end_dates else None,
+        "revenue_tag": revenue_tag,
+        "revenue_available": bool(revenue),
+        # "standard" | "financial_net_revenue" | "financial_composite" | None
+        "revenue_basis": revenue_basis,
+        "status": "ok" if len(periods) >= 4 and revenue else "limited",
     }
 
 

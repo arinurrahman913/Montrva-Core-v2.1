@@ -115,7 +115,13 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
             yoy_q1=trends.get('revenue_yoy_q1'),
             yoy_q2=trends.get('revenue_yoy_q2'),
             yoy_q3=trends.get('revenue_yoy_q3'),
-            yoy_q4=trends.get('revenue_yoy_q4')
+            yoy_q4=trends.get('revenue_yoy_q4'),
+            # Dua field ini dideklarasikan sejak awal di knowledge_contracts.py
+            # tapi tidak pernah di-assign siapa pun — 0 terisi dari 4.273
+            # ticker, dan tidak mungkin terisi selama Evidence cuma menyimpan
+            # 8 kuartal (3Y butuh 16, 5Y butuh 24).
+            cagr_3y=trends.get('revenue_cagr_3y'),
+            cagr_5y=trends.get('revenue_cagr_5y')
         ),
         gross_margin_trend=MarginTrend(
             q1=trends.get('gross_margin_q1'),
@@ -142,7 +148,8 @@ def build_knowledge_for_ticker(evidence: EvidencePackage, candidate: ScreeningCa
         balance_sheet=BalanceSheet(
             debt_to_equity=_debt_to_equity_ratio(evidence.fundamental.debt_to_equity),
             current_ratio=evidence.fundamental.current_ratio,
-            quick_ratio=evidence.fundamental.quick_ratio
+            quick_ratio=evidence.fundamental.quick_ratio,
+            cash_and_equivalents=evidence.fundamental.total_cash
         ),
         cash_flow_trend=CashFlowTrend(
             fcf_q4=evidence.fundamental.free_cash_flow,

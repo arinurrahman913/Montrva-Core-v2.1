@@ -11,9 +11,9 @@ AI-selected quantitative highlights.
 Deliberately NOT part of the ~5000-ticker full pipeline refresh (would add
 minutes/cost per run for tickers nobody ever looks at) — called on-demand
 by backend/app.py when the dashboard opens a ticker's Knowledge modal, then
-cached to disk keyed by ticker + KnowledgeMetadata.evidence_date so
-re-opening the same ticker doesn't re-call the API unless its underlying
-Evidence/Knowledge data actually changed.
+cached to disk keyed by ticker + KnowledgeMetadata.evidence_date +
+PROMPT_VERSION so re-opening the same ticker doesn't re-call the API unless
+its underlying Evidence/Knowledge data — or the prompt itself — changed.
 
 Free tier (aistudio.google.com/apikey). Gracefully degrades — returns None,
 never raises — if GEMINI_API_KEY isn't set, same convention as
@@ -63,12 +63,49 @@ PEER_METRIC_LABELS = {
 }
 
 
+# Dinaikkan setiap kali isi/format _build_prompt berubah dengan cara yang
+# membuat narasi lama SALAH (bukan sekadar beda gaya). Cache narasi dikunci
+# ticker + evidence_date; tanpa penanda ini, entri lama tetap terpakai walau
+# angkanya dihasilkan dari prompt yang keliru. v2: skala pecahan->persen
+# (ROE/ROA/margin/institutional ownership) + kunci news/filings + arah Form 4.
+# v3: Debt/Equity (Yahoo memberi satuan persen, 67.156 = 0.67x).
+PROMPT_VERSION = 3
+
+
 def _fmt(value, suffix: str = "") -> str:
     if value is None:
         return "tidak tersedia"
     if isinstance(value, float):
         return f"{value:.1f}{suffix}"
     return f"{value}{suffix}"
+
+
+def _fmt_frac_pct(value) -> str:
+    """Untuk field yang disimpan sebagai PECAHAN (0.486 = 48.6%).
+
+    Evidence menyimpan dua skala berbeda dan itu tidak terlihat dari nama
+    field-nya: `fundamental.roe/roa/gross_margin/operating_margin` dan
+    `institutional_ownership.percentage` adalah pecahan mentah dari Yahoo,
+    sementara `dividend_yield`, `analyst_estimates.surprise_pct/growth`, dan
+    SEMUA turunan Knowledge (yoy_*, net_margin_trend, return_1y, upside_pct)
+    sudah dalam satuan persen. Menempelkan "%" ke kelompok pertama tanpa
+    dikali 100 pernah membuat prompt menyatakan ROE AAPL "1.5%" (aslinya
+    148.8%) dan institutional ownership REPL "1.1%" (aslinya 105.7%) — model
+    menyalinnya apa adanya, dan itu memang yang tertulis di prompt."""
+    if value is None:
+        return "tidak tersedia"
+    return f"{value * 100:.1f}%"
+
+
+def _fmt_de(value) -> str:
+    """Debt/Equity: Yahoo melaporkannya dalam SATUAN PERSEN (67.156 = 0.67x),
+    dan knowledge.py membaginya 100 sebelum dipakai — terukur pada 322 ticker
+    sampel, rasio evidence/knowledge tepat 100.0. Tanpa pembagian yang sama di
+    sini, prompt menulis "D/E: 67.2" untuk perusahaan yang kartunya menampilkan
+    "0.67x": bukan cuma beda format, beda dua digit."""
+    if value is None:
+        return "tidak tersedia"
+    return f"{value / 100:.2f}x"
 
 
 def _fmt_money(value) -> str:
@@ -121,6 +158,30 @@ def _peer_comparison_txt(peer: dict | None) -> str:
     return header + ":\n" + "\n".join(rows)
 
 
+def _insider_activity_txt(ia: dict) -> str:
+    """Ringkas aktivitas Form 4 30 hari BESERTA ARAHNYA.
+
+    Sebelumnya prompt cuma mengirim `buy_count_30d` dan melabelinya "filing",
+    jadi REPL — 11 transaksi jual, net -175.204 lembar, cukup untuk menyalakan
+    flag Risk `insider_selling_90d` — masuk ke model sebagai "0 filing".
+    Arahnya sekarang nyata: sec_form4.py mem-parse XML Form 4 (sejak
+    2026-08-15), `transaction_type` berisi buy/sell sungguhan."""
+    buy = ia.get("buy_count_30d")
+    sell = ia.get("sell_count_30d")
+    if buy is None and sell is None:
+        return "tidak tersedia"
+    net = ia.get("net_shares_30d")
+    parts = [f"{buy or 0} transaksi beli, {sell or 0} transaksi jual"]
+    if net:
+        arah = "neto BELI" if net > 0 else "neto JUAL"
+        parts.append(f"{arah} {abs(net):,.0f} lembar".replace(",", "."))
+    if ia.get("top_buyer"):
+        parts.append(f"pembeli terbesar {ia['top_buyer']}")
+    if ia.get("top_seller"):
+        parts.append(f"penjual terbesar {ia['top_seller']}")
+    return ", ".join(parts)
+
+
 def _build_prompt(evidence: dict, knowledge: dict, catalyst: dict | None = None, peer: dict | None = None) -> str:
     pm = evidence.get("price_market") or {}
     fnd = evidence.get("fundamental") or {}
@@ -128,8 +189,13 @@ def _build_prompt(evidence: dict, knowledge: dict, catalyst: dict | None = None,
     io = evidence.get("institutional_ownership") or {}
     top_holders = (io.get("top_holders") or [])[:3]
     ia = evidence.get("institutional_activity") or {}
-    news = ((evidence.get("news") or {}).get("news") or [])[:5]
-    filings = ((evidence.get("sec_filings") or {}).get("filings") or [])[:5]
+    # KUNCI "items", bukan "news"/"filings": EvidencePackage.to_dict()
+    # (contracts.py) menamai ulang dua list ini saat serialisasi, jadi nama
+    # field dataclass-nya cuma berlaku untuk objek in-process. Sebelum ini
+    # keduanya selalu terbaca kosong — 757 dari 800 ticker sampel sebenarnya
+    # punya berita, dan tak satu pun pernah sampai ke prompt.
+    news = ((evidence.get("news") or {}).get("items") or [])[:5]
+    filings = ((evidence.get("sec_filings") or {}).get("items") or [])[:5]
     cp = evidence.get("company_profile") or {}
     ae = evidence.get("analyst_estimates") or {}
     eps_hist = ae.get("eps_surprise_history") or []
@@ -173,7 +239,7 @@ def _build_prompt(evidence: dict, knowledge: dict, catalyst: dict | None = None,
 ATURAN WAJIB:
 - HANYA gunakan angka/fakta yang diberikan di bawah. JANGAN mengarang data yang tidak ada.
 - JANGAN kasih rekomendasi beli/jual/hold — ini penjelasan fakta, bukan saran investasi.
-- Soal "Form 4 filing count": itu CUMA jumlah filing (termasuk grant/vesting rutin), BUKAN konfirmasi insider membeli saham — jangan disebut "insider membeli" atau "insider selling", cukup sebut faktanya sebagai "aktivitas filing".
+- Soal aktivitas insider Form 4: arah transaksinya (beli/jual) sekarang berasal dari XML Form 4 yang sudah di-parse, jadi boleh disebut apa adanya sebagai "insider menjual"/"insider membeli". TAPI jangan menafsirkannya jadi sinyal — penjualan insider sering karena rencana 10b5-1, pajak vesting, atau kebutuhan pribadi, bukan pandangan atas prospek perusahaan.
 - Soal percentile peer: percentile TINGGI belum tentu "lebih baik" (mis. Debt/Equity tinggi = leverage lebih besar, bukan otomatis positif) -- deskripsikan posisi relatifnya, jangan otomatis nilai "bagus/jelek" kecuali arahnya memang jelas dari konteks (mis. FCF yield tinggi memang secara umum positif).
 - Kalau suatu data "tidak tersedia", jangan dipaksakan disebut.
 
@@ -186,8 +252,8 @@ Harga sekarang: ${_fmt(pm.get('last_price'))}, Market cap: {_fmt_money(pm.get('m
 52-week high/low: ${_fmt(pm.get('high_52w'))} / ${_fmt(pm.get('low_52w'))}, Beta: {_fmt(pm.get('beta'))}
 
 DATA -- FUNDAMENTAL:
-P/E: {_fmt(fnd.get('pe_ratio'))}, D/E: {_fmt(fnd.get('debt_to_equity'))}, Current ratio: {_fmt(fnd.get('current_ratio'))}, Quick ratio: {_fmt(fnd.get('quick_ratio'))}
-ROE: {_fmt(fnd.get('roe'), '%')}, ROA: {_fmt(fnd.get('roa'), '%')}, Gross margin: {_fmt(fnd.get('gross_margin'), '%')}, Operating margin: {_fmt(fnd.get('operating_margin'), '%')}
+P/E: {_fmt(fnd.get('pe_ratio'))}, D/E: {_fmt_de(fnd.get('debt_to_equity'))}, Current ratio: {_fmt(fnd.get('current_ratio'))}, Quick ratio: {_fmt(fnd.get('quick_ratio'))}
+ROE: {_fmt_frac_pct(fnd.get('roe'))}, ROA: {_fmt_frac_pct(fnd.get('roa'))}, Gross margin: {_fmt_frac_pct(fnd.get('gross_margin'))}, Operating margin: {_fmt_frac_pct(fnd.get('operating_margin'))}
 Dividend yield: {_fmt(fnd.get('dividend_yield'), '%')}, Free cash flow: {_fmt_money(fnd.get('free_cash_flow'))}
 4 kuartal terakhir (revenue, net income): {quarters_txt}
 
@@ -198,9 +264,9 @@ Return 1 tahun: {_fmt(ht.get('return_1y'), '%')}, Volatilitas harian: {_fmt(ht.g
 EPS beat/miss streak: {_fmt(ht.get('earnings_beat_miss_streak'))}
 
 DATA -- KEPEMILIKAN:
-Institutional ownership: {_fmt(io.get('percentage'), '%')}
+Institutional ownership: {_fmt_frac_pct(io.get('percentage'))}
 Top pemegang saham: {holders_txt}
-Aktivitas Form 4 filing (30 hari terakhir): {_fmt(ia.get('buy_count_30d'))} filing
+Aktivitas insider Form 4 (30 hari terakhir): {_insider_activity_txt(ia)}
 
 DATA -- ANALYST ESTIMATES:
 Target harga: low ${_fmt(ae.get('target_low'))}, mean ${_fmt(ae.get('target_mean'))}, high ${_fmt(ae.get('target_high'))}
@@ -302,7 +368,16 @@ def get_or_generate_narrative(
 
     cache = load_narrative_cache(cache_path)
     entry = cache.get(ticker)
-    if entry and entry.get("evidence_date") == evidence_date and entry.get("qualitative"):
+    # `prompt_version` ikut jadi bagian kunci: entri yang dibuat sebelum
+    # perbaikan skala/kunci data di atas angkanya salah, dan evidence_date-nya
+    # TIDAK berubah karena datanya memang sama — cuma prompt-nya yang dulu
+    # keliru membacanya. Entri lama (tanpa field ini) otomatis dianggap basi.
+    if (
+        entry
+        and entry.get("evidence_date") == evidence_date
+        and entry.get("prompt_version") == PROMPT_VERSION
+        and entry.get("qualitative")
+    ):
         return {
             "qualitative": entry["qualitative"],
             "quantitative_highlights": entry.get("quantitative_highlights") or [],
@@ -319,6 +394,7 @@ def get_or_generate_narrative(
     if result:
         cache[ticker] = {
             "evidence_date": evidence_date,
+            "prompt_version": PROMPT_VERSION,
             "qualitative": result["qualitative"],
             "quantitative_highlights": result["quantitative_highlights"],
             "catalyst_note": result.get("catalyst_note"),

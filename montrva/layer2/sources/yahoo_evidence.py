@@ -57,7 +57,7 @@ _FUNDAMENTAL_NOT_APPLICABLE_FIELDS = ("dividend_yield", "payout_ratio")
 _FUNDAMENTAL_RATIO_FIELDS = (
     "revenue", "net_income", "eps", "pe_ratio", "debt_to_equity", "current_ratio",
     "quick_ratio", "roe", "roa", "operating_margin", "gross_margin", "free_cash_flow",
-    "dividend_yield", "payout_ratio", "book_value_per_share", "asset_turnover",
+    "total_cash", "dividend_yield", "payout_ratio", "book_value_per_share", "asset_turnover",
     "inventory_turnover", "interest_coverage", "shares_outstanding_change_12m",
 )
 
@@ -424,6 +424,7 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             operating_margin=cached.get("operating_margin"),
             gross_margin=cached.get("gross_margin"),
             free_cash_flow=cached.get("free_cash_flow"),
+            total_cash=cached.get("total_cash"),
             dividend_yield=cached.get("dividend_yield"),
             payout_ratio=cached.get("payout_ratio"),
             book_value_per_share=cached.get("book_value_per_share"),
@@ -468,6 +469,7 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             operating_margin=_safe_float(info.get("operatingMargins")),
             gross_margin=_safe_float(info.get("grossMargins")),
             free_cash_flow=_safe_float(info.get("freeCashflow")),
+            total_cash=_safe_float(info.get("totalCash")),
             dividend_yield=_safe_float(info.get("dividendYield")),
             payout_ratio=_safe_float(info.get("payoutRatio")),
             book_value_per_share=_safe_float(info.get("bookValue")),
@@ -493,6 +495,7 @@ def fetch_fundamental_data(ticker: str) -> FundamentalData:
             "operating_margin": data.operating_margin,
             "gross_margin": data.gross_margin,
             "free_cash_flow": data.free_cash_flow,
+            "total_cash": data.total_cash,
             "dividend_yield": data.dividend_yield,
             "payout_ratio": data.payout_ratio,
             "book_value_per_share": data.book_value_per_share,
